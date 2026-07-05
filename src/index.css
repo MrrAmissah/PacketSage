@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg-canvas: #f8fafc;
+  --bg-shell: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-surface-muted: #f1f5f9;
+  --bg-elevated: #ffffff;
+  --bg-input: #f1f5f9;
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+  --accent-primary: #0062f1;
+  --accent-primary-hover: #0052d4;
+  --accent-soft: #eff6ff;
+  --status-info: #0284c7;
+  --status-info-bg: #e0f2fe;
+  --status-success: #16a34a;
+  --status-success-bg: #f0fdf4;
+  --status-warning: #d97706;
+  --status-warning-bg: #fef3c7;
+  --status-danger: #dc2626;
+  --status-danger-bg: #fef2f2;
+  --risk-high: #dc2626;
+  --risk-medium: #d97706;
+  --risk-low: #0284c7;
+  --mono-bg: #f1f5f9;
+  --table-header: #f8fafc;
+  --table-row: #ffffff;
+  --table-row-hover: #f1f5f9;
+  --report-paper: #ffffff;
+  --report-text: #0f172a;
+  --shadow-soft: 0 2px 8px -1px rgba(15, 23, 42, 0.05), 0 1px 4px -1px rgba(15, 23, 42, 0.03);
+  --logo-packet: #10213f;
+}
+
+.dark {
+  --bg-canvas: #0b0f19;
+  --bg-shell: #070a13;
+  --bg-surface: #0f172a;
+  --bg-surface-muted: #1e293b;
+  --bg-elevated: #1e293b;
+  --bg-input: #070a13;
+  --border-subtle: #1e293b;
+  --border-default: #1e293b;
+  --border-strong: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-inverse: #0f172a;
+  --accent-primary: #0062f1;
+  --accent-primary-hover: #0052d4;
+  --accent-soft: #162235;
+  --status-info: #2f95ea;
+  --status-info-bg: rgba(47, 149, 234, 0.1);
+  --status-success: #10b981;
+  --status-success-bg: rgba(16, 185, 129, 0.1);
+  --status-warning: #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.1);
+  --status-danger: #ef4444;
+  --status-danger-bg: rgba(239, 68, 68, 0.1);
+  --risk-high: #ef4444;
+  --risk-medium: #f59e0b;
+  --risk-low: #2f95ea;
+  --mono-bg: #070a13;
+  --table-header: #070a13;
+  --table-row: #0f172a;
+  --table-row-hover: rgba(7, 10, 19, 0.3);
+  --report-paper: #0e131f;
+  --report-text: #f1f5f9;
+  --shadow-soft: 0 4px 12px -2px rgba(0, 0, 0, 0.3), 0 2px 6px -1px rgba(0, 0, 0, 0.2);
+  --logo-packet: #f1f5f9;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Color mappings to semantic CSS variable tokens */
+  --color-canvas: var(--bg-canvas);
+  --color-shell: var(--bg-shell);
+  --color-surface: var(--bg-surface);
+  --color-surface-muted: var(--bg-surface-muted);
+  --color-elevated: var(--bg-elevated);
+  --color-input: var(--bg-input);
+  
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+  
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-primary-hover: var(--accent-primary-hover);
+  --color-accent-soft: var(--accent-soft);
+  
+  --color-status-info: var(--status-info);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-success: var(--status-success);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-bg: var(--status-danger-bg);
+  
+  --color-risk-high: var(--risk-high);
+  --color-risk-medium: var(--risk-medium);
+  --color-risk-low: var(--risk-low);
+  
+  --color-mono-bg: var(--mono-bg);
+  --color-table-header: var(--table-header);
+  --color-table-row: var(--table-row);
+  --color-table-row-hover: var(--table-row-hover);
+  --color-report-paper: var(--report-paper);
+  --color-report-text: var(--report-text);
+  --color-logo-packet: var(--logo-packet);
+  
+  --shadow-soft: var(--shadow-soft);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-canvas);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}

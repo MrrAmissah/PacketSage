@@ -1,0 +1,6 @@
+{
+  "name": "PacketSage",
+  "description": "A professional AI-assisted network-forensics and packet-analysis platform combining deterministic packet/log extraction and defensive AI explanations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

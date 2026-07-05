@@ -1,8 +1,19 @@
-# PacketSage: Defensive Network Forensics Workspace
+# PacketSage
 
-PacketSage is an interactive, browser-side forensic sandbox and defensive network-analysis workspace designed for security analysts, incident responders, students, and SOC operators. 
+PacketSage is a defensive network forensics sandbox for reviewing packet exports, decoded telemetry, protocol behavior, evidence-linked observations, AI-assisted analyst memos, incident timelines, and report-ready investigation notes.
 
-By ingesting text-based packet logs, Wireshark CSVs, Suricata EVE alerts, or Zeek summaries, PacketSage reconstructs communications, isolates suspicious traffic signatures, and drafts comprehensive incident records with the aid of a server-side AI-assisted analytical assistant.
+It is built for security analysts, incident responders, students, and SOC operators who need a structured workspace for passive packet review. PacketSage ingests text-based packet logs, Wireshark CSVs, Suricata EVE alerts, Zeek summaries, and demo PCAP-style metadata, then reconstructs flows, highlights review-worthy observations, and helps draft evidence-bound reports.
+
+## Product Preview
+
+<p align="center">
+  <img src="./docs/assets/packetsage-import-evidence.png" alt="PacketSage Import Evidence screen for uploading authorized packet exports, loading a sample incident dataset, or pasting structured logs." width="96%" />
+</p>
+
+<p align="center">
+  <img src="./docs/assets/packetsage-command-center.png" alt="PacketSage Command Center showing decoded packet evidence, protocol stats, signal counts, and investigation brief." width="47%" />
+  <img src="./docs/assets/packetsage-report-builder.png" alt="PacketSage Report Builder showing report settings, evidence metadata, readiness checks, and export controls." width="47%" />
+</p>
 
 ---
 

@@ -1,20 +1,21 @@
-import {
-  parseCsv,
-  parseDemoData,
-  parsePcapPlaceholder,
-  parseSuricataEve,
-  parseTextLog,
-  parseTsharkJson,
-  parseZeekLog,
-} from "../src/lib/parser";
+const parserBundlePath = "../dist/parser.mjs";
 
-export default function handler(req: any, res: any) {
+export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
+    const {
+      parseCsv,
+      parseDemoData,
+      parsePcapPlaceholder,
+      parseSuricataEve,
+      parseTextLog,
+      parseTsharkJson,
+      parseZeekLog,
+    } = await import(parserBundlePath);
     const { fileName, fileContent, parseMode, fileSize } = req.body || {};
 
     if (parseMode === "demo") {

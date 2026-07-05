@@ -1460,7 +1460,7 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                   <div className="space-y-1 pb-2 border-b border-border-subtle/30">
                     <span className="text-status-error font-semibold uppercase tracking-wider text-[9px] block">Incomplete / Overclaiming</span>
                     <p className="text-text-muted font-mono bg-canvas p-1.5 rounded border border-border-subtle/30 text-[10px]">
-                      "Malware confirmed on host, C2 server verified."
+                      "Unusual host activity observed; C2-like timing requires validation."
                     </p>
                   </div>
                   

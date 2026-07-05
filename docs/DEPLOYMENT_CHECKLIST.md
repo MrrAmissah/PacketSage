@@ -61,6 +61,25 @@ For container-ready environments:
   * Build: `npm run build`
   * Start: `npm run start` (launches compiled `dist/server.cjs`)
 
+## Phase 4B: Vercel Preview Deployment
+
+For Vercel-hosted previews:
+
+### 4B.1 Project Settings
+* [ ] **Framework Preset**: Use Vite.
+* [ ] **Install Command**: `npm install`
+* [ ] **Build Command**: `npm run build`
+* [ ] **Output Directory**: `dist`
+* [ ] **Production Branch**: `main`
+* [ ] **Preview Branch**: `release/packetsage-v1.1.0-public-demo`
+
+### 4B.2 Serverless API Compatibility
+* [ ] **API Runtime**: Vercel preview deployments use the serverless functions in `api/` for `/api/health`, `/api/parse`, and `/api/analyze`.
+* [ ] **Server-Side Secret Boundary**: `GEMINI_API_KEY` must be configured only as a server-side Vercel environment variable for Preview and Production.
+* [ ] **Client Environment Label**: `VITE_APP_ENV` may be set to `preview` for Preview deployments and `production` for Production deployments.
+* [ ] **No Browser Gemini Key**: Do not create `VITE_GEMINI_API_KEY`.
+* [ ] **SPA Routing**: `vercel.json` rewrites non-file routes to `index.html` for client-side navigation while preserving API function routes.
+
 ---
 
 ## Phase 5: Post-Deployment Smoke Test & Verification

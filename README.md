@@ -4,6 +4,10 @@ PacketSage is a defensive network forensics sandbox for reviewing packet exports
 
 It is built for security analysts, incident responders, students, and SOC operators who need a structured workspace for passive packet review. PacketSage ingests text-based packet logs, Wireshark CSVs, Suricata EVE alerts, Zeek summaries, and demo PCAP-style metadata, then reconstructs flows, highlights review-worthy observations, and helps draft evidence-bound reports.
 
+## License & Use
+
+PacketSage is proprietary and source-available, not open source. Public access to this repository is for transparency, review, portfolio, and collaboration screening only. Copying, redistribution, commercial use, hosted reuse, rebranding, or derivative products require prior written permission from the repository owner. See [LICENSE](./LICENSE) and [CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ## Product Preview
 
 <p align="center">

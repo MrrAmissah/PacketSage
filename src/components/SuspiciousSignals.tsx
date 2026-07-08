@@ -329,7 +329,15 @@ const DEMO_SIGNAL_MATCHERS: Record<string, (signal: SuspiciousSignal) => boolean
   'sig-repeated-connections': (signal) => {
     const id = signal.id.toLowerCase();
     const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
-    return id.includes('sig-unusualport') || (text.includes('outbound') && (text.includes('connection') || text.includes('socket')));
+    const isRepeatedConnectionPattern = (
+      text.includes('repeated') ||
+      text.includes('multiple') ||
+      text.includes('successive') ||
+      text.includes('short duration')
+    ) && (text.includes('outbound') || text.includes('connection') || text.includes('socket'));
+
+    // Unusual-port parser signals are owned by the protocol-mismatch card below.
+    return !id.includes('sig-unusualport') && isRepeatedConnectionPattern;
   },
   'sig-unusual-host-traffic': (signal) => {
     const id = signal.id.toLowerCase();

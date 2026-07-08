@@ -938,8 +938,82 @@ export default function SuspiciousSignals({
       <div id="signals-and-observations-workspace" className={`grid grid-cols-1 gap-5 relative font-sans items-start ${selectedSignal ? 'xl:grid-cols-[minmax(0,1fr)_390px]' : 'grid-cols-1'}`}>
         
         {/* Signals Table Card */}
-        <div className="bg-surface rounded-2xl border border-border-subtle overflow-hidden shadow-sm flex flex-col justify-between min-w-0">
-          <div className="overflow-x-auto">
+        <div className="bg-surface rounded-2xl border border-border-subtle overflow-hidden shadow-sm flex flex-col justify-between min-w-0 order-2 xl:order-none">
+          <div className="md:hidden divide-y divide-border-subtle">
+            {paginatedSignals.length > 0 ? (
+              paginatedSignals.map((sig) => {
+                const isSelected = selectedSignal?.id === sig.id;
+                return (
+                  <button
+                    id={`signal-card-${sig.id}`}
+                    key={sig.id}
+                    type="button"
+                    onClick={() => handleSelectSignal(sig)}
+                    className={`w-full text-left p-4 transition-all cursor-pointer ${
+                      isSelected ? 'bg-accent-soft border-l-4 border-accent-primary' : 'hover:bg-surface-muted/40 border-l-4 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span className="mt-0.5 shrink-0">
+                          {sig.severity === 'high' ? (
+                            <ShieldAlert size={14} className="text-status-danger" />
+                          ) : sig.severity === 'medium' ? (
+                            <AlertTriangle size={14} className="text-status-warning" />
+                          ) : (
+                            <Shield size={14} className="text-status-info" />
+                          )}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-text-primary text-xs leading-snug line-clamp-2" title={sig.title}>
+                            {sig.title}
+                          </div>
+                          <div className="text-[11px] text-text-muted mt-0.5 line-clamp-1" title={sig.subtitle}>
+                            {sig.subtitle}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight size={13} className={`mt-1 shrink-0 transition-transform ${isSelected ? 'text-accent-primary translate-x-0.5' : 'text-text-muted'}`} />
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="space-y-1">
+                        <span className="block text-text-muted font-bold uppercase tracking-wider">Severity</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase border inline-flex items-center gap-1 w-fit ${getSeverityBadgeStyle(sig.severity)}`}>
+                          <span className={`w-1 h-1 rounded-full ${getSeverityIndicator(sig.severity)}`} />
+                          {sig.severity}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="block text-text-muted font-bold uppercase tracking-wider">Status</span>
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border inline-flex w-fit ${getStatusBadgeStyle(sig.status)}`}>
+                          {sig.status}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="block text-text-muted font-bold uppercase tracking-wider">Confidence</span>
+                        <span className="font-mono text-text-primary font-semibold">{sig.confidenceScore}%</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="block text-text-muted font-bold uppercase tracking-wider">Related flows</span>
+                        <span className="font-mono text-text-primary font-semibold">{sig.relatedFlowsCount}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 font-mono text-[10px] bg-mono-bg border border-border-subtle/70 text-text-secondary px-2 py-1 rounded-lg truncate" title={redactSensitive(sig.observedEvidence)}>
+                      {redactSensitive(sig.observedSnippet)}
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="py-12 text-center text-text-muted text-xs">
+                No signals match your query or filter criteria.
+              </div>
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table id="signals-table" className="w-full text-left text-xs">
               <thead className="bg-surface-muted border-b border-border-subtle text-text-muted select-none">
                 <tr>
@@ -1130,7 +1204,7 @@ export default function SuspiciousSignals({
 
         {/* Selected Finding Detail Sidebar */}
         {selectedSignal && (
-          <div className="w-full bg-surface rounded-2xl border border-border-subtle p-4 space-y-4 shadow-lg h-fit xl:sticky xl:top-[84px] xl:max-h-[calc(100vh-140px)] overflow-y-auto animate-in slide-in-from-right duration-200">
+          <div className="w-full bg-surface rounded-2xl border border-border-subtle p-4 space-y-4 shadow-lg h-fit xl:sticky xl:top-[84px] xl:max-h-[calc(100vh-140px)] overflow-y-auto animate-in slide-in-from-right duration-200 order-1 xl:order-none">
             
             {/* Title Block & Close Action */}
             <div className="flex justify-between items-start pb-2.5 border-b border-border-subtle">

@@ -17,14 +17,15 @@ import {
   ExternalLink,
   Ban
 } from 'lucide-react';
-import { SuspiciousSignal, FlowSummary } from '../types';
+import { SuspiciousSignal, FlowSummary, SignalReviewStatus } from '../types';
 import InfoPopover from './InfoPopover';
 
 interface SuspiciousSignalsProps {
   signals: SuspiciousSignal[];
   flows: FlowSummary[];
+  signalStatusOverrides?: Record<string, SignalReviewStatus>;
   onNavigateToFlows: (flow: FlowSummary) => void;
-  onUpdateSignalStatus?: (id: string, status: 'Needs review' | 'Added to report' | 'Dismissed') => void;
+  onUpdateSignalStatus?: (id: string, status: SignalReviewStatus, linkedIds?: string[]) => void;
 }
 
 // Rich high-fidelity signals matching the reference image layout and metadata
@@ -34,10 +35,12 @@ interface EnrichedSignal extends SuspiciousSignal {
   observedSnippet: string;
   relatedFlowsCount: number;
   firstSeenTime: string;
-  status: 'Needs review' | 'Added to report' | 'Dismissed';
+  status: SignalReviewStatus;
   metrics?: { label: string; value: string }[];
   flowsList?: { src: string; dst: string; proto: string }[];
 }
+
+const EMPTY_SIGNAL_STATUS_OVERRIDES: Record<string, SignalReviewStatus> = {};
 
 const PCAP_DEMO_SIGNALS: EnrichedSignal[] = [
   {
@@ -310,6 +313,75 @@ const PCAP_DEMO_SIGNALS: EnrichedSignal[] = [
   }
 ];
 
+const normalizeSignalText = (value = '') => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+const DEMO_SIGNAL_MATCHERS: Record<string, (signal: SuspiciousSignal) => boolean> = {
+  'sig-dns-beacon': (signal) => {
+    const id = signal.id.toLowerCase();
+    const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
+    return id.includes('sig-dnsbeacon') || (text.includes('dns') && (text.includes('periodic') || text.includes('timing')));
+  },
+  'sig-cleartext-binary': (signal) => {
+    const id = signal.id.toLowerCase();
+    const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
+    return id.includes('sig-cleartext-download') || (text.includes('cleartext') && (text.includes('binary') || text.includes('download')));
+  },
+  'sig-repeated-connections': (signal) => {
+    const id = signal.id.toLowerCase();
+    const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
+    return id.includes('sig-unusualport') || (text.includes('outbound') && (text.includes('connection') || text.includes('socket')));
+  },
+  'sig-unusual-host-traffic': (signal) => {
+    const id = signal.id.toLowerCase();
+    const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
+    return id.includes('sig-dataspike') || text.includes('data volume') || text.includes('outbound data');
+  },
+  'sig-protocol-mismatch': (signal) => {
+    const id = signal.id.toLowerCase();
+    const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
+    return id.includes('sig-unusualport') || text.includes('suspicious port') || text.includes('unusual port');
+  },
+  'sig-failed-connections': (signal) => {
+    const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
+    return text.includes('failed') || text.includes('reset') || text.includes('rst');
+  },
+};
+
+const getLinkedSignalIds = (displaySignal: SuspiciousSignal, sourceSignals: SuspiciousSignal[]) => {
+  const exact = sourceSignals.filter(signal => signal.id === displaySignal.id).map(signal => signal.id);
+  if (exact.length > 0) return exact;
+
+  const matcher = DEMO_SIGNAL_MATCHERS[displaySignal.id];
+  if (matcher) {
+    return sourceSignals.filter(matcher).map(signal => signal.id);
+  }
+
+  const displayTitle = normalizeSignalText(displaySignal.title);
+  const displayEvidence = normalizeSignalText(displaySignal.observedEvidence).slice(0, 80);
+  return sourceSignals
+    .filter(signal => {
+      const sourceTitle = normalizeSignalText(signal.title);
+      const sourceEvidence = normalizeSignalText(signal.observedEvidence);
+      return sourceTitle === displayTitle || (!!displayEvidence && sourceEvidence.includes(displayEvidence));
+    })
+    .map(signal => signal.id);
+};
+
+const getPersistedStatus = (
+  displaySignal: SuspiciousSignal,
+  sourceSignals: SuspiciousSignal[],
+  overrides: Record<string, SignalReviewStatus>
+): SignalReviewStatus | undefined => {
+  const linkedIds = [displaySignal.id, ...getLinkedSignalIds(displaySignal, sourceSignals)];
+  for (const signalId of linkedIds) {
+    const overrideStatus = overrides[signalId];
+    if (overrideStatus) return overrideStatus;
+    const sourceStatus = sourceSignals.find(signal => signal.id === signalId)?.status;
+    if (sourceStatus) return sourceStatus;
+  }
+  return displaySignal.status;
+};
+
 const redactSensitive = (text: string): string => {
   if (!text) return text;
   let redacted = text;
@@ -474,7 +546,13 @@ const sanitizeSignal = <T extends SuspiciousSignal>(sig: T): T => {
   };
 };
 
-export default function SuspiciousSignals({ signals, flows, onNavigateToFlows, onUpdateSignalStatus }: SuspiciousSignalsProps) {
+export default function SuspiciousSignals({
+  signals,
+  flows,
+  signalStatusOverrides = EMPTY_SIGNAL_STATUS_OVERRIDES,
+  onNavigateToFlows,
+  onUpdateSignalStatus
+}: SuspiciousSignalsProps) {
   // Rich local state populated from static data OR parsed rule signals
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
@@ -500,8 +578,7 @@ export default function SuspiciousSignals({ signals, flows, onNavigateToFlows, o
         // Merge demo PCAP signals with any actual rules generated so that the reference dataset is perfectly preserved!
         const merged: EnrichedSignal[] = [];
         PCAP_DEMO_SIGNALS.forEach(pcapSig => {
-          const matchingPropSig = signals.find(s => s.id === pcapSig.id);
-          const activeStatus = matchingPropSig?.status || pcapSig.status || 'Needs review';
+          const activeStatus = getPersistedStatus(pcapSig, signals, signalStatusOverrides) || 'Needs review';
           merged.push({
             ...sanitizeSignal(pcapSig),
             status: activeStatus
@@ -520,16 +597,14 @@ export default function SuspiciousSignals({ signals, flows, onNavigateToFlows, o
               observedSnippet: cleanedSig.observedEvidence.slice(0, 35),
               relatedFlowsCount: 1,
               firstSeenTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-              status: engineSig.status || 'Needs review'
+              status: signalStatusOverrides[engineSig.id] || engineSig.status || 'Needs review'
             });
           }
         });
         setEnrichedSignals(merged);
         if (merged.length > 0) {
           // Keep selection synchronized on re-mount if we already have a selection or take the first one
-          const currentSelectedId = selectedSignal?.id;
-          const foundSelected = merged.find(m => m.id === currentSelectedId);
-          setSelectedSignal(foundSelected || merged[0]);
+          setSelectedSignal(prev => merged.find(m => m.id === prev?.id) || merged[0]);
         }
       } else {
         // Standard user upload data enrichment
@@ -543,14 +618,12 @@ export default function SuspiciousSignals({ signals, flows, onNavigateToFlows, o
             observedSnippet: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 30) : 'Telemetry trace',
             relatedFlowsCount: 1,
             firstSeenTime: new Date(Date.now() - idx * 60000).toISOString().replace('T', ' ').slice(0, 19),
-            status: sig.status || 'Needs review'
+            status: signalStatusOverrides[sig.id] || sig.status || 'Needs review'
           };
         });
         setEnrichedSignals(mapped);
         if (mapped.length > 0) {
-          const currentSelectedId = selectedSignal?.id;
-          const foundSelected = mapped.find(m => m.id === currentSelectedId);
-          setSelectedSignal(foundSelected || mapped[0]);
+          setSelectedSignal(prev => mapped.find(m => m.id === prev?.id) || mapped[0]);
         }
       }
     } else {
@@ -558,7 +631,7 @@ export default function SuspiciousSignals({ signals, flows, onNavigateToFlows, o
       setEnrichedSignals([]);
       setSelectedSignal(null);
     }
-  }, [signals]);
+  }, [signals, signalStatusOverrides]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {
@@ -566,9 +639,13 @@ export default function SuspiciousSignals({ signals, flows, onNavigateToFlows, o
   };
 
   // Status modifier functions (Simulating real integration/workflow status persistence)
-  const handleUpdateStatus = (id: string, newStatus: 'Needs review' | 'Added to report' | 'Dismissed') => {
+  const handleUpdateStatus = (id: string, newStatus: SignalReviewStatus) => {
+    const activeSignal = enrichedSignals.find(signal => signal.id === id) || selectedSignal;
+    const linkedIds = activeSignal ? getLinkedSignalIds(activeSignal, signals) : [];
+    const idsToUpdate = new Set([id, ...linkedIds]);
+
     const updated = enrichedSignals.map(s => {
-      if (s.id === id) {
+      if (idsToUpdate.has(s.id)) {
         return { ...s, status: newStatus };
       }
       return s;
@@ -576,13 +653,11 @@ export default function SuspiciousSignals({ signals, flows, onNavigateToFlows, o
     setEnrichedSignals(updated);
     
     // Update selected signal if it matches
-    if (selectedSignal && selectedSignal.id === id) {
-      setSelectedSignal({ ...selectedSignal, status: newStatus });
-    }
+    setSelectedSignal(prev => prev && idsToUpdate.has(prev.id) ? { ...prev, status: newStatus } : prev);
 
     // Call parent to sync state globally so navigation transitions do not wipe data
     if (onUpdateSignalStatus) {
-      onUpdateSignalStatus(id, newStatus);
+      onUpdateSignalStatus(id, newStatus, linkedIds);
     }
   };
 

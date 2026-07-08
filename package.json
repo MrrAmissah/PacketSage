@@ -1,7 +1,8 @@
 {
-  "name": "react-example",
+  "name": "packetsage",
   "private": true,
   "version": "0.0.0",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

@@ -93,6 +93,8 @@ export interface TlsRecord {
   riskLevel: 'info' | 'low' | 'medium' | 'high';
 }
 
+export type SignalReviewStatus = 'Needs review' | 'Added to report' | 'Dismissed';
+
 export interface SuspiciousSignal {
   id: string;
   title: string;
@@ -105,7 +107,7 @@ export interface SuspiciousSignal {
   recommendedDefensiveCheck: string;
   relatedFlowIds?: string[];
   relatedEventIds?: string[];
-  status?: 'Needs review' | 'Added to report' | 'Dismissed';
+  status?: SignalReviewStatus;
 }
 
 export interface AiAnalysisResult {

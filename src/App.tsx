@@ -27,7 +27,7 @@ import {
   Sparkles
 } from 'lucide-react';
 
-import { AiAnalysisResult, FlowSummary } from './types';
+import { AiAnalysisResult, FlowSummary, SignalReviewStatus } from './types';
 import { ParsedResult } from './lib/parser';
 import { PacketSageLogo } from './components/Logo';
 import InfoPopover from './components/InfoPopover';
@@ -51,6 +51,7 @@ export default function App() {
   const [aiResult, setAiResult] = useState<AiAnalysisResult | null>(null);
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('packet-sage-theme');
@@ -95,6 +96,7 @@ export default function App() {
   const handleDataParsed = (data: ParsedResult) => {
     setParsedData(data);
     setAiResult(null); // Reset AI result when new data is parsed
+    setSignalStatusOverrides({});
     setSelectedFlow(null);
     setActiveTab('overview'); // Take them to command center automatically
   };
@@ -103,15 +105,26 @@ export default function App() {
     if (confirm("Are you sure you want to clear current forensic evidence? All volatile packet and log tables will be deleted.")) {
       setParsedData(null);
       setAiResult(null);
+      setSignalStatusOverrides({});
       setSelectedFlow(null);
       setActiveTab('import');
     }
   };
 
-  const handleUpdateSignalStatus = (id: string, status: 'Needs review' | 'Added to report' | 'Dismissed') => {
+  const handleUpdateSignalStatus = (id: string, status: SignalReviewStatus, linkedIds: string[] = []) => {
+    const idsToUpdate = Array.from(new Set([id, ...linkedIds].filter(Boolean)));
+
+    setSignalStatusOverrides(prev => {
+      const next = { ...prev };
+      idsToUpdate.forEach(signalId => {
+        next[signalId] = status;
+      });
+      return next;
+    });
+
     if (!parsedData) return;
     const updatedSignals = parsedData.signals.map(s => {
-      if (s.id === id) {
+      if (idsToUpdate.includes(s.id)) {
         return { ...s, status };
       }
       return s;
@@ -153,6 +166,7 @@ export default function App() {
           <SuspiciousSignals
             signals={parsedData?.signals || []}
             flows={parsedData?.flows || []}
+            signalStatusOverrides={signalStatusOverrides}
             onNavigateToFlows={(flow) => {
               setSelectedFlow(flow);
               setActiveTab('flows');
@@ -189,7 +203,7 @@ export default function App() {
           />
         );
       case 'report':
-        return <ReportBuilder data={parsedData} aiResult={aiResult} isLoading={isLoading} />;
+        return <ReportBuilder data={parsedData} aiResult={aiResult} isLoading={isLoading} signalStatusOverrides={signalStatusOverrides} />;
       case 'academy':
         return <LearningMode hasEvidence={!!parsedData} parsedData={parsedData} />;
       case 'architecture':
@@ -452,4 +466,3 @@ export default function App() {
     </div>
   );
 }
-

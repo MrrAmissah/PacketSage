@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 let aiClient: GoogleGenAI | null = null;
-const DEFAULT_ANALYSIS_TIMEOUT_MS = 35_000;
+const DEFAULT_ANALYSIS_TIMEOUT_MS = 45_000;
+const DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-3.5-flash"];
 const MAX_FLOW_PREVIEW = 15;
 const MAX_DNS_RECORDS = 20;
 const MAX_HTTP_RECORDS = 10;
@@ -35,6 +36,27 @@ function getAnalysisTimeoutMs() {
   return DEFAULT_ANALYSIS_TIMEOUT_MS;
 }
 
+function getGeminiModelCandidates() {
+  const configuredModels = String(process.env.GEMINI_MODEL || "")
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set([...configuredModels, ...DEFAULT_GEMINI_MODELS]));
+}
+
+function getLowLatencyModelConfig(model: string) {
+  if (model.startsWith("gemini-2.5-flash")) {
+    return { thinkingConfig: { thinkingBudget: 0 } };
+  }
+
+  if (model.startsWith("gemini-3") || model === "gemini-flash-latest") {
+    return { thinkingConfig: { thinkingLevel: "low" } };
+  }
+
+  return {};
+}
+
 function redactSensitive(value: string) {
   return value
     .replace(/(Authorization:\s*Basic\s+)[A-Za-z0-9+/=]+/gi, "Authorization: Basic username=[redacted], password=[redacted]")
@@ -46,6 +68,14 @@ function redactSensitive(value: string) {
 
 function safeText(value: any, maxLength = MAX_FIELD_LENGTH) {
   return redactSensitive(String(value ?? "").replace(/\s+/g, " ").trim()).slice(0, maxLength);
+}
+
+function safeErrorMetadata(err: any) {
+  return {
+    errorName: safeText(err?.name || "Error", 80),
+    status: safeText(err?.status || err?.code || "", 80),
+    message: safeText(err?.message || "", 220),
+  };
 }
 
 function asArray(value: any) {
@@ -66,6 +96,43 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, controller
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+async function generateGeminiAnalysis(request: any, timeoutMs: number) {
+  const startedAt = Date.now();
+  let lastError: any;
+
+  for (const model of getGeminiModelCandidates()) {
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 2_500) {
+      throw new AnalysisTimeoutError(timeoutMs);
+    }
+
+    const controller = new AbortController();
+    try {
+      return await withTimeout(getAiClient().models.generateContent({
+        ...request,
+        model,
+        config: {
+          ...request.config,
+          ...getLowLatencyModelConfig(model),
+          abortSignal: controller.signal,
+        },
+      }), remainingMs, controller);
+    } catch (err: any) {
+      lastError = err;
+      if (err instanceof AnalysisTimeoutError || err?.name === "AbortError") {
+        throw new AnalysisTimeoutError(timeoutMs);
+      }
+
+      console.log("[Info] Gemini model attempt failed", {
+        model: safeText(model, 80),
+        ...safeErrorMetadata(err),
+      });
+    }
+  }
+
+  throw lastError || new Error("Gemini model attempts failed.");
 }
 
 function buildFallbackMemo(reqBody: any, options: { reason?: "timeout" | "error" | "missing-key" } = {}) {
@@ -154,12 +221,9 @@ Be honest about limitations. If traffic appears benign, say so.
 Perspective directive: ${perspectiveInstruction}`;
 
     const timeoutMs = getAnalysisTimeoutMs();
-    const controller = new AbortController();
-    const response = await withTimeout(getAiClient().models.generateContent({
-      model: "gemini-3.5-flash",
+    const response = await generateGeminiAnalysis({
       contents: `Perform a forensic investigation report on the following network capture metadata:\n${JSON.stringify(sanitizedMetadata, null, 2)}\n\nProvide your output as a structured, schema-compliant JSON object.`,
       config: {
-        abortSignal: controller.signal,
         systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
@@ -194,7 +258,7 @@ Perspective directive: ${perspectiveInstruction}`;
           ],
         },
       },
-    }), timeoutMs, controller);
+    }, timeoutMs);
 
     if (!response.text) {
       throw new Error("No text returned from Gemini API");
@@ -202,9 +266,18 @@ Perspective directive: ${perspectiveInstruction}`;
 
     return res.status(200).json(JSON.parse(response.text.trim()));
   } catch (err: any) {
-    const reason = err instanceof AnalysisTimeoutError || err?.name === "AbortError" ? "timeout" : "error";
+    const reason = err instanceof AnalysisTimeoutError || err?.name === "AbortError"
+      ? "timeout"
+      : String(err?.message || "").includes("GEMINI_API_KEY")
+        ? "missing-key"
+        : "error";
     console.log("[Info] Constructing local backup analyst memo", {
-      reason: reason === "timeout" ? "gemini_timeout" : "gemini_unavailable",
+      reason: reason === "timeout"
+        ? "gemini_timeout"
+        : reason === "missing-key"
+          ? "gemini_missing_key"
+          : "gemini_unavailable",
+      ...safeErrorMetadata(err),
       flows: asArray(req.body?.flowSummary).length,
       dns: asArray(req.body?.dnsRecords).length,
       http: asArray(req.body?.httpRecords).length,

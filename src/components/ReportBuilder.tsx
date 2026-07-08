@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, CheckCircle, FileText, Printer, Shield, Calendar, Layers, Eye, RefreshCw, AlertTriangle, Check, RotateCcw } from 'lucide-react';
-import { AiAnalysisResult } from '../types';
+import { AiAnalysisResult, SignalReviewStatus, SuspiciousSignal } from '../types';
 import InfoPopover from './InfoPopover';
 import { ParsedResult } from '../lib/parser';
 
@@ -8,7 +8,10 @@ interface ReportBuilderProps {
   data: ParsedResult | null;
   aiResult: AiAnalysisResult | null;
   isLoading?: boolean;
+  signalStatusOverrides?: Record<string, SignalReviewStatus>;
 }
+
+const EMPTY_SIGNAL_STATUS_OVERRIDES: Record<string, SignalReviewStatus> = {};
 
 // Redact usernames, passwords, cookies, auth tokens, secrets
 const redactSensitive = (text: string): string => {
@@ -75,7 +78,12 @@ const formatUnambiguousDate = (dateStr: string) => {
   }
 };
 
-export default function ReportBuilder({ data, aiResult, isLoading }: ReportBuilderProps) {
+export default function ReportBuilder({
+  data,
+  aiResult,
+  isLoading,
+  signalStatusOverrides = EMPTY_SIGNAL_STATUS_OVERRIDES
+}: ReportBuilderProps) {
   const [analystName, setAnalystName] = useState('Tier-1 Cybersecurity Analyst');
   const [classification, setClassification] = useState('INTERNAL USE ONLY');
   const [status, setStatus] = useState('INVESTIGATING');
@@ -181,6 +189,9 @@ export default function ReportBuilder({ data, aiResult, isLoading }: ReportBuild
   };
 
   const readinessScore = getReadinessScore();
+  const getSignalReviewStatus = (signal: SuspiciousSignal): SignalReviewStatus => {
+    return signalStatusOverrides[signal.id] || signal.status || 'Needs review';
+  };
 
   const renderReportDocument = () => {
     return (
@@ -338,7 +349,7 @@ export default function ReportBuilder({ data, aiResult, isLoading }: ReportBuild
                             {ref}
                           </td>
                           <td className="py-2 px-3 text-right text-[10px] text-slate-500 font-semibold whitespace-nowrap">
-                            {(sig as any).status || 'Needs review'}
+                            {getSignalReviewStatus(sig)}
                           </td>
                         </tr>
                       );
@@ -523,6 +534,7 @@ export default function ReportBuilder({ data, aiResult, isLoading }: ReportBuild
         const evidenceRef = redactSensitive((sig as any).observedSnippet || (sig.observedEvidence.length > 30 ? sig.observedEvidence.substring(0, 30) + '...' : sig.observedEvidence));
         md += `### Finding ${idx + 1}: ${title}\n`;
         md += `* **Heuristic Severity:** ${sig.severity.toUpperCase()} | **Confidence:** ${sig.confidence.toUpperCase()}\n`;
+        md += `* **Review Status:** ${getSignalReviewStatus(sig)}\n`;
         md += `* **Category:** ${sig.category}\n`;
         md += `* **Observed Evidence:** ${evidenceRef}\n`;
         md += `* **Forensic Caveat:** ${sig.whatItDoesNotProve}\n`;
@@ -975,28 +987,58 @@ export default function ReportBuilder({ data, aiResult, isLoading }: ReportBuild
 
       {/* 2. Full-Screen Preview Modal */}
       {isPreviewOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col backdrop-blur-md animate-in fade-in duration-200">
+        <div id="report-preview-modal" className="fixed inset-0 z-50 bg-slate-950 flex flex-col backdrop-blur-md animate-in fade-in duration-200">
           
           {/* Dynamic Print Helper Style Block */}
           <style>{`
             @media print {
+              @page {
+                margin: 0.5in;
+              }
               body, html {
                 background: white !important;
                 color: black !important;
+                height: auto !important;
+                overflow: visible !important;
               }
-              /* Hide all other core workspace layout elements */
-              body > *, 
-              #root > *,
+              #root,
+              #packet-sage-workspace,
+              #report-preview-modal {
+                display: block !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+                background: white !important;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              #final-report-print-target,
+              #final-report-print-target * {
+                visibility: visible !important;
+              }
+              #report-preview-modal {
+                position: static !important;
+                inset: auto !important;
+                width: auto !important;
+                padding: 0 !important;
+                margin: 0 !important;
+              }
+              #report-preview-scroll {
+                display: block !important;
+                overflow: visible !important;
+                padding: 0 !important;
+                margin: 0 !important;
+              }
               .print\\:hidden {
                 display: none !important;
+                visibility: hidden !important;
               }
-              /* Display only the print target container */
               #final-report-print-target {
                 display: block !important;
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
+                position: static !important;
                 width: 100% !important;
+                max-width: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
                 background: white !important;
@@ -1048,7 +1090,7 @@ export default function ReportBuilder({ data, aiResult, isLoading }: ReportBuild
           </div>
 
           {/* Scrollable Container for Document Sheet */}
-          <div className="flex-grow overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start w-full">
+          <div id="report-preview-scroll" className="flex-grow overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start w-full">
             {/* Centered Document Sheet (Styled as Premium White Paper) */}
             <div 
               id="final-report-print-target"

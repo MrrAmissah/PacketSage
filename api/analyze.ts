@@ -1,6 +1,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 let aiClient: GoogleGenAI | null = null;
+const DEFAULT_ANALYSIS_TIMEOUT_MS = 35_000;
+const MAX_FLOW_PREVIEW = 15;
+const MAX_DNS_RECORDS = 20;
+const MAX_HTTP_RECORDS = 10;
+const MAX_TLS_RECORDS = 10;
+const MAX_SIGNAL_RECORDS = 20;
+const MAX_FIELD_LENGTH = 260;
+
+class AnalysisTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Gemini analysis timed out after ${timeoutMs}ms`);
+    this.name = "AnalysisTimeoutError";
+  }
+}
 
 function getAiClient(): GoogleGenAI {
   if (!aiClient) {
@@ -13,14 +27,58 @@ function getAiClient(): GoogleGenAI {
   return aiClient;
 }
 
-function buildFallbackMemo(reqBody: any) {
+function getAnalysisTimeoutMs() {
+  const configured = Number(process.env.GEMINI_TIMEOUT_MS);
+  if (Number.isFinite(configured) && configured >= 10_000 && configured <= 60_000) {
+    return configured;
+  }
+  return DEFAULT_ANALYSIS_TIMEOUT_MS;
+}
+
+function redactSensitive(value: string) {
+  return value
+    .replace(/(Authorization:\s*Basic\s+)[A-Za-z0-9+/=]+/gi, "Authorization: Basic username=[redacted], password=[redacted]")
+    .replace(/(username|user)\s*([=:])\s*[^\s&;,]+/gi, "username=[redacted]")
+    .replace(/(password|passwd|pwd)\s*([=:])\s*[^\s&;,]+/gi, "password=[redacted]")
+    .replace(/(token|auth_token|access_token|secret|key|cookie|sessionid|session)\s*([=:])\s*[^\s&;,]+/gi, "$1=[redacted]")
+    .replace(/bearer\s+[a-zA-Z0-9_.-]+/gi, "bearer [redacted]");
+}
+
+function safeText(value: any, maxLength = MAX_FIELD_LENGTH) {
+  return redactSensitive(String(value ?? "").replace(/\s+/g, " ").trim()).slice(0, maxLength);
+}
+
+function asArray(value: any) {
+  return Array.isArray(value) ? value : [];
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, controller: AbortController): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new AnalysisTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function buildFallbackMemo(reqBody: any, options: { reason?: "timeout" | "error" | "missing-key" } = {}) {
   const { flowSummary, dnsRecords, httpRecords } = reqBody || {};
   const commonHost = flowSummary?.[0]?.sourceIp || "10.0.0.15";
   const commonDomain = dnsRecords?.[0]?.query || "d4c1f2a1.example.com";
   const commonExternal = flowSummary?.[0]?.destinationIp || "203.0.113.50";
+  const fallbackNotice = options.reason === "timeout"
+    ? "Gemini analysis timed out before the platform limit, so PacketSage returned a local structured fallback memo for analyst continuity."
+    : "Gemini analysis was unavailable, so PacketSage returned a local structured fallback memo for analyst continuity.";
 
   return {
-    executiveSummary: `A forensic analysis of host ${commonHost} identified multiple review-worthy network behaviors, including periodic DNS query timing, cleartext HTTP transfer activity, and repeated outbound connections. These observations require endpoint, DNS resolver, and destination reputation validation before concluding compromise or command-and-control activity.`,
+    executiveSummary: `${fallbackNotice} A forensic analysis of host ${commonHost} identified multiple review-worthy network behaviors, including periodic DNS query timing, cleartext HTTP transfer activity, and repeated outbound connections. These observations require endpoint, DNS resolver, and destination reputation validation before concluding compromise or command-and-control activity.`,
     whatHappened: `• QUERIED: Host ${commonHost} initiated periodic DNS resolver queries to domain ${commonDomain} at uniform intervals. This periodic query pattern requires validation before drawing conclusions about beaconing behavior.\n• REQUESTED: Decoded application-layer sessions from ${commonHost} requested external assets over cleartext.\n• DOWNLOADED: A cleartext binary download transfer was completed from ${commonExternal}, which requires endpoint validation.\n• OBSERVED: Multiple repeated outbound connection attempts targeting port 80/443 of remote external destinations, which require reputation and ownership review.`,
     normalActivity: "Routine host activities, local ARP resolution, multicast discovery protocols, and background encrypted TLS 1.3 handshakes to public software update domains were recorded in the baseline dataset.",
     suspiciousActivity: `Host ${commonHost} sustained a sequence of application-layer transfers and repeated outbound connection attempts to external destinations over non-standard or unencrypted ports.`,
@@ -30,8 +88,10 @@ function buildFallbackMemo(reqBody: any) {
     beginnerExplanation: "One computer downloaded a file over an unencrypted channel, then repeatedly contacted a domain and external network services. That pattern is unusual enough to check the computer's process history, DNS logs, and surrounding network traffic.",
     technicalExplanation: `Transport/application behavior:\nThe network capture reveals a series of unencrypted application-layer transfers combined with periodic outbound socket configurations.\n\nDNS behavior:\nRepeated recursive DNS queries were generated targeting domain ${commonDomain}.\n\nHTTP/cleartext behavior:\nA payload transfer was completed over unencrypted HTTP. This cleartext channel exposes transport headers and data streams to inspection.\n\nExternal connection behavior:\nOutbound session sequences target destination ports with repeated timing intervals.\n\nRequired validation:\nEndpoint process telemetry, DNS resolver logs, and destination ownership checks are required before concluding compromise or command-and-control activity.`,
     confidence: "medium",
-    limitations: "• Payload contents may be incomplete.\n• Network metadata does not confirm endpoint compromise on its own.\n• Host process telemetry is required to validate execution.\n• Authentication logs are required to assess account impact.",
-    reportReadySummary: "This forensic investigation report details anomalous network patterns including unencrypted downloads and persistent DNS querying.",
+    limitations: `• ${fallbackNotice}\n• Payload contents may be incomplete.\n• Network metadata does not confirm endpoint compromise on its own.\n• Host process telemetry is required to validate execution.\n• Authentication logs are required to assess account impact.`,
+    reportReadySummary: options.reason === "timeout"
+      ? "Gemini analysis timed out and PacketSage returned a local fallback report summary for review."
+      : "This fallback forensic investigation report details anomalous network patterns including unencrypted downloads and persistent DNS querying.",
   };
 }
 
@@ -43,30 +103,37 @@ export default async function handler(req: any, res: any) {
 
   try {
     const { flowSummary, dnsRecords, httpRecords, tlsRecords, suspiciousSignals, protocolStats, fileName, perspective } = req.body || {};
+    const flowsInput = asArray(flowSummary);
+    const dnsInput = asArray(dnsRecords);
+    const httpInput = asArray(httpRecords);
+    const tlsInput = asArray(tlsRecords);
+    const signalInput = asArray(suspiciousSignals);
+    const protocolInput = asArray(protocolStats);
     const sanitizedMetadata = {
-      fileName,
-      totalFlows: flowSummary?.length || 0,
-      totalDns: dnsRecords?.length || 0,
-      totalHttp: httpRecords?.length || 0,
-      totalTls: tlsRecords?.length || 0,
-      protocolMix: protocolStats?.map((p: any) => `${p.protocol}: ${p.percentage}%`).join(", ") || "",
-      flowsPreview: flowSummary?.slice(0, 15).map((f: any) => ({
-        src: f.sourceIp,
+      fileName: safeText(fileName, 120),
+      totalFlows: flowsInput.length,
+      totalDns: dnsInput.length,
+      totalHttp: httpInput.length,
+      totalTls: tlsInput.length,
+      protocolMix: protocolInput.slice(0, 12).map((p: any) => `${safeText(p.protocol, 40)}: ${safeText(p.percentage, 20)}%`).join(", ") || "",
+      flowsPreview: flowsInput.slice(0, MAX_FLOW_PREVIEW).map((f: any) => ({
+        src: safeText(f.sourceIp, 48),
         sport: f.sourcePort,
-        dst: f.destinationIp,
+        dst: safeText(f.destinationIp, 48),
         dport: f.destinationPort,
-        proto: f.protocol,
+        proto: safeText(f.protocol, 24),
         bytes: f.byteCount,
-        direction: f.direction,
-        risk: f.riskLevel,
+        direction: safeText(f.direction, 32),
+        risk: safeText(f.riskLevel, 32),
       })),
-      dnsQueries: dnsRecords?.slice(0, 20).map((d: any) => `${d.clientIp} -> ${d.query} (${d.queryType})`),
-      httpTraffic: httpRecords?.slice(0, 10).map((h: any) => `${h.clientIp} -> ${h.host}${h.uri} (${h.method} ${h.statusCode})`),
-      suspiciousSignals: suspiciousSignals?.map((s: any) => ({
-        title: s.title,
-        severity: s.severity,
-        confidence: s.confidence,
-        evidence: s.observedEvidence,
+      dnsQueries: dnsInput.slice(0, MAX_DNS_RECORDS).map((d: any) => `${safeText(d.clientIp, 48)} -> ${safeText(d.query, 120)} (${safeText(d.queryType, 24)})`),
+      httpTraffic: httpInput.slice(0, MAX_HTTP_RECORDS).map((h: any) => `${safeText(h.clientIp, 48)} -> ${safeText(h.host, 120)}${safeText(h.uri, 120)} (${safeText(h.method, 16)} ${safeText(h.statusCode, 16)})`),
+      tlsTraffic: tlsInput.slice(0, MAX_TLS_RECORDS).map((t: any) => `${safeText(t.clientIp, 48)} -> ${safeText(t.serverIp, 48)} SNI=${safeText(t.sni, 120)} ${safeText(t.version, 24)}`),
+      suspiciousSignals: signalInput.slice(0, MAX_SIGNAL_RECORDS).map((s: any) => ({
+        title: safeText(s.title, 140),
+        severity: safeText(s.severity, 32),
+        confidence: safeText(s.confidence, 32),
+        evidence: safeText(s.observedEvidence),
       })),
     };
 
@@ -86,10 +153,13 @@ Provide safe, defensive network actions only. Do not provide exploitation, malwa
 Be honest about limitations. If traffic appears benign, say so.
 Perspective directive: ${perspectiveInstruction}`;
 
-    const response = await getAiClient().models.generateContent({
+    const timeoutMs = getAnalysisTimeoutMs();
+    const controller = new AbortController();
+    const response = await withTimeout(getAiClient().models.generateContent({
       model: "gemini-3.5-flash",
       contents: `Perform a forensic investigation report on the following network capture metadata:\n${JSON.stringify(sanitizedMetadata, null, 2)}\n\nProvide your output as a structured, schema-compliant JSON object.`,
       config: {
+        abortSignal: controller.signal,
         systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
@@ -124,7 +194,7 @@ Perspective directive: ${perspectiveInstruction}`;
           ],
         },
       },
-    });
+    }), timeoutMs, controller);
 
     if (!response.text) {
       throw new Error("No text returned from Gemini API");
@@ -132,7 +202,15 @@ Perspective directive: ${perspectiveInstruction}`;
 
     return res.status(200).json(JSON.parse(response.text.trim()));
   } catch (err: any) {
-    console.log("[Info] Constructing local backup analyst memo:", err.message || err);
-    return res.status(200).json(buildFallbackMemo(req.body));
+    const reason = err instanceof AnalysisTimeoutError || err?.name === "AbortError" ? "timeout" : "error";
+    console.log("[Info] Constructing local backup analyst memo", {
+      reason: reason === "timeout" ? "gemini_timeout" : "gemini_unavailable",
+      flows: asArray(req.body?.flowSummary).length,
+      dns: asArray(req.body?.dnsRecords).length,
+      http: asArray(req.body?.httpRecords).length,
+      tls: asArray(req.body?.tlsRecords).length,
+      signals: asArray(req.body?.suspiciousSignals).length,
+    });
+    return res.status(200).json(buildFallbackMemo(req.body, { reason }));
   }
 }

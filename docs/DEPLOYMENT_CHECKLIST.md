@@ -78,6 +78,7 @@ For Vercel-hosted previews:
 * [ ] **Server-Side Secret Boundary**: `GEMINI_API_KEY` must be configured only as a server-side Vercel environment variable for Preview and Production.
 * [ ] **Client Environment Label**: `VITE_APP_ENV` may be set to `preview` for Preview deployments and `production` for Production deployments.
 * [ ] **No Browser Gemini Key**: Do not create `VITE_GEMINI_API_KEY`.
+* [ ] **AI Timeout Guard**: `/api/analyze` should return the structured local fallback memo before the platform timeout if Gemini is slow or unavailable.
 * [ ] **SPA Routing**: `vercel.json` rewrites non-file routes to `index.html` for client-side navigation while preserving API function routes.
 
 ---
@@ -94,14 +95,15 @@ Once deployed, run these sequential verifications on the live instance:
 
 ### 5.2 Heuristic & Signal Check
 1. Go to the **Signals & Observations** tab.
-2. Select any active signal and toggle its status to **Validated**.
-3. Verify the visual state changes and displays a green indicator badge.
+2. Select an active signal and click **Add to report**.
+3. Select another active signal and click **Dismiss noise**.
+4. Navigate away and back, then verify the table row, detail rail, and Report Builder status column preserve the selected statuses.
 
 ### 5.3 AI Analyst Integration
 1. Open the **AI Analyst Memo** tab.
-2. Click **Synthesize Narrative Memo**.
+2. Click **Generate Forensic Incident Memo**.
 3. Wait for the loading indicators.
-4. Confirm the narrative memo finishes, displaying formatted markdown, executive analogies, and defensive containment suggestions.
+4. Confirm the memo finishes with Gemini-backed output, or clearly reports the structured timeout fallback if Gemini exceeds the app-level guard.
 
 ### 5.4 Report Compiler & Print Layouts
 1. Go to the **Report Builder** tab.
@@ -109,6 +111,7 @@ Once deployed, run these sequential verifications on the live instance:
 3. Add custom text to the Analyst Notes field.
 4. Click **Print / Export PDF**.
 5. Confirm the print overlay displays only the structured report, hiding application navigation headers and action controls.
+6. Confirm browser/headless PDF output is not blank and contains the report title, evidence summary, findings table, analyst memo if linked, validation notes, and limitations.
 
 ---
 

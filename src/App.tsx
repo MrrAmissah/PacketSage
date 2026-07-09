@@ -52,10 +52,11 @@ export default function App() {
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
+  const workspaceScrollRef = React.useRef<HTMLDivElement>(null);
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('packet-sage-theme');
-    return (saved as ThemeMode) || 'system';
+    return (saved as ThemeMode) || 'light';
   });
 
   React.useEffect(() => {
@@ -92,6 +93,10 @@ export default function App() {
     mediaQuery.addEventListener('change', listener);
     return () => mediaQuery.removeEventListener('change', listener);
   }, [theme]);
+
+  React.useEffect(() => {
+    workspaceScrollRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [activeTab, parsedData?.evidence.id]);
 
   const handleDataParsed = (data: ParsedResult) => {
     setParsedData(data);
@@ -214,18 +219,18 @@ export default function App() {
   };
 
   return (
-    <div id="packet-sage-workspace" className="flex h-screen bg-canvas text-text-primary overflow-hidden font-sans transition-colors duration-150">
+    <div id="packet-sage-workspace" className="flex flex-col md:flex-row h-screen bg-canvas text-text-primary overflow-hidden font-sans transition-colors duration-150">
       
       {/* Sidebar Rail */}
-      <aside className="w-60 bg-[#08162e] border-r border-slate-900 flex flex-col justify-between shrink-0 select-none text-slate-100">
-        <div className="space-y-6 pt-6">
+      <aside className="w-full md:w-60 bg-[#08162e] border-b md:border-b-0 md:border-r border-slate-900 flex flex-col md:justify-between shrink-0 select-none text-slate-100">
+        <div className="space-y-2 md:space-y-6 pt-2 md:pt-6 min-w-0">
           {/* Logo Heading */}
-          <div className="px-5 pb-4 border-b border-[#1e293b]/40">
-            <PacketSageLogo iconClassName="w-8 h-8" forceLight={true} />
+          <div className="px-3 md:px-5 pb-2 md:pb-4 border-b border-[#1e293b]/40">
+            <PacketSageLogo className="[&>span]:hidden md:[&>span]:block" iconClassName="w-7 h-7 md:w-8 md:h-8" forceLight={true} />
           </div>
 
           {/* Navigation Items */}
-          <nav className="space-y-1 px-3">
+          <nav className="flex md:block gap-2 md:space-y-1 px-2 md:px-3 pb-2 md:pb-0 overflow-x-auto mobile-scroll-snap">
             {[
               { id: 'overview', label: 'Command center', icon: Server, enabled: !!parsedData },
               { id: 'import', label: 'Import evidence', icon: Database, enabled: true },
@@ -245,7 +250,7 @@ export default function App() {
                   key={item.id}
                   disabled={!item.enabled}
                   onClick={() => setActiveTab(item.id as TabType)}
-                  className={`relative w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-medium rounded-lg transition-all text-left cursor-pointer group ${
+                  className={`relative flex-none md:flex-auto min-w-[124px] md:min-w-0 md:w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-3.5 py-2 md:py-2.5 text-xs font-medium rounded-lg transition-all text-left cursor-pointer group ${
                     !item.enabled
                       ? 'text-slate-500 hover:bg-transparent cursor-not-allowed border border-transparent'
                       : isActive
@@ -256,7 +261,7 @@ export default function App() {
                 >
                   {/* Premium left indicator vertical bar */}
                   {isActive && (
-                    <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#38bdf8] rounded-r-md" />
+                    <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#38bdf8] rounded-r-md hidden md:block" />
                   )}
                   <Icon 
                     size={14} 
@@ -268,7 +273,7 @@ export default function App() {
                         : 'text-slate-400 group-hover:text-slate-200'
                     }`} 
                   />
-                  <span>{item.label}</span>
+                  <span className="truncate">{item.label}</span>
                   {!item.enabled && (
                     <Lock size={10} className="ml-auto text-slate-500/40" />
                   )}
@@ -279,7 +284,7 @@ export default function App() {
         </div>
 
         {/* Workspace Footer Actions */}
-        <div className="p-4 border-t border-[#1e293b]/40 space-y-3 text-[10px] text-slate-400 font-medium bg-[#051022]/40">
+        <div className="hidden md:block p-4 border-t border-[#1e293b]/40 space-y-3 text-[10px] text-slate-400 font-medium bg-[#051022]/40">
           {parsedData && (
             <button
               onClick={handleResetData}
@@ -293,14 +298,29 @@ export default function App() {
             <span>Version: <strong className="text-slate-300 font-mono">v1.1.0</strong></span>
           </div>
         </div>
+        <div className="md:hidden px-2 pb-2 text-[10px] text-slate-400 font-medium bg-[#051022]/40 border-t border-[#1e293b]/40">
+          <div className="flex items-center justify-between gap-2 pt-1.5">
+            {parsedData ? (
+              <button
+                onClick={handleResetData}
+                className="h-7 px-3 text-slate-300 hover:text-red-400 bg-transparent hover:bg-red-500/10 border border-slate-800 hover:border-red-500/20 rounded-lg text-[10px] font-medium tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                Clear evidence
+              </button>
+            ) : (
+              <span>Session: <strong className="text-amber-500 font-semibold">Volatile</strong></span>
+            )}
+            <span className="ml-auto">Version: <strong className="text-slate-300 font-mono">v1.1.0</strong></span>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 min-h-0">
         
         {/* Top Evidence Bar */}
-        <header className="h-12 bg-shell/80 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between shrink-0 select-none transition-colors duration-150 z-20">
-          <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-text-muted font-normal min-w-0">
+        <header className="min-h-12 bg-shell/80 backdrop-blur-md border-b border-border-subtle px-3 sm:px-6 py-2 sm:py-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 select-none transition-colors duration-150 z-20">
+          <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-text-muted font-normal min-w-0 w-full sm:w-auto overflow-x-auto mobile-scroll-snap">
             {!parsedData ? (
               <>
                 {/* 1. No Evidence Loaded */}
@@ -404,7 +424,7 @@ export default function App() {
           </div>
 
           {/* Right actions sequence: Theme toggle → Build report → No cloud retention */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
             {/* Theme toggle */}
             <div className="flex items-center bg-surface-muted border border-border-subtle rounded-lg p-0.5 h-8">
               {[
@@ -443,13 +463,14 @@ export default function App() {
                 }`}
                 title={!parsedData ? "Please import evidence to build an incident report" : undefined}
               >
-                Build Incident Report
+                <span className="hidden sm:inline">Build Incident Report</span>
+                <span className="sm:hidden">Report</span>
                 <ArrowRight size={11} />
               </button>
             )}
 
             {/* No cloud retention */}
-            <div className="h-8 px-2 bg-status-success-bg border border-status-success/25 rounded-lg text-[10px] text-status-success font-semibold flex items-center gap-1 select-none">
+            <div className="h-8 px-2 bg-status-success-bg border border-status-success/25 rounded-lg text-[10px] text-status-success font-semibold hidden sm:flex items-center gap-1 select-none">
               <Lock size={10} className="text-status-success" />
               <span className="hidden xs:inline">No Cloud Retention</span>
             </div>
@@ -457,7 +478,7 @@ export default function App() {
         </header>
 
         {/* Tab workspace window with standard responsive layout */}
-        <div className="flex-1 overflow-y-auto px-6 md:px-8 py-6 bg-canvas transition-colors duration-150">
+        <div ref={workspaceScrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 bg-canvas transition-colors duration-150">
           <div className="max-w-[1440px] mx-auto w-full">
             {renderActiveContent()}
           </div>

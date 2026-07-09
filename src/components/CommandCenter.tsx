@@ -440,8 +440,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </div>
               </div>
               <div className="flex items-baseline justify-between mt-1 min-w-0">
-                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono truncate">{events.length}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1">Telemetry decoded</span>
+                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono shrink-0">{events.length}</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Telemetry decoded</span>
               </div>
             </div>
 
@@ -454,8 +454,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </div>
               </div>
               <div className="flex items-baseline justify-between mt-1 min-w-0">
-                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono truncate">{flows.length}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1">Distinct sessions</span>
+                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono shrink-0">{flows.length}</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Distinct sessions</span>
               </div>
             </div>
 
@@ -468,8 +468,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </div>
               </div>
               <div className="flex items-baseline justify-between mt-1 min-w-0">
-                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono truncate">{uniqueEndpoints.length}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1">Unique addresses</span>
+                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono shrink-0">{uniqueEndpoints.length}</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Unique addresses</span>
               </div>
             </div>
 
@@ -482,8 +482,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </div>
               </div>
               <div className="flex items-baseline justify-between mt-1 min-w-0">
-                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono truncate">{protocolStats.length}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1">Identified types</span>
+                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono shrink-0">{protocolStats.length}</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Identified types</span>
               </div>
             </div>
 
@@ -498,10 +498,10 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </div>
               </div>
               <div className="flex items-baseline justify-between mt-1 min-w-0">
-                <span className={`text-lg font-bold tracking-tight tabular-nums font-mono truncate ${
+                <span className={`text-lg font-bold tracking-tight tabular-nums font-mono shrink-0 ${
                   signals.length > 0 ? "text-status-danger" : "text-text-primary"
                 }`}>{signals.length}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1">Requiring review</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Requiring review</span>
               </div>
             </div>
 
@@ -519,10 +519,10 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </div>
               </div>
               <div className="flex items-baseline justify-between mt-1 min-w-0">
-                <span className={`text-lg font-bold tracking-tight tabular-nums font-mono truncate ${
+                <span className={`text-lg font-bold tracking-tight tabular-nums font-mono shrink-0 ${
                   cleartextCount > 0 ? "text-status-warning" : "text-text-primary"
                 }`}>{cleartextCount}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1">Unsecure transfers</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Unsecure transfers</span>
               </div>
             </div>
           </div>
@@ -537,7 +537,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
           
           {/* C. Observed Traffic Activity Chart */}
         <div className="p-5 bg-surface border border-border-subtle rounded-xl shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 select-none">
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-text-primary">Observed traffic activity</h3>
               <p className="text-xs text-text-muted">

@@ -150,3 +150,12 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
 }
+
+.mobile-scroll-snap {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.mobile-scroll-snap::-webkit-scrollbar {
+  display: none;
+}

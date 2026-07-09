@@ -1120,7 +1120,35 @@ export function runRuleEngine(
     }
   });
 
-  // 5. Massive Outbound Data Spike
+  // 5. Repeated outbound connections to the same external service
+  const repeatedOutboundGroups: Record<string, FlowSummary[]> = {};
+  flows.forEach(flow => {
+    if (flow.direction !== 'outbound') return;
+    const key = `${flow.sourceIp}->${flow.destinationIp}:${flow.destinationPort}:${flow.protocol}`;
+    repeatedOutboundGroups[key] = repeatedOutboundGroups[key] || [];
+    repeatedOutboundGroups[key].push(flow);
+  });
+
+  Object.values(repeatedOutboundGroups).forEach(group => {
+    if (group.length < 4) return;
+
+    const [firstFlow] = group;
+    const relatedFlowIds = group.map(flow => flow.id);
+    signals.push({
+      id: `sig-repeated-connections-${firstFlow.sourceIp}-${firstFlow.destinationIp}-${firstFlow.destinationPort}`.replace(/[^a-zA-Z0-9-_]/g, '_'),
+      title: 'Repeated outbound connections',
+      severity: 'medium',
+      confidence: group.length >= 8 ? 'high' : 'medium',
+      category: 'Repeated outbound activity',
+      observedEvidence: `Internal IP ${firstFlow.sourceIp} made ${group.length} repeated outbound connection attempts to ${firstFlow.destinationIp} on port ${firstFlow.destinationPort}.`,
+      interpretation: 'Multiple outbound sessions to the same external service may indicate application heartbeats, staged communication, polling, or repeated connection retries that require validation alongside endpoint context.',
+      whatItDoesNotProve: 'It does not prove command-and-control, tunneling, or data theft. Normal client software, update services, and developer tools can produce repeated outbound connections.',
+      recommendedDefensiveCheck: 'Review the destination reputation, destination service owner, process lineage on the source host, and whether these repeated sessions match expected application behavior.',
+      relatedFlowIds
+    });
+  });
+
+  // 6. Massive Outbound Data Spike
   flows.forEach(flow => {
     if (flow.byteCount > 10 * 1024 * 1024 && flow.direction === 'outbound') {
       signals.push({

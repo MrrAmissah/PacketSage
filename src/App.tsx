@@ -56,7 +56,7 @@ export default function App() {
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('packet-sage-theme');
-    return (saved as ThemeMode) || 'system';
+    return (saved as ThemeMode) || 'light';
   });
 
   React.useEffect(() => {

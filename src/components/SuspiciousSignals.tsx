@@ -110,24 +110,24 @@ const PCAP_DEMO_SIGNALS: EnrichedSignal[] = [
     confidence: 'medium',
     confidenceScore: 61,
     category: 'Repeated outbound activity',
-    observedSnippet: '203.0.113.50:80',
-    observedEvidence: 'Telemetry recorded 8 successive short-duration outbound TCP connections from 10.0.0.15 to external IP 203.0.113.50.',
+    observedSnippet: '203.0.113.80:4444',
+    observedEvidence: 'Telemetry recorded 10 successive short-duration outbound TCP connections from 10.0.0.15 to external IP 203.0.113.80 on port 4444.',
     interpretation: 'A quick sequence of short-duration TCP connections to a single external host often points to heartbeats, staging discovery, or keep-alive sockets.',
     whatItDoesNotProve: 'Does not guarantee active C2 channel communication or theft. It may be triggered by standard software polling scripts, CDN resource requests, or local API loops.',
     recommendedDefensiveCheck: 'Query external domain registry details. Review the payload headers for authorization tokens or persistent shell identifiers.',
-    relatedFlowsCount: 8,
+    relatedFlowsCount: 10,
     firstSeenTime: '2024-05-21 10:11:03',
     status: 'Needs review',
     metrics: [
-      { label: 'Total connections', value: '8 sessions' },
-      { label: 'Target IP', value: '203.0.113.50' },
-      { label: 'Dest Port', value: '80' },
+      { label: 'Total connections', value: '10 sessions' },
+      { label: 'Target IP', value: '203.0.113.80' },
+      { label: 'Dest Port', value: '4444' },
       { label: 'Handshake status', value: 'ESTABLISHED (completed)' }
     ],
     flowsList: [
-      { src: '10.0.0.15:50120', dst: '203.0.113.50:80', proto: 'TCP' },
-      { src: '10.0.0.15:50121', dst: '203.0.113.50:80', proto: 'TCP' },
-      { src: '10.0.0.15:50122', dst: '203.0.113.50:80', proto: 'TCP' }
+      { src: '10.0.0.15:53000', dst: '203.0.113.80:4444', proto: 'TCP' },
+      { src: '10.0.0.15:53001', dst: '203.0.113.80:4444', proto: 'TCP' },
+      { src: '10.0.0.15:53002', dst: '203.0.113.80:4444', proto: 'TCP' }
     ]
   },
   {
@@ -330,6 +330,7 @@ const DEMO_SIGNAL_MATCHERS: Record<string, (signal: SuspiciousSignal) => boolean
     const id = signal.id.toLowerCase();
     const text = normalizeSignalText(`${signal.title} ${signal.category} ${signal.observedEvidence}`);
     const isRepeatedConnectionPattern = (
+      id.includes('sig-repeated-connections') ||
       text.includes('repeated') ||
       text.includes('multiple') ||
       text.includes('successive') ||
@@ -676,8 +677,11 @@ export default function SuspiciousSignals({
       if (sig.id === 'sig-dns-beacon') {
         return f.destinationPort === 53;
       }
-      if (sig.id === 'sig-cleartext-binary' || sig.id === 'sig-repeated-connections') {
+      if (sig.id === 'sig-cleartext-binary') {
         return f.destinationIp === '203.0.113.50';
+      }
+      if (sig.id === 'sig-repeated-connections') {
+        return f.destinationIp === '203.0.113.80' || f.destinationPort === 4444;
       }
       if (sig.id === 'sig-unusual-host-traffic') {
         return f.sourceIp === '10.0.0.15';

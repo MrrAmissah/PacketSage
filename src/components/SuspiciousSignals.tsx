@@ -19,12 +19,14 @@ import {
 } from 'lucide-react';
 import { SuspiciousSignal, FlowSummary, SignalReviewStatus } from '../types';
 import InfoPopover from './InfoPopover';
+import { selectPresentedSignals } from '../lib/signalPresentation';
+import { resolveRelatedFlows } from '../lib/relatedFlows';
 
 interface SuspiciousSignalsProps {
   signals: SuspiciousSignal[];
   flows: FlowSummary[];
   signalStatusOverrides?: Record<string, SignalReviewStatus>;
-  onNavigateToFlows: (flow: FlowSummary) => void;
+  onNavigateToFlows: (flows: FlowSummary[]) => void;
   onUpdateSignalStatus?: (id: string, status: SignalReviewStatus, linkedIds?: string[]) => void;
 }
 
@@ -37,7 +39,7 @@ interface EnrichedSignal extends SuspiciousSignal {
   firstSeenTime: string;
   status: SignalReviewStatus;
   metrics?: { label: string; value: string }[];
-  flowsList?: { src: string; dst: string; proto: string }[];
+  flowsList?: { id?: string; src: string; dst: string; proto: string }[];
 }
 
 const EMPTY_SIGNAL_STATUS_OVERRIDES: Record<string, SignalReviewStatus> = {};
@@ -562,7 +564,7 @@ export default function SuspiciousSignals({
   onNavigateToFlows,
   onUpdateSignalStatus
 }: SuspiciousSignalsProps) {
-  // Rich local state populated from static data OR parsed rule signals
+  // Rich local state derived only from parser/rule-engine signals.
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
 
@@ -579,68 +581,36 @@ export default function SuspiciousSignals({
 
   // Load and enrich signals
   useEffect(() => {
-    if (signals.length > 0) {
-      // If we have parsed/rule-engine signals, we enrich them dynamically or use pre-populated ones for the demo file
-      const isDemoFile = signals.some(s => s.id.includes('sig-dnsbeacon') || s.id.includes('sig-portscan') || s.id.includes('sig-cleartext') || s.id.includes('sig-unusualport') || s.id.includes('sig-dataspike'));
-      
-      if (isDemoFile || signals.length > 1) {
-        // Merge demo PCAP signals with any actual rules generated so that the reference dataset is perfectly preserved!
-        const merged: EnrichedSignal[] = [];
-        PCAP_DEMO_SIGNALS.forEach(pcapSig => {
-          const activeStatus = getPersistedStatus(pcapSig, signals, signalStatusOverrides) || 'Needs review';
-          merged.push({
-            ...sanitizeSignal(pcapSig),
-            status: activeStatus
-          });
-        });
-
-        // Add any missing signals from engine
-        signals.forEach(engineSig => {
-          if (!merged.some(m => m.id === engineSig.id || m.title.toLowerCase() === engineSig.title.toLowerCase())) {
-            const mappedConfidence = engineSig.severity === 'high' ? 75 : engineSig.severity === 'medium' ? 60 : engineSig.severity === 'low' ? 45 : 30;
-            const cleanedSig = sanitizeSignal(engineSig);
-            merged.push({
-              ...cleanedSig,
-              subtitle: cleanedSig.observedEvidence.slice(0, 45) + '...',
-              confidenceScore: mappedConfidence,
-              observedSnippet: cleanedSig.observedEvidence.slice(0, 35),
-              relatedFlowsCount: 1,
-              firstSeenTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-              status: signalStatusOverrides[engineSig.id] || engineSig.status || 'Needs review'
-            });
-          }
-        });
-        setEnrichedSignals(merged);
-        if (merged.length > 0) {
-          // Keep selection synchronized on re-mount if we already have a selection or take the first one
-          setSelectedSignal(prev => merged.find(m => m.id === prev?.id) || merged[0]);
-        }
-      } else {
-        // Standard user upload data enrichment
-        const mapped = signals.map((sig, idx) => {
-          const confidenceScores: Record<string, number> = { high: 75, medium: 60, low: 45, info: 30 };
-          const cleanedSig = sanitizeSignal(sig);
-          return {
-            ...cleanedSig,
-            subtitle: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 50) + '...' : 'Pattern detected in stream',
-            confidenceScore: confidenceScores[cleanedSig.severity] || 50,
-            observedSnippet: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 30) : 'Telemetry trace',
-            relatedFlowsCount: 1,
-            firstSeenTime: new Date(Date.now() - idx * 60000).toISOString().replace('T', ' ').slice(0, 19),
-            status: signalStatusOverrides[sig.id] || sig.status || 'Needs review'
-          };
-        });
-        setEnrichedSignals(mapped);
-        if (mapped.length > 0) {
-          setSelectedSignal(prev => mapped.find(m => m.id === prev?.id) || mapped[0]);
-        }
-      }
-    } else {
-      // In case no signals are parsed at all, we populate some high-fidelity placeholders so the screen isn't bare
+    if (signals.length === 0) {
       setEnrichedSignals([]);
       setSelectedSignal(null);
+      return;
     }
-  }, [signals, signalStatusOverrides]);
+
+    const confidenceScores: Record<string, number> = { high: 75, medium: 60, low: 45, info: 30 };
+    const mapped = selectPresentedSignals(signals).map(sig => {
+      const cleanedSig = sanitizeSignal(sig);
+      const relatedFlows = resolveRelatedFlows(sig.relatedFlowIds, flows);
+      const firstSeen = relatedFlows.map(flow => flow.firstSeen).sort()[0] || '';
+      return {
+        ...cleanedSig,
+        subtitle: cleanedSig.observedEvidence ? `${cleanedSig.observedEvidence.substring(0, 50)}...` : 'Deterministic observation',
+        confidenceScore: confidenceScores[cleanedSig.confidence] || 50,
+        observedSnippet: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 30) : 'No evidence summary supplied',
+        relatedFlowsCount: relatedFlows.length,
+        flowsList: relatedFlows.map(flow => ({
+          id: flow.id,
+          src: `${flow.sourceIp}:${flow.sourcePort}`,
+          dst: `${flow.destinationIp}:${flow.destinationPort}`,
+          proto: flow.protocol,
+        })),
+        firstSeenTime: firstSeen ? firstSeen.replace('T', ' ').slice(0, 19) : 'Not provided',
+        status: signalStatusOverrides[sig.id] || sig.status || 'Needs review'
+      };
+    });
+    setEnrichedSignals(mapped);
+    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id) || mapped[0]);
+  }, [signals, flows, signalStatusOverrides]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {
@@ -672,35 +642,8 @@ export default function SuspiciousSignals({
 
   // Navigate to Related Flows in the main App explorer
   const handleViewRelatedFlows = (sig: EnrichedSignal) => {
-    // Attempt to locate a matching flow in the flows list
-    const foundFlow = flows.find(f => {
-      if (sig.id === 'sig-dns-beacon') {
-        return f.destinationPort === 53;
-      }
-      if (sig.id === 'sig-cleartext-binary') {
-        return f.destinationIp === '203.0.113.50';
-      }
-      if (sig.id === 'sig-repeated-connections') {
-        return f.destinationIp === '203.0.113.80' || f.destinationPort === 4444;
-      }
-      if (sig.id === 'sig-unusual-host-traffic') {
-        return f.sourceIp === '10.0.0.15';
-      }
-      if (sig.id === 'sig-tls-sni-rare') {
-        return f.destinationIp === '198.51.100.42' || f.destinationPort === 443;
-      }
-      if (sig.id === 'sig-protocol-mismatch' || sig.id === 'sig-credential-exposure') {
-        return f.destinationPort === 8080 || f.destinationIp === '10.0.0.18';
-      }
-      return f.sourceIp === '10.0.0.15';
-    });
-
-    if (foundFlow) {
-      onNavigateToFlows(foundFlow);
-    } else if (flows.length > 0) {
-      // Fallback to first flow if nothing specific is mapped
-      onNavigateToFlows(flows[0]);
-    }
+    const relatedFlows = resolveRelatedFlows(sig.relatedFlowIds, flows);
+    if (relatedFlows.length > 0) onNavigateToFlows(relatedFlows);
   };
 
   // Filter computation
@@ -1333,7 +1276,9 @@ export default function SuspiciousSignals({
                 </h4>
                 <button
                   onClick={() => handleViewRelatedFlows(selectedSignal)}
-                  className="text-[10px] font-bold text-accent-primary hover:text-accent-primary-hover transition-colors flex items-center gap-0.5 cursor-pointer"
+                  disabled={selectedSignal.relatedFlowsCount === 0}
+                  title={selectedSignal.relatedFlowsCount === 0 ? 'No referenced flows are available in the current evidence.' : undefined}
+                  className="text-[10px] font-bold text-accent-primary hover:text-accent-primary-hover transition-colors flex items-center gap-0.5 cursor-pointer disabled:text-text-muted disabled:cursor-not-allowed"
                 >
                   <span>View all</span>
                   <ExternalLink size={9} />
@@ -1342,15 +1287,21 @@ export default function SuspiciousSignals({
 
               {selectedSignal.flowsList && selectedSignal.flowsList.length > 0 ? (
                 <div className="bg-surface-muted/20 border border-border-subtle/40 rounded-xl divide-y divide-border-subtle/30 overflow-hidden text-[10px]">
-                  {selectedSignal.flowsList.map((f, idx) => (
-                    <div 
-                      key={idx} 
-                      onClick={() => handleViewRelatedFlows(selectedSignal)}
-                      className="px-3 py-1.5 flex items-center justify-between text-text-secondary hover:text-accent-primary cursor-pointer transition-colors"
+                  {selectedSignal.flowsList.map((f, index) => (
+                    <button
+                      type="button"
+                      key={f.id || index}
+                      disabled={!f.id}
+                      onClick={() => {
+                        if (!f.id) return;
+                        const relatedFlow = resolveRelatedFlows([f.id], flows);
+                        if (relatedFlow.length > 0) onNavigateToFlows(relatedFlow);
+                      }}
+                      className="w-full px-3 py-1.5 flex items-center justify-between text-left text-text-secondary transition-colors hover:text-accent-primary cursor-pointer disabled:text-text-muted disabled:cursor-not-allowed"
                     >
                       <span className="font-mono truncate">{f.src} ➔ {f.dst}</span>
                       <span className="text-text-muted font-sans text-[8px] tracking-wider uppercase bg-surface-muted px-1.5 py-0.5 rounded border border-border-subtle/20">{f.proto}</span>
-                    </div>
+                    </button>
                   ))}
                   {selectedSignal.relatedFlowsCount > (selectedSignal.flowsList?.length || 0) && (
                     <div className="px-3 py-1.5 text-left text-[9px] text-text-muted bg-surface-muted/10">
@@ -1360,7 +1311,9 @@ export default function SuspiciousSignals({
                 </div>
               ) : (
                 <div className="text-[11px] text-text-muted italic">
-                  Flow matches recorded trace records.
+                  {selectedSignal.relatedFlowIds?.length
+                    ? 'Referenced flows are unavailable in the current evidence.'
+                    : 'No related flows were recorded for this signal.'}
                 </div>
               )}
             </div>

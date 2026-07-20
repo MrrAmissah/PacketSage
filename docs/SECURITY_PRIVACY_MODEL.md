@@ -22,11 +22,11 @@ PacketSage operates as a purely passive review workstation.
 
 ## 2. In-Memory Volatile Retention Model
 
-To minimize the security footprint of packet analyses, PacketSage utilizes an ephemeral browser-side sandbox architecture:
+To minimize the security footprint of packet analyses, PacketSage uses an in-memory workspace with explicit processing boundaries:
 
-* **Session Isolation**: All imported evidence, parsed network records, and signal verification states are loaded and processed in-memory.
-* **No Database Persistence**: In sandbox mode, no data is written to databases, persistent disks, or cloud storage.
-* **Clear Case / Session Reset**: Clicking "Clear Data" or reloading the browser completely destroys the current in-memory store. All parsed flows, DNS logs, HTTP handshakes, and validation notes are instantly purged from both the frontend React state and server-side memory.
+* **Processing Boundary**: Raw PCAP/PCAPNG captures are decoded in browser memory. Supported text exports are sent to the serverless parsing endpoint.
+* **Active Evidence State**: Parsed network records are held in the active application session; PacketSage does not claim zero retention by every infrastructure or model provider involved.
+* **Clear Case / Session Reset**: Clicking "Clear Data" or reloading clears active evidence and generated analysis from React state. Some review-status preferences may persist in browser storage.
 
 ---
 
@@ -45,7 +45,7 @@ To enable AI-assisted incident description drafting without compromising sensiti
 ### 3.1 What is Shared with the AI Proxy
 To generate the AI Analyst Memo, selected decoded metadata, packet volume metrics, port distributions, and triggered rule identifiers are compiled and sent to the server-side Gemini API.
 * **No Raw Packet Payloads**: Large raw packet files are never transmitted to the server or LLM. Only distilled, high-level structural logs (e.g., DNS queries, protocol summaries, port ratios) are submitted.
-* **No Persistent Server Logging**: The Express server-side proxy routes the metadata to the secure Google GenAI endpoint and discards it immediately after returning the narrative response.
+* **Provider Boundary**: The proxy sends selected metadata to the configured model provider. Operators must review the provider and hosting platform retention settings for their deployment.
 
 ### 3.2 Redaction Controls
 Before sending distilled metadata to the server-side AI proxy, PacketSage applies browser-side redaction algorithms:

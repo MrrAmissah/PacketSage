@@ -14,9 +14,9 @@ import {
   parseSuricataEve,
   parseZeekLog,
   parseTsharkJson,
-  parseTextLog,
-  parsePcapPlaceholder
+  parseTextLog
 } from "./src/lib/parser.js";
+import { clientSafeParseError, validateParsedResult, validateParseRequest } from "./src/lib/parseRequest.js";
 
 // Load environment variables
 dotenv.config();
@@ -25,8 +25,17 @@ const app = express();
 const PORT = 3000;
 
 // Body parser limits increased for packet capture log transfers
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(express.json({ limit: "3mb" }));
+app.use(express.urlencoded({ limit: "3mb", extended: true }));
+app.use((error: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request body is too large.' });
+  }
+  if (error instanceof SyntaxError) {
+    return res.status(400).json({ error: 'Request body must contain valid JSON.' });
+  }
+  return next(error);
+});
 
 // Lazily initialize Gemini client to avoid crashes if API key is not set at load time
 let aiClient: GoogleGenAI | null = null;
@@ -57,15 +66,10 @@ app.get("/api/health", (req, res) => {
 // API Route: Parsing Endpoint
 app.post("/api/parse", (req, res) => {
   try {
-    const { fileName, fileContent, parseMode, fileSize } = req.body;
+    const { fileName, fileContent, parseMode } = validateParseRequest(req.body);
 
     if (parseMode === "demo") {
-      const parsed = parseDemoData();
-      return res.json(parsed);
-    }
-
-    if (!fileContent) {
-      return res.status(400).json({ error: "Missing fileContent payload for non-demo parse mode." });
+      return res.json(validateParsedResult(parseDemoData()));
     }
 
     let parsedResult;
@@ -86,17 +90,12 @@ app.post("/api/parse", (req, res) => {
       case "txt":
         parsedResult = parseTextLog(fileName, fileContent);
         break;
-      case "pcap":
-        parsedResult = parsePcapPlaceholder(fileName, fileSize || fileContent.length);
-        break;
-      default:
-        parsedResult = parseTextLog(fileName, fileContent);
     }
 
-    return res.json(parsedResult);
-  } catch (err: any) {
-    console.error("Parsing failed on server:", err);
-    return res.status(500).json({ error: "Parser failed: " + err.message });
+    return res.json(validateParsedResult(parsedResult));
+  } catch (error) {
+    const safe = clientSafeParseError(error);
+    return res.status(safe.status).json({ error: safe.message });
   }
 });
 
@@ -276,31 +275,8 @@ Provide your output as a highly structured, schema-compliant JSON object contain
     const jsonResponse = JSON.parse(text.trim());
     return res.json(jsonResponse);
   } catch (err: any) {
-    console.log("[Info] Constructing high-fidelity dynamic local backup analyst memo:", err.message || err);
-    
-    // Construct robust local fallback incorporating live request details
-    const { flowSummary, dnsRecords, httpRecords } = req.body;
-    const commonHost = flowSummary?.[0]?.sourceIp || "10.0.0.15";
-    const commonDomain = dnsRecords?.[0]?.query || "d4c1f2a1.example.com";
-    const commonExternal = flowSummary?.[0]?.destinationIp || "203.0.113.50";
-    const flowsCount = flowSummary?.length || 0;
-
-    const fallbackResponse = {
-      executiveSummary: `A forensic analysis of host ${commonHost} identified multiple review-worthy network behaviors, including periodic DNS query timing, cleartext HTTP transfer activity, and repeated outbound connections. These observations require endpoint, DNS resolver, and destination reputation validation before concluding compromise or command-and-control activity.`,
-      whatHappened: `• QUERIED: Host ${commonHost} initiated periodic DNS resolver queries to domain ${commonDomain} at uniform intervals. This periodic query pattern requires validation before drawing conclusions about beaconing behavior.\n• REQUESTED: Decoded application-layer sessions from ${commonHost} requested external assets over cleartext.\n• DOWNLOADED: A cleartext binary download transfer was completed from ${commonExternal}, which requires endpoint validation.\n• OBSERVED: Multiple repeated outbound connection attempts targeting port 80/443 of remote external destinations, which require reputation and ownership review.`,
-      normalActivity: `Routine host activities, local ARP resolution, multicast discovery protocols, and background encrypted TLS 1.3 handshakes to public software update domains were recorded in the baseline dataset.`,
-      suspiciousActivity: `Host ${commonHost} sustained a sequence of application-layer transfers and repeated outbound connection attempts to external destinations over non-standard or unencrypted ports.`,
-      keyEvidence: `• Host Source IP: ${commonHost}\n• External Connection Targets: ${commonExternal}\n• Target DNS Query Domain: ${commonDomain}\n• Decoded Transport: HTTP Cleartext, DNS Recursive Lookups`,
-      analystQuestions: `• Is the file transfer from ${commonHost} to ${commonExternal} part of an expected software deployment process?\n• Do host operator logs identify legitimate administrative software performing queries to ${commonDomain}?\n• Were active domain credentials transmitted over plain text channels during these connection times?`,
-      recommendedChecks: `• Review DNS resolver logs for the queried domain and host.\n• Check endpoint process activity around the observed timestamps.\n• Review proxy, authentication, and EDR logs for matching events.\n• Confirm destination ownership, reputation, and expected business use.\n• Inspect adjacent flows for repeated timing or payload-transfer patterns.\n• Preserve relevant endpoint artifacts for follow-up investigation.\n• Add validated observations to the incident report.`,
-      beginnerExplanation: `One computer downloaded a file over an unencrypted channel, then repeatedly contacted a domain and external network services. That pattern is unusual enough to check the computer’s process history, DNS logs, and surrounding network traffic.`,
-      technicalExplanation: `Transport/application behavior:\nThe network capture reveals a series of unencrypted application-layer transfers combined with periodic outbound socket configurations.\n\nDNS behavior:\nRepeated recursive DNS queries were generated targeting domain ${commonDomain}.\n\nHTTP/cleartext behavior:\nA payload transfer was completed over unencrypted HTTP. This cleartext channel exposes transport headers and data streams to inspection.\n\nExternal connection behavior:\nOutbound session sequences target destination ports with repeated timing intervals.\n\nRequired validation:\nEndpoint process telemetry, DNS resolver logs, and destination ownership checks are required before concluding compromise or command-and-control activity.`,
-      confidence: "medium",
-      limitations: `• Payload contents may be incomplete.\n• Network metadata does not confirm endpoint compromise on its own.\n• Host process telemetry is required to validate execution.\n• Authentication logs are required to assess account impact.`,
-      reportReadySummary: `This forensic investigation report details anomalous network patterns including unencrypted downloads and persistent DNS querying.`
-    };
-
-    return res.json(fallbackResponse);
+    console.log("[Info] Gemini analysis unavailable:", err?.name || "Error");
+    return res.status(503).json({ error: 'AI analysis is unavailable. No fallback findings were generated.' });
   }
 });
 

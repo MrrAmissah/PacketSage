@@ -1,4 +1,6 @@
 const parserBundlePath = "../dist/parser.mjs";
+import { clientSafeParseError, validateParsedResult, validateParseRequest } from "../src/lib/parseRequest.js";
+import { MAX_REQUEST_BYTES } from "../src/lib/limits.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -7,43 +9,45 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    const contentLength = Number(req.headers?.['content-length'] || 0);
+    if (contentLength > MAX_REQUEST_BYTES) {
+      return res.status(413).json({ error: 'Request body is too large.' });
+    }
     const {
       parseCsv,
       parseDemoData,
-      parsePcapPlaceholder,
       parseSuricataEve,
       parseTextLog,
       parseTsharkJson,
       parseZeekLog,
     } = await import(parserBundlePath);
-    const { fileName, fileContent, parseMode, fileSize } = req.body || {};
+    const { fileName, fileContent, parseMode } = validateParseRequest(req.body);
 
     if (parseMode === "demo") {
-      return res.status(200).json(parseDemoData());
+      return res.status(200).json(validateParsedResult(parseDemoData()));
     }
 
-    if (!fileContent) {
-      return res.status(400).json({ error: "Missing fileContent payload for non-demo parse mode." });
-    }
-
+    let parsed;
     switch (parseMode) {
       case "csv":
-        return res.status(200).json(parseCsv(fileName, fileContent));
+        parsed = parseCsv(fileName, fileContent);
+        break;
       case "suricata":
-        return res.status(200).json(parseSuricataEve(fileName, fileContent));
+        parsed = parseSuricataEve(fileName, fileContent);
+        break;
       case "zeek":
-        return res.status(200).json(parseZeekLog(fileName, fileContent));
+        parsed = parseZeekLog(fileName, fileContent);
+        break;
       case "tshark":
-        return res.status(200).json(parseTsharkJson(fileName, fileContent));
+        parsed = parseTsharkJson(fileName, fileContent);
+        break;
       case "txt":
-        return res.status(200).json(parseTextLog(fileName, fileContent));
-      case "pcap":
-        return res.status(200).json(parsePcapPlaceholder(fileName, fileSize || fileContent.length));
-      default:
-        return res.status(200).json(parseTextLog(fileName, fileContent));
+        parsed = parseTextLog(fileName, fileContent);
+        break;
     }
-  } catch (err: any) {
-    console.error("Parsing failed on serverless function:", err);
-    return res.status(500).json({ error: "Parser failed: " + err.message });
+    return res.status(200).json(validateParsedResult(parsed));
+  } catch (error) {
+    const safe = clientSafeParseError(error);
+    return res.status(safe.status).json({ error: safe.message });
   }
 }

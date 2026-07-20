@@ -29,6 +29,7 @@ import {
 
 import { AiAnalysisResult, FlowSummary, SignalReviewStatus } from './types';
 import { ParsedResult } from './lib/parser';
+import { resolveRelatedFlows } from './lib/relatedFlows';
 import { PacketSageLogo } from './components/Logo';
 import InfoPopover from './components/InfoPopover';
 import CommandCenter from './components/CommandCenter';
@@ -50,6 +51,7 @@ export default function App() {
   const [parsedData, setParsedData] = useState<ParsedResult | null>(null);
   const [aiResult, setAiResult] = useState<AiAnalysisResult | null>(null);
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
+  const [relatedFlowScopeIds, setRelatedFlowScopeIds] = useState<string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   const workspaceScrollRef = React.useRef<HTMLDivElement>(null);
@@ -103,6 +105,7 @@ export default function App() {
     setAiResult(null); // Reset AI result when new data is parsed
     setSignalStatusOverrides({});
     setSelectedFlow(null);
+    setRelatedFlowScopeIds(null);
     setActiveTab('overview'); // Take them to command center automatically
   };
 
@@ -112,6 +115,7 @@ export default function App() {
       setAiResult(null);
       setSignalStatusOverrides({});
       setSelectedFlow(null);
+      setRelatedFlowScopeIds(null);
       setActiveTab('import');
     }
   };
@@ -141,15 +145,23 @@ export default function App() {
   };
 
   const renderActiveContent = () => {
+    const availableFlows = parsedData?.flows || [];
+    const visibleFlows = relatedFlowScopeIds === null
+      ? availableFlows
+      : resolveRelatedFlows(relatedFlowScopeIds, availableFlows);
+
     switch (activeTab) {
       case 'overview':
-        return <CommandCenter data={parsedData} onNavigate={(tab) => setActiveTab(tab as TabType)} />;
+        return <CommandCenter data={parsedData} onNavigate={(tab) => {
+          if (tab === 'flows') setRelatedFlowScopeIds(null);
+          setActiveTab(tab as TabType);
+        }} />;
       case 'import':
         return <EvidenceImport onDataParsed={handleDataParsed} isLoading={isLoading} setIsLoading={setIsLoading} />;
       case 'flows':
         return (
           <FlowExplorer
-            flows={parsedData?.flows || []}
+            flows={visibleFlows}
             events={parsedData?.events || []}
             onSelectFlow={setSelectedFlow}
             selectedFlow={selectedFlow}
@@ -172,8 +184,9 @@ export default function App() {
             signals={parsedData?.signals || []}
             flows={parsedData?.flows || []}
             signalStatusOverrides={signalStatusOverrides}
-            onNavigateToFlows={(flow) => {
-              setSelectedFlow(flow);
+            onNavigateToFlows={(relatedFlows) => {
+              setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
+              setSelectedFlow(relatedFlows[0] || null);
               setActiveTab('flows');
             }}
             onUpdateSignalStatus={handleUpdateSignalStatus}
@@ -202,6 +215,7 @@ export default function App() {
             flows={parsedData?.flows || []}
             signals={parsedData?.signals || []}
             onNavigateToFlows={(flow) => {
+              setRelatedFlowScopeIds(null);
               setSelectedFlow(flow);
               setActiveTab('flows');
             }}
@@ -214,7 +228,10 @@ export default function App() {
       case 'architecture':
         return <ArchitectureRoadmap />;
       default:
-        return <CommandCenter data={parsedData} onNavigate={(tab) => setActiveTab(tab as TabType)} />;
+        return <CommandCenter data={parsedData} onNavigate={(tab) => {
+          if (tab === 'flows') setRelatedFlowScopeIds(null);
+          setActiveTab(tab as TabType);
+        }} />;
     }
   };
 
@@ -249,7 +266,10 @@ export default function App() {
                 <button
                   key={item.id}
                   disabled={!item.enabled}
-                  onClick={() => setActiveTab(item.id as TabType)}
+                  onClick={() => {
+                    if (item.id === 'flows') setRelatedFlowScopeIds(null);
+                    setActiveTab(item.id as TabType);
+                  }}
                   className={`relative flex-none md:flex-auto min-w-[124px] md:min-w-0 md:w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-3.5 py-2 md:py-2.5 text-xs font-medium rounded-lg transition-all text-left cursor-pointer group ${
                     !item.enabled
                       ? 'text-slate-500 hover:bg-transparent cursor-not-allowed border border-transparent'
@@ -343,7 +363,7 @@ export default function App() {
                     <span className="w-1.5 h-1.5 rounded-full bg-text-muted/40 shrink-0" />
                     Idle
                   </span>
-                  <InfoPopover content="Demo Decoder means PacketSage is using browser-side structured parsing for sample or exported evidence. Full binary PCAP decoding is a planned production decoder-worker target." align="left" />
+                  <InfoPopover content="Raw PCAP/PCAPNG files are decoded locally in a bounded browser parser. Supported text exports are sent to the parsing endpoint." align="left" />
                 </div>
 
                 <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
@@ -366,7 +386,7 @@ export default function App() {
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-muted border border-border-subtle/50 text-text-muted text-[10.5px] font-semibold tracking-wide uppercase select-none">
                     Volatile
                   </span>
-                  <InfoPopover content="Volatile means active evidence is staged in browser/session memory during sandbox analysis and cleared when the session is refreshed or reset." align="left" />
+                  <InfoPopover content="Active evidence is held in application memory and cleared on refresh or reset. Some review-status preferences may persist locally." align="left" />
                 </div>
               </>
             ) : (
@@ -389,7 +409,7 @@ export default function App() {
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10.5px] font-bold uppercase tracking-wide">
                     {parsedData.evidence.parseMode}
                   </span>
-                  <InfoPopover content="Demo Decoder means PacketSage is using browser-side structured parsing for sample or exported evidence. Full binary PCAP decoding is a planned production decoder-worker target." align="left" />
+                  <InfoPopover content="Raw PCAP/PCAPNG files are decoded locally in a bounded browser parser. Supported text exports are sent to the parsing endpoint." align="left" />
                 </div>
 
                 <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
@@ -417,13 +437,13 @@ export default function App() {
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10.5px] font-bold uppercase tracking-wide">
                     Volatile
                   </span>
-                  <InfoPopover content="Volatile means active evidence is staged in browser/session memory during sandbox analysis and cleared when the session is refreshed or reset." align="left" />
+                  <InfoPopover content="Active evidence is held in application memory and cleared on refresh or reset. Some review-status preferences may persist locally." align="left" />
                 </div>
               </>
             )}
           </div>
 
-          {/* Right actions sequence: Theme toggle → Build report → No cloud retention */}
+          {/* Right actions sequence: Theme toggle → Build report → local capture decode */}
           <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
             {/* Theme toggle */}
             <div className="flex items-center bg-surface-muted border border-border-subtle rounded-lg p-0.5 h-8">
@@ -469,10 +489,10 @@ export default function App() {
               </button>
             )}
 
-            {/* No cloud retention */}
+            {/* Capture processing boundary */}
             <div className="h-8 px-2 bg-status-success-bg border border-status-success/25 rounded-lg text-[10px] text-status-success font-semibold hidden sm:flex items-center gap-1 select-none">
               <Lock size={10} className="text-status-success" />
-              <span className="hidden xs:inline">No Cloud Retention</span>
+              <span className="hidden xs:inline">Local Capture Decode</span>
             </div>
           </div>
         </header>

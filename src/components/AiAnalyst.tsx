@@ -154,20 +154,6 @@ export default function AiAnalyst({
     setToastMessage('Memo controls reset to default');
   };
 
-  // Helper to extract common values from active metadata
-  const sourceIps = flows.map(f => f.sourceIp).filter(Boolean);
-  const getMostFrequent = (arr: string[], fallback: string) => {
-    if (arr.length === 0) return fallback;
-    const counts: Record<string, number> = {};
-    arr.forEach(x => counts[x] = (counts[x] || 0) + 1);
-    return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
-  };
-  
-  const commonHost = getMostFrequent(sourceIps, '10.0.0.15');
-  const commonDomain = getMostFrequent(dns.map(d => d.query).filter(Boolean), 'd4c1f2a1.example.com');
-  const externalIps = flows.filter(f => f.direction === 'outbound').map(f => f.destinationIp);
-  const commonExternal = getMostFrequent(externalIps, '203.0.113.50');
-
   // Derive evidence time range dynamically and with full cross-page synchronization using widest accurate evidence time window
   const getWidestTimeRange = () => {
     const allTimestamps: Date[] = [];
@@ -201,7 +187,7 @@ export default function AiAnalyst({
     });
 
     if (allTimestamps.length === 0) {
-      return 'May 21, 2024 10:00:00–10:22:18 UTC';
+      return 'No evidence timestamps available';
     }
 
     const earliest = new Date(Math.min(...allTimestamps.map(t => t.getTime())));
@@ -223,10 +209,6 @@ export default function AiAnalyst({
   };
 
   const timeRangeString = getWidestTimeRange();
-
-  const dnsTime = dns.length > 0 ? formatEvidenceTime(dns[0].timestamp).split(' ')[3] || '10:12:18' : '10:12:18';
-  const httpTime = http.length > 0 ? formatEvidenceTime(http[0].timestamp).split(' ')[3] || '10:08:01' : '10:08:01';
-  const connTime = flows.length > 0 ? formatEvidenceTime(flows[0].firstSeen).split(' ')[3] || '10:14:22' : '10:14:22';
 
   // Helper helper to map overclaiming findings titles to strong observable ones
   const sanitizeFindingTitle = (title: string): string => {
@@ -261,19 +243,19 @@ export default function AiAnalyst({
     return title;
   };
   
-  // Hardcoded dynamic defaults if AI has not run - perfectly aligned to user instructions
+  // Before a model response exists, show neutral state and observed record counts only.
   const defaultMemo = {
-    executiveSummary: `A forensic analysis of host ${commonHost} identified multiple review-worthy network behaviors, including periodic DNS query timing, cleartext HTTP transfer activity, and repeated outbound connections. These observations require endpoint, DNS resolver, and destination reputation validation before concluding compromise or command-and-control activity.`,
-    whatHappened: `• ${dnsTime} UTC – QUERIED: Host ${commonHost} initiated periodic DNS resolver queries to domain ${commonDomain} at uniform intervals. This periodic query pattern requires validation before drawing conclusions about beaconing behavior.\n• ${httpTime} UTC – REQUESTED: Decoded application-layer sessions from ${commonHost} requested external assets over cleartext.\n• ${httpTime} UTC – DOWNLOADED: A cleartext binary download transfer was completed from ${commonExternal}, which requires endpoint validation.\n• ${connTime} UTC – OBSERVED: Multiple repeated outbound connection attempts targeting port 80/443 of remote external destinations, which require reputation and ownership review.`,
-    confidence: "medium" as const,
-    limitations: "• Payload contents may be incomplete.\n• Network metadata does not confirm endpoint compromise on its own.\n• Host process telemetry is required to validate execution.\n• Authentication logs are required to assess account impact.",
-    recommendedChecks: `• Review DNS resolver logs for the queried domain and host.\n• Check endpoint process activity around the observed timestamps.\n• Review proxy, authentication, and EDR logs for matching events.\n• Confirm destination ownership, reputation, and expected business use.\n• Inspect adjacent flows for repeated timing or payload-transfer patterns.\n• Preserve relevant endpoint artifacts for follow-up investigation.\n• Add validated observations to the incident report.`,
-    beginnerExplanation: `One computer downloaded a file over an unencrypted channel, then repeatedly contacted a domain and external network services. That pattern is unusual enough to check the computer’s process history, DNS logs, and surrounding network traffic.`,
-    technicalExplanation: `Transport/application behavior:\nThe network capture reveals a series of unencrypted application-layer transfers combined with periodic outbound socket configurations.\n\nDNS behavior:\nRepeated recursive DNS queries were generated targeting domain ${commonDomain}. The frequency and structure of the lookups indicate query beaconing patterns.\n\nHTTP/cleartext behavior:\nA payload transfer was completed over unencrypted HTTP. This cleartext channel exposes transport headers and data streams to inspection and interception.\n\nExternal connection behavior:\nOutbound session sequences target destination ports with repeated timing intervals. The persistent polling warrants endpoint trace correlation.\n\nRequired validation:\nEndpoint process telemetry, DNS resolver logs, and destination ownership checks are required before concluding compromise or command-and-control activity.`,
-    normalActivity: `Routine host activities, local ARP resolution, multicast discovery protocols, and background encrypted TLS 1.3 handshakes to public software update domains were recorded in the baseline dataset.`,
-    suspiciousActivity: `Host ${commonHost} sustained a sequence of application-layer transfers and repeated outbound connection attempts to external destinations over non-standard or unencrypted ports.`,
-    keyEvidence: `• Host Source IP: ${commonHost}\n• External Connection Targets: ${commonExternal}\n• Target DNS Query Domain: ${commonDomain}\n• Decoded Transport: HTTP Cleartext, DNS Recursive Lookups`,
-    analystQuestions: `• Is the file transfer from ${commonHost} to ${commonExternal} part of an expected software deployment process?\n• Do host operator logs identify legitimate administrative software performing queries to ${commonDomain}?\n• Were active domain credentials transmitted over plain text channels during these connection times?`
+    executiveSummary: 'No AI memo has been generated. Run the analyst only after reviewing the deterministic observations below.',
+    whatHappened: 'No model-generated narrative is available.',
+    confidence: "low" as const,
+    limitations: 'No model analysis has run. Packet and flow metadata alone may be incomplete and does not establish intent, compromise, execution, or account impact.',
+    recommendedChecks: 'Validate parser observations against authorized endpoint, resolver, proxy, and destination-ownership records before adding conclusions to a report.',
+    beginnerExplanation: 'PacketSage has organized the imported metadata, but it has not generated an explanatory conclusion.',
+    technicalExplanation: 'No AI technical analysis is available. Review the deterministic flow, protocol, and signal tables for observed metadata.',
+    normalActivity: 'Not assessed.',
+    suspiciousActivity: 'Not assessed.',
+    keyEvidence: `${flows.length} flows, ${dns.length} DNS records, ${http.length} HTTP records, ${tls.length} TLS records, and ${signals.length} deterministic signals are available for review.`,
+    analystQuestions: 'Which parser observations have been independently validated?'
   };
 
   const memoData = analysisResult ? {
@@ -341,23 +323,7 @@ export default function AiAnalyst({
       setToastMessage('AI Forensic Memo successfully generated!');
     } catch (err: any) {
       clearInterval(interval);
-      console.warn("Upstream Gemini busy or unavailable. Automatically falling back to high-fidelity offline forensic memo.", err);
-      const localFallback: AiAnalysisResult = {
-        executiveSummary: defaultMemo.executiveSummary,
-        whatHappened: defaultMemo.whatHappened,
-        confidence: defaultMemo.confidence,
-        limitations: defaultMemo.limitations,
-        recommendedChecks: defaultMemo.recommendedChecks,
-        beginnerExplanation: defaultMemo.beginnerExplanation,
-        technicalExplanation: defaultMemo.technicalExplanation,
-        normalActivity: defaultMemo.normalActivity,
-        suspiciousActivity: defaultMemo.suspiciousActivity,
-        keyEvidence: defaultMemo.keyEvidence,
-        analystQuestions: defaultMemo.analystQuestions,
-        reportReadySummary: "This forensic investigation report details anomalous network patterns including unencrypted downloads and persistent DNS querying."
-      };
-      onAnalysisCompleted(localFallback);
-      setToastMessage('Upstream API busy. Loaded highly accurate offline-derived Analyst Memo.');
+      setErrorMessage(err.message || 'AI analysis is unavailable. No fallback findings were generated.');
     } finally {
       setIsLoading(false);
       setLoadingStep('');
@@ -395,9 +361,7 @@ export default function AiAnalyst({
       setCustomResult(`Based on your query "${customQuery}", here is the AI Analyst's targeted evaluation:\n\n${result.technicalExplanation}\n\nRecommended Action:\n${result.recommendedChecks}`);
       setToastMessage('Query complete!');
     } catch (err: any) {
-      console.warn("Interactive query failed, generating local offline evaluation response.", err);
-      setCustomResult(`Based on your query "${customQuery}", here is the offline-derived forensic assessment:\n\nTransport/Application Behavior: The capture features unencrypted downloads and outbound socket queries matching timing patterns under review. Required Validation: Endpoint process logs, proxy history, and local auth records should be inspected to verify host integrity.\n\nRecommended Checks:\n- Review EDR process logs\n- Check local DNS cache`);
-      setToastMessage('Query complete!');
+      setErrorMessage(err.message || 'Interactive analysis is unavailable. No fallback findings were generated.');
     } finally {
       setIsQueryLoading(false);
     }
@@ -487,105 +451,9 @@ export default function AiAnalyst({
     return 'Observed network behavior requires endpoint validation';
   };
 
-  // Deduplicate and enrich signals to show exactly 4-6 distinct, major evidence-based findings
+  // Findings are a direct presentation of deterministic parser signals only.
   const deduplicatedFindings = React.useMemo(() => {
-    const list: Array<{
-      id: string;
-      title: string;
-      severity: 'high' | 'medium' | 'low';
-      confidence: 'high' | 'medium' | 'low';
-      category: string;
-      observedEvidence: string;
-      interpretation: string;
-      recommendedDefensiveCheck: string;
-    }> = [];
-
-    // 1. Periodic DNS query pattern
-    if (dns.length > 0 || signals.some(s => s.id.toLowerCase().includes('dns'))) {
-      list.push({
-        id: 'finding-dns-beacon',
-        title: 'Periodic DNS query pattern observed',
-        severity: 'high',
-        confidence: 'high', // High confidence that periodic DNS timing was observed.
-        category: 'C2 / Beaconing',
-        observedEvidence: `Host ${commonHost} initiated periodic recursive DNS queries to domain ${commonDomain} at uniform intervals.`,
-        interpretation: 'The periodic timing of recursive lookup requests is consistent with beaconing timing configurations.',
-        recommendedDefensiveCheck: 'Review DNS resolver logs for the queried domain and host.'
-      });
-    }
-
-    // 2. Cleartext HTTP / binary transfer
-    if (http.length > 0 || signals.some(s => s.id.toLowerCase().includes('cleartext') || s.id.toLowerCase().includes('binary'))) {
-      list.push({
-        id: 'finding-cleartext-binary',
-        title: 'Cleartext HTTP / binary transfer observed',
-        severity: 'medium',
-        confidence: 'high', // High confidence that cleartext HTTP transfer occurred.
-        category: 'Cleartext Transfer',
-        observedEvidence: `Host ${commonHost} downloaded payload/binary (agent.bin) from remote host ${commonExternal} over TCP port 80.`,
-        interpretation: 'Downloading binary elements over plain-text HTTP exposes the stream to in-transit metadata exposure or modification.',
-        recommendedDefensiveCheck: 'Check endpoint process activity around the observed timestamps.'
-      });
-    }
-
-    // 3. Repeated outbound connections
-    if (flows.some(f => f.direction === 'outbound') || signals.some(s => s.id.toLowerCase().includes('connections'))) {
-      list.push({
-        id: 'finding-repeated-outbound',
-        title: 'Repeated outbound connections observed',
-        severity: 'medium',
-        confidence: 'medium', // Medium confidence that repeated outbound activity requires review.
-        category: 'Outbound Activity',
-        observedEvidence: `Host ${commonHost} established successive short-duration outbound socket connections targeting port 80/443 of remote external destination ${commonExternal}.`,
-        interpretation: 'A quick sequence of short-duration TCP connections often indicates background keep-alive or heartbeats.',
-        recommendedDefensiveCheck: 'Confirm destination ownership, reputation, and expected business use.'
-      });
-    }
-
-    // 4. Potential credential exposure
-    if (http.length > 0 || signals.some(s => s.id.toLowerCase().includes('credential') || s.id.toLowerCase().includes('auth'))) {
-      list.push({
-        id: 'finding-credential-exposure',
-        title: 'Potential credential exposure',
-        severity: 'high',
-        confidence: 'high',
-        category: 'Credential Security',
-        observedEvidence: 'Cleartext basic authorization headers or plain-text credential-like fields observed in the unencrypted HTTP traffic logs.',
-        interpretation: 'Cleartext credentials exposed in transit can be read by any path-intercepting system.',
-        recommendedDefensiveCheck: 'Review authentication logs and rotate the exposed user credentials immediately.'
-      });
-    }
-
-    // 5. Protocol mismatch or unusual port behavior
-    if (flows.some(f => f.destinationPort === 4444 || f.destinationPort === 1337 || f.destinationPort === 8000) || signals.some(s => s.id.toLowerCase().includes('port') || s.id.toLowerCase().includes('mismatch'))) {
-      list.push({
-        id: 'finding-protocol-mismatch',
-        title: 'Protocol mismatch or unusual port behavior',
-        severity: 'medium',
-        confidence: 'medium',
-        category: 'Anomalous Traffic',
-        observedEvidence: `Sustained application-layer TCP traffic observed on non-standard ports (such as 4444, 1337, or 8000).`,
-        interpretation: 'Non-standard port allocation is typical of unencrypted custom protocols or custom listeners.',
-        recommendedDefensiveCheck: 'Audit workstation process activity and identify parent executables initiating the sockets.'
-      });
-    }
-
-    // 6. External endpoint concentration or unusual source activity
-    if (flows.length > 0 || signals.some(s => s.id.toLowerCase().includes('spike') || s.id.toLowerCase().includes('host'))) {
-      list.push({
-        id: 'finding-endpoint-concentration',
-        title: 'External endpoint concentration or unusual source activity',
-        severity: 'low',
-        confidence: 'medium',
-        category: 'Network Anomaly',
-        observedEvidence: `Host ${commonHost} generated the vast majority of outbound connections and bytes transferred in this capture.`,
-        interpretation: 'High asymmetric data outbound volume warrants validation of authorized administrative updates.',
-        recommendedDefensiveCheck: 'Compare data transfer volumes against historical local workstation baselines.'
-      });
-    }
-
-    // Map scopes and filters to deduplicated findings if needed
-    return list.filter(finding => {
+    return signals.filter(finding => {
       if (evidenceScope === 'high') {
         return finding.severity === 'high';
       }
@@ -593,23 +461,11 @@ export default function AiAnalyst({
         return finding.severity === 'high' || finding.severity === 'medium';
       }
       if (evidenceScope === 'custom') {
-        return selectedFindings.length === 0 || selectedFindings.some(sfId => {
-          const lowerId = sfId.toLowerCase();
-          return (lowerId.includes('dns') && finding.id.includes('dns')) ||
-                 (lowerId.includes('binary') && finding.id.includes('binary')) ||
-                 (lowerId.includes('cleartext') && finding.id.includes('binary')) ||
-                 (lowerId.includes('connections') && finding.id.includes('outbound')) ||
-                 (lowerId.includes('credential') && finding.id.includes('credential')) ||
-                 (lowerId.includes('auth') && finding.id.includes('credential')) ||
-                 (lowerId.includes('port') && finding.id.includes('protocol')) ||
-                 (lowerId.includes('mismatch') && finding.id.includes('protocol')) ||
-                 (lowerId.includes('spike') && finding.id.includes('endpoint')) ||
-                 (lowerId.includes('host') && finding.id.includes('endpoint'));
-        });
+        return selectedFindings.includes(finding.id);
       }
-      return true; // 'all'
+      return true;
     });
-  }, [flows, dns, http, tls, signals, commonHost, commonDomain, commonExternal, evidenceScope, selectedFindings]);
+  }, [signals, evidenceScope, selectedFindings]);
 
   return (
     <div id="ai-analyst-workspace" className="space-y-6 font-sans">
@@ -715,28 +571,10 @@ export default function AiAnalyst({
             </div>
           </div>
           <button
-            onClick={() => {
-              const localFallback: AiAnalysisResult = {
-                executiveSummary: defaultMemo.executiveSummary,
-                whatHappened: defaultMemo.whatHappened,
-                confidence: defaultMemo.confidence,
-                limitations: defaultMemo.limitations,
-                recommendedChecks: defaultMemo.recommendedChecks,
-                beginnerExplanation: defaultMemo.beginnerExplanation,
-                technicalExplanation: defaultMemo.technicalExplanation,
-                normalActivity: defaultMemo.normalActivity,
-                suspiciousActivity: defaultMemo.suspiciousActivity,
-                keyEvidence: defaultMemo.keyEvidence,
-                analystQuestions: defaultMemo.analystQuestions,
-                reportReadySummary: "This forensic investigation report details anomalous network patterns including unencrypted downloads and persistent DNS querying."
-              };
-              onAnalysisCompleted(localFallback);
-              setErrorMessage(null);
-              setToastMessage("Loaded highly accurate offline-derived Analyst Memo.");
-            }}
+            onClick={runAiAnalysis}
             className="px-3.5 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white font-bold text-[11px] rounded-lg cursor-pointer transition-all shrink-0 self-start md:self-center"
           >
-            Apply Offline Analyst Fallback
+            Retry AI Analysis
           </button>
         </div>
       )}
@@ -1147,7 +985,7 @@ export default function AiAnalyst({
                         <span className="text-text-muted">6.</span> Analyst perspective (Non-technical explainer)
                       </h4>
                       <div className="p-3 bg-surface-muted/50 border border-border-subtle/50 rounded-xl text-xs text-text-primary leading-relaxed italic">
-                        “One computer downloaded a file over an unencrypted channel, then repeatedly contacted a domain and external network services. That pattern is unusual enough to check the computer’s process history, DNS logs, and surrounding network traffic.”
+                        {memoData.beginnerExplanation}
                       </div>
                     </div>
                   )}
@@ -1159,44 +997,9 @@ export default function AiAnalyst({
                         <span className="text-text-muted">7.</span> Technical protocol evaluation
                       </h4>
                       
-                      <div className="space-y-3 pl-1 text-xs text-text-secondary leading-relaxed font-sans">
-                        
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-text-muted block">Transport / application behavior</span>
-                          <p className="pl-3 border-l border-border-subtle text-text-secondary font-sans">
-                            The capture reveals a series of application-layer transfers paired with outbound socket configurations. The observed patterns indicate persistent communication attempts targeting port 80/443.
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-text-muted block">DNS behavior</span>
-                          <p className="pl-3 border-l border-border-subtle text-text-secondary font-sans">
-                            Uniform recursive DNS queries were generated targeting <span className="font-mono text-accent-primary font-semibold">{commonDomain}</span>. The constant interval profiles warrant recursive path validation and resolver log auditing.
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-text-muted block">HTTP / cleartext behavior</span>
-                          <p className="pl-3 border-l border-border-subtle text-text-secondary font-sans">
-                            Unencrypted HTTP requests were completed over the local network interface, including payload transport. The unencrypted channel exposes transactional headers and local parameters to packet capture.
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-text-muted block">External connection behavior</span>
-                          <p className="pl-3 border-l border-border-subtle text-text-secondary font-sans">
-                            Outbound sessions poll destination endpoints at standardized schedules. Destination ports exhibit non-standard services or unencrypted payloads requiring active routing inspections.
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-text-muted block">Required validation</span>
-                          <p className="pl-3 border-l border-border-subtle font-semibold text-text-primary font-sans bg-accent-soft p-2.5 rounded-lg border border-accent-primary/10">
-                            The capture shows a sequence of application-layer transfer, periodic DNS activity, and repeated outbound connection attempts. The observed destination ports and timing patterns warrant analyst review. Endpoint process telemetry, DNS resolver logs, and destination ownership checks are required before concluding compromise or command-and-control activity.
-                          </p>
-                        </div>
-
-                      </div>
+                      <p className="whitespace-pre-line pl-3 border-l border-border-subtle text-xs text-text-secondary leading-relaxed">
+                        {memoData.technicalExplanation}
+                      </p>
                     </div>
                   )}
 

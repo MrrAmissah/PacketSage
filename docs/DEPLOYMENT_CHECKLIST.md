@@ -78,7 +78,7 @@ For Vercel-hosted previews:
 * [ ] **Server-Side Secret Boundary**: `GEMINI_API_KEY` must be configured only as a server-side Vercel environment variable for Preview and Production.
 * [ ] **Client Environment Label**: `VITE_APP_ENV` may be set to `preview` for Preview deployments and `production` for Production deployments.
 * [ ] **No Browser Gemini Key**: Do not create `VITE_GEMINI_API_KEY`.
-* [ ] **AI Timeout Guard**: `/api/analyze` should return the structured local fallback memo before the platform timeout if Gemini is slow or unavailable.
+* [ ] **AI Timeout Guard**: `/api/analyze` should return a client-safe `504` timeout without generating fallback findings.
 * [ ] **SPA Routing**: `vercel.json` rewrites non-file routes to `index.html` for client-side navigation while preserving API function routes.
 
 ---

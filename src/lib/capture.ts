@@ -274,8 +274,9 @@ export async function parseCapture(fileName: string, buffer: ArrayBuffer): Promi
     const timestamp = packet.timestamp?.toISOString() ?? '1970-01-01T00:00:00.000Z';
     const capturedLength = packet.data.byteLength;
     const originalLength = packet.originalPacketLength;
+    const eventId = `capture-${index + 1}`;
     events.push({
-      id: `capture-${index + 1}`,
+      id: eventId,
       timestamp,
       sourceIp: decoded.sourceIp,
       sourcePort: decoded.sourcePort,
@@ -289,7 +290,7 @@ export async function parseCapture(fileName: string, buffer: ArrayBuffer): Promi
       info: `${decoded.info}; captured ${capturedLength} bytes, original ${originalLength} bytes`,
       sourceType: parser.ng ? 'pcapng' : 'pcap',
     });
-    if (decoded.dns) dns.push({ id: '', timestamp, ...decoded.dns });
+    if (decoded.dns) dns.push({ id: '', relatedEventIds: [eventId], timestamp, ...decoded.dns });
   });
   if (events.length === 0) throw new CaptureParseError('Capture link type or network protocols are unsupported.');
 

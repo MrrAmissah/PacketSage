@@ -61,6 +61,7 @@ export interface ProtocolStat {
 
 export interface DnsRecord {
   id?: string;
+  relatedEventIds?: string[];
   timestamp: string;
   clientIp: string;
   query: string;
@@ -73,6 +74,7 @@ export interface DnsRecord {
 
 export interface HttpRecord {
   id?: string;
+  relatedEventIds?: string[];
   timestamp: string;
   clientIp: string;
   host: string;
@@ -87,6 +89,7 @@ export interface HttpRecord {
 
 export interface TlsRecord {
   id?: string;
+  relatedEventIds?: string[];
   timestamp: string;
   clientIp: string;
   serverIp: string;
@@ -164,6 +167,7 @@ export interface InvestigationEventEvidence {
 
 export interface InvestigationDnsEvidence {
   id: string;
+  relatedEventIds: string[];
   timestamp: string;
   clientIp: string;
   query: string;
@@ -175,6 +179,7 @@ export interface InvestigationDnsEvidence {
 
 export interface InvestigationHttpEvidence {
   id: string;
+  relatedEventIds: string[];
   timestamp: string;
   clientIp: string;
   host: string;
@@ -187,6 +192,7 @@ export interface InvestigationHttpEvidence {
 
 export interface InvestigationTlsEvidence {
   id: string;
+  relatedEventIds: string[];
   timestamp: string;
   clientIp: string;
   serverIp: string;

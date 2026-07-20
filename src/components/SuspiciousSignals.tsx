@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Shield, 
   ShieldAlert, 
@@ -36,8 +36,13 @@ import InvestigationAssessmentPanel from './InvestigationAssessment';
 import {
   buildInvestigationEvidencePacket,
   evidenceIds,
+  investigationPacketIdentity,
   validateInvestigationAssessment,
 } from '../lib/investigation';
+import {
+  InvestigationRequestCoordinator,
+  runInvestigationRequest,
+} from '../lib/investigationRequests';
 import { selectPresentedSignals } from '../lib/signalPresentation';
 import { resolveRelatedFlows } from '../lib/relatedFlows';
 
@@ -596,6 +601,7 @@ export default function SuspiciousSignals({
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
   const [investigationState, setInvestigationState] = useState<{
     signalId: string;
+    packetIdentity: string;
     status: 'analysing' | 'success' | 'failure';
     packet: InvestigationEvidencePacket;
     assessment?: InvestigationAssessment;
@@ -610,7 +616,27 @@ export default function SuspiciousSignals({
       return null;
     }
   }, [selectedSignal, flows, events, dns, http, tls]);
-  const activeInvestigation = investigationState?.signalId === selectedSignal?.id ? investigationState : null;
+  const packetIdentity = useMemo(
+    () => investigationPacket ? investigationPacketIdentity(investigationPacket) : null,
+    [investigationPacket],
+  );
+  const requestCoordinator = useRef(new InvestigationRequestCoordinator());
+  const currentInvestigationContext = selectedSignal && packetIdentity
+    ? { signalId: selectedSignal.id, packetIdentity }
+    : null;
+  const currentInvestigationContextRef = useRef(currentInvestigationContext);
+  currentInvestigationContextRef.current = currentInvestigationContext;
+  const activeInvestigation = investigationState
+    && investigationState.signalId === currentInvestigationContext?.signalId
+    && investigationState.packetIdentity === currentInvestigationContext.packetIdentity
+    ? investigationState
+    : null;
+
+  useEffect(() => {
+    requestCoordinator.current.invalidate();
+    setInvestigationState(null);
+    return () => requestCoordinator.current.invalidate();
+  }, [currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity]);
 
   // Filters State
   const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'>('ALL');
@@ -691,34 +717,45 @@ export default function SuspiciousSignals({
   };
 
   const handleInvestigate = async () => {
-    if (!selectedSignal || !investigationPacket) return;
+    if (!selectedSignal || !investigationPacket || !packetIdentity) return;
     const signalId = selectedSignal.id;
-    setInvestigationState({ signalId, status: 'analysing', packet: investigationPacket });
-    try {
-      const response = await fetch('/api/investigate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ evidence: investigationPacket }),
-      });
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        body = null;
-      }
-      if (!response.ok) {
-        const safeMessage = body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
-          ? (body as { error: string }).error.slice(0, 300)
-          : 'AI-assisted investigation could not be completed. Try again.';
-        throw new Error(safeMessage);
-      }
-      const validated = validateInvestigationAssessment(body, evidenceIds(investigationPacket));
-      setInvestigationState({ signalId, status: 'success', packet: investigationPacket, assessment: validated });
-    } catch (error) {
-      const message = error instanceof Error && error.message
-        ? error.message
+    const request = requestCoordinator.current.begin({ signalId, packetIdentity });
+    if (!request) return;
+    setInvestigationState({ signalId, packetIdentity, status: 'analysing', packet: investigationPacket });
+    const outcome = await runInvestigationRequest(
+      requestCoordinator.current,
+      request,
+      () => currentInvestigationContextRef.current,
+      async () => {
+        const response = await fetch('/api/investigate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ evidence: investigationPacket }),
+          signal: request.controller.signal,
+        });
+        let body: unknown;
+        try {
+          body = await response.json();
+        } catch {
+          body = null;
+        }
+        if (!response.ok) {
+          const safeMessage = body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
+            ? (body as { error: string }).error.slice(0, 300)
+            : 'AI-assisted investigation could not be completed. Try again.';
+          throw new Error(safeMessage);
+        }
+        return validateInvestigationAssessment(body, evidenceIds(investigationPacket));
+      },
+    );
+    if (outcome.status === 'ignored') return;
+    if (outcome.status === 'success') {
+      setInvestigationState({ signalId, packetIdentity, status: 'success', packet: investigationPacket, assessment: outcome.value });
+    } else {
+      const message = outcome.error instanceof Error && outcome.error.message
+        ? outcome.error.message
         : 'AI-assisted investigation could not be completed. Try again.';
-      setInvestigationState({ signalId, status: 'failure', packet: investigationPacket, error: message });
+      setInvestigationState({ signalId, packetIdentity, status: 'failure', packet: investigationPacket, error: message });
     }
   };
 

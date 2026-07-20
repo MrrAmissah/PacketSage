@@ -23,6 +23,7 @@ import {
   MAX_INVESTIGATION_REQUEST_BYTES,
   MAX_INVESTIGATION_TEXT_CHARACTERS,
 } from './limits';
+import { deterministicId } from './deterministic';
 import { resolveRelatedFlows } from './relatedFlows';
 
 export interface InvestigationCollections {
@@ -60,29 +61,6 @@ function orderedUnique<T>(items: readonly T[], key: (item: T) => string): T[] {
     seen.add(id);
     return true;
   });
-}
-
-function eventMatchesDns(event: InvestigationEventEvidence, record: Pick<InvestigationDnsEvidence, 'timestamp' | 'clientIp'>): boolean {
-  return event.timestamp === record.timestamp
-    && (event.sourceIp === record.clientIp || event.destinationIp === record.clientIp)
-    && (event.sourcePort === 53 || event.destinationPort === 53 || event.service?.toUpperCase() === 'DNS');
-}
-
-function eventMatchesHttp(event: InvestigationEventEvidence, record: Pick<InvestigationHttpEvidence, 'timestamp' | 'clientIp'>): boolean {
-  return event.timestamp === record.timestamp
-    && (event.sourceIp === record.clientIp || event.destinationIp === record.clientIp)
-    && (event.sourcePort === 80 || event.destinationPort === 80 || event.sourcePort === 8080 || event.destinationPort === 8080 || event.service?.toUpperCase() === 'HTTP');
-}
-
-function eventMatchesTls(event: InvestigationEventEvidence, record: Pick<InvestigationTlsEvidence, 'timestamp' | 'clientIp' | 'serverIp'>): boolean {
-  const endpointsMatch = (
-    event.sourceIp === record.clientIp && event.destinationIp === record.serverIp
-  ) || (
-    event.destinationIp === record.clientIp && event.sourceIp === record.serverIp
-  );
-  return event.timestamp === record.timestamp
-    && endpointsMatch
-    && (event.sourcePort === 443 || event.destinationPort === 443 || ['TLS', 'HTTPS'].includes(event.service?.toUpperCase() || ''));
 }
 
 function normalizeFlow(flow: FlowSummary, includedEventIds: ReadonlySet<string>): InvestigationFlowEvidence {
@@ -142,26 +120,37 @@ export function buildInvestigationEvidencePacket(
   const events = includedEvents.map(normalizeEvent);
   const flows = relatedFlows.map(flow => normalizeFlow(flow, includedEventIds));
 
-  const dnsCandidates = collections.dns
-    .filter((record): record is DnsRecord & { id: string } => validId(record.id))
-    .filter(record => events.some(event => eventMatchesDns(event, record)));
-  const httpCandidates = collections.http
-    .filter((record): record is HttpRecord & { id: string } => validId(record.id))
-    .filter(record => events.some(event => eventMatchesHttp(event, record)));
-  const tlsCandidates = collections.tls
-    .filter((record): record is TlsRecord & { id: string } => validId(record.id))
-    .filter(record => events.some(event => eventMatchesTls(event, record)));
+  const exactRelatedEventIds = (ids: readonly string[] | undefined): string[] => orderedUnique(
+    (ids || []).filter(id => includedEventIds.has(id)),
+    id => id,
+  );
+  const dnsCandidates = collections.dns.flatMap(record => {
+    if (!validId(record.id)) return [];
+    const relatedEventIds = exactRelatedEventIds(record.relatedEventIds);
+    return relatedEventIds.length > 0 ? [{ record: record as DnsRecord & { id: string }, relatedEventIds }] : [];
+  });
+  const httpCandidates = collections.http.flatMap(record => {
+    if (!validId(record.id)) return [];
+    const relatedEventIds = exactRelatedEventIds(record.relatedEventIds);
+    return relatedEventIds.length > 0 ? [{ record: record as HttpRecord & { id: string }, relatedEventIds }] : [];
+  });
+  const tlsCandidates = collections.tls.flatMap(record => {
+    if (!validId(record.id)) return [];
+    const relatedEventIds = exactRelatedEventIds(record.relatedEventIds);
+    return relatedEventIds.length > 0 ? [{ record: record as TlsRecord & { id: string }, relatedEventIds }] : [];
+  });
   const protocolCandidates = [
-    ...dnsCandidates.map(record => ({ kind: 'dns' as const, record })),
-    ...httpCandidates.map(record => ({ kind: 'http' as const, record })),
-    ...tlsCandidates.map(record => ({ kind: 'tls' as const, record })),
+    ...dnsCandidates.map(candidate => ({ kind: 'dns' as const, ...candidate })),
+    ...httpCandidates.map(candidate => ({ kind: 'http' as const, ...candidate })),
+    ...tlsCandidates.map(candidate => ({ kind: 'tls' as const, ...candidate })),
   ];
   const includedProtocolRecords = protocolCandidates.slice(0, MAX_INVESTIGATION_PROTOCOL_RECORDS);
 
   const dns: InvestigationDnsEvidence[] = includedProtocolRecords
-    .filter((item): item is { kind: 'dns'; record: DnsRecord & { id: string } } => item.kind === 'dns')
-    .map(({ record }) => ({
+    .filter((item): item is { kind: 'dns'; record: DnsRecord & { id: string }; relatedEventIds: string[] } => item.kind === 'dns')
+    .map(({ record, relatedEventIds }) => ({
       id: record.id,
+      relatedEventIds,
       timestamp: boundedText(record.timestamp, 64),
       clientIp: boundedText(record.clientIp, 128),
       query: boundedText(record.query),
@@ -171,9 +160,10 @@ export function buildInvestigationEvidencePacket(
       riskLevel: record.riskLevel,
     }));
   const http: InvestigationHttpEvidence[] = includedProtocolRecords
-    .filter((item): item is { kind: 'http'; record: HttpRecord & { id: string } } => item.kind === 'http')
-    .map(({ record }) => ({
+    .filter((item): item is { kind: 'http'; record: HttpRecord & { id: string }; relatedEventIds: string[] } => item.kind === 'http')
+    .map(({ record, relatedEventIds }) => ({
       id: record.id,
+      relatedEventIds,
       timestamp: boundedText(record.timestamp, 64),
       clientIp: boundedText(record.clientIp, 128),
       host: boundedText(record.host),
@@ -184,9 +174,10 @@ export function buildInvestigationEvidencePacket(
       riskLevel: record.riskLevel,
     }));
   const tls: InvestigationTlsEvidence[] = includedProtocolRecords
-    .filter((item): item is { kind: 'tls'; record: TlsRecord & { id: string } } => item.kind === 'tls')
-    .map(({ record }) => ({
+    .filter((item): item is { kind: 'tls'; record: TlsRecord & { id: string }; relatedEventIds: string[] } => item.kind === 'tls')
+    .map(({ record, relatedEventIds }) => ({
       id: record.id,
+      relatedEventIds,
       timestamp: boundedText(record.timestamp, 64),
       clientIp: boundedText(record.clientIp, 128),
       serverIp: boundedText(record.serverIp, 128),
@@ -351,8 +342,14 @@ export function validateInvestigationRequest(body: unknown): InvestigationEviden
   };
 
   const protocolLimit = MAX_INVESTIGATION_PROTOCOL_RECORDS;
+  const protocolEventIds = (value: unknown, message: string): string[] => {
+    const ids = orderedUnique(stringArray(value, message, MAX_INVESTIGATION_EVENTS), id => id);
+    if (ids.length === 0 || ids.some(id => !eventIds.has(id))) throw new InvestigationValidationError(message);
+    return ids;
+  };
   const dns: InvestigationDnsEvidence[] = recordArray(evidence.dns, 'Invalid DNS evidence.', protocolLimit).map(record => ({
     id: stringValue(record.id, 'Invalid DNS evidence ID.', MAX_INVESTIGATION_ID_CHARACTERS),
+    relatedEventIds: protocolEventIds(record.relatedEventIds, 'DNS evidence must reference supplied events.'),
     timestamp: stringValue(record.timestamp, 'Invalid DNS timestamp.', 64),
     clientIp: stringValue(record.clientIp, 'Invalid DNS client.', 128),
     query: stringValue(record.query, 'Invalid DNS query.'),
@@ -371,6 +368,7 @@ export function validateInvestigationRequest(body: unknown): InvestigationEviden
     if (!severities.has(risk)) throw new InvestigationValidationError('Invalid HTTP risk level.');
     return {
       id: stringValue(record.id, 'Invalid HTTP evidence ID.', MAX_INVESTIGATION_ID_CHARACTERS),
+      relatedEventIds: protocolEventIds(record.relatedEventIds, 'HTTP evidence must reference supplied events.'),
       timestamp: stringValue(record.timestamp, 'Invalid HTTP timestamp.', 64),
       clientIp: stringValue(record.clientIp, 'Invalid HTTP client.', 128),
       host: stringValue(record.host, 'Invalid HTTP host.'),
@@ -383,6 +381,7 @@ export function validateInvestigationRequest(body: unknown): InvestigationEviden
   });
   const tls: InvestigationTlsEvidence[] = recordArray(evidence.tls, 'Invalid TLS evidence.', protocolLimit).map(record => ({
     id: stringValue(record.id, 'Invalid TLS evidence ID.', MAX_INVESTIGATION_ID_CHARACTERS),
+    relatedEventIds: protocolEventIds(record.relatedEventIds, 'TLS evidence must reference supplied events.'),
     timestamp: stringValue(record.timestamp, 'Invalid TLS timestamp.', 64),
     clientIp: stringValue(record.clientIp, 'Invalid TLS client.', 128),
     serverIp: stringValue(record.serverIp, 'Invalid TLS server.', 128),
@@ -397,9 +396,6 @@ export function validateInvestigationRequest(body: unknown): InvestigationEviden
     })(),
   }));
   if (dns.length + http.length + tls.length > protocolLimit) throw new InvestigationValidationError('Too many protocol evidence records.', 413);
-  if (dns.some(record => !events.some(event => eventMatchesDns(event, record)))) throw new InvestigationValidationError('DNS evidence is not directly related to supplied events.');
-  if (http.some(record => !events.some(event => eventMatchesHttp(event, record)))) throw new InvestigationValidationError('HTTP evidence is not directly related to supplied events.');
-  if (tls.some(record => !events.some(event => eventMatchesTls(event, record)))) throw new InvestigationValidationError('TLS evidence is not directly related to supplied events.');
 
   const limitsValue = objectValue(evidence.limitsApplied, 'Investigation limit metadata is required.');
   const limitsApplied = {
@@ -425,6 +421,10 @@ export function evidenceIds(packet: InvestigationEvidencePacket): Set<string> {
     ...packet.http.map(item => item.id),
     ...packet.tls.map(item => item.id),
   ]);
+}
+
+export function investigationPacketIdentity(packet: InvestigationEvidencePacket): string {
+  return deterministicId('investigation-packet', [JSON.stringify(packet)]);
 }
 
 function outputText(value: unknown, message: string): string {

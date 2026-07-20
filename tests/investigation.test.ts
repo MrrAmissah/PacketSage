@@ -8,15 +8,23 @@ import InvestigationAssessmentPanel from '../src/components/InvestigationAssessm
 import {
   buildInvestigationEvidencePacket,
   evidenceIds,
+  investigationPacketIdentity,
   InvestigationValidationError,
   resolveCitedFlow,
   validateInvestigationRequest,
 } from '../src/lib/investigation';
 import {
+  InvestigationRequestCoordinator,
+  runInvestigationRequest,
+  type InvestigationRequestContext,
+} from '../src/lib/investigationRequests';
+import {
   MAX_INVESTIGATION_EVENTS,
   MAX_INVESTIGATION_FLOWS,
+  MAX_INVESTIGATION_PROTOCOL_RECORDS,
   MAX_INVESTIGATION_REQUEST_BYTES,
 } from '../src/lib/limits';
+import { parseDemoData } from '../src/lib/parser';
 import {
   clientSafeInvestigationError,
   createOpenAiInvestigationRequest,
@@ -164,7 +172,7 @@ test('direct protocol records require an exact relationship to included events',
     flows: [flow('flow-dns', [dnsEvent.id], { destinationPort: 53, service: 'DNS', protocol: 'UDP' })],
     events: [dnsEvent],
     dns: [
-      { id: 'dns-valid', timestamp, clientIp: '10.0.0.5', query: 'example.test', queryType: 'A', response: 'Pending', rcode: '0', riskLevel: 'info' },
+      { id: 'dns-valid', relatedEventIds: [dnsEvent.id], timestamp, clientIp: '10.0.0.5', query: 'example.test', queryType: 'A', response: 'Pending', rcode: '0', riskLevel: 'info' },
       { id: 'dns-unrelated', timestamp: '2026-07-20T10:00:00.000Z', clientIp: '10.0.0.5', query: 'unrelated.test', queryType: 'A', response: 'Pending', rcode: '0', riskLevel: 'info' },
     ],
     http: [],
@@ -293,4 +301,357 @@ test('successful structured response renders all four investigation sections', (
   assert.match(markup, /Recommended next investigative steps/);
   assert.match(markup, /Not confirmed/);
   assert.match(markup, /Open exact flow flow-related/);
+});
+
+test('simultaneous DNS records use only explicit event relationships', () => {
+  const includedEvent = event('evt-dns-included', { destinationPort: 53, service: 'DNS' });
+  const excludedEvent = event('evt-dns-excluded', { destinationPort: 53, service: 'DNS' });
+  const packet = buildInvestigationEvidencePacket(signal(['flow-dns']), {
+    flows: [flow('flow-dns', [includedEvent.id])],
+    events: [includedEvent, excludedEvent],
+    dns: [
+      { id: 'dns-included', relatedEventIds: [includedEvent.id], timestamp, clientIp: includedEvent.sourceIp, query: 'included.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' },
+      { id: 'dns-colliding-unrelated', relatedEventIds: [excludedEvent.id], timestamp, clientIp: includedEvent.sourceIp, query: 'unrelated.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' },
+    ],
+    http: [],
+    tls: [],
+  });
+
+  assert.deepEqual(packet?.dns.map(record => record.id), ['dns-included']);
+  const serialized = JSON.stringify(packet);
+  assert.doesNotMatch(serialized, /dns-colliding-unrelated|unrelated\.test|metadata omitted from investigation packet/);
+});
+
+test('simultaneous HTTP records use only explicit event relationships', () => {
+  const includedEvent = event('evt-http-included', { destinationPort: 80, service: 'HTTP' });
+  const excludedEvent = event('evt-http-excluded', { destinationPort: 80, service: 'HTTP' });
+  const packet = buildInvestigationEvidencePacket(signal(['flow-http']), {
+    flows: [flow('flow-http', [includedEvent.id])],
+    events: [includedEvent, excludedEvent],
+    dns: [],
+    http: [
+      { id: 'http-included', relatedEventIds: [includedEvent.id], timestamp, clientIp: includedEvent.sourceIp, host: 'included.test', method: 'GET', uri: '/one', statusCode: 200, cleartext: true, riskLevel: 'info' },
+      { id: 'http-colliding-unrelated', relatedEventIds: [excludedEvent.id], timestamp, clientIp: includedEvent.sourceIp, host: 'unrelated.test', method: 'GET', uri: '/two', statusCode: 200, cleartext: true, riskLevel: 'info' },
+    ],
+    tls: [],
+  });
+  assert.deepEqual(packet?.http.map(record => record.id), ['http-included']);
+});
+
+test('simultaneous TLS records use only explicit event relationships', () => {
+  const includedEvent = event('evt-tls-included');
+  const excludedEvent = event('evt-tls-excluded');
+  const packet = buildInvestigationEvidencePacket(signal(['flow-tls']), {
+    flows: [flow('flow-tls', [includedEvent.id])],
+    events: [includedEvent, excludedEvent],
+    dns: [],
+    http: [],
+    tls: [
+      { id: 'tls-included', relatedEventIds: [includedEvent.id], timestamp, clientIp: includedEvent.sourceIp, serverIp: includedEvent.destinationIp, sni: 'included.test', riskLevel: 'info' },
+      { id: 'tls-colliding-unrelated', relatedEventIds: [excludedEvent.id], timestamp, clientIp: includedEvent.sourceIp, serverIp: includedEvent.destinationIp, sni: 'unrelated.test', riskLevel: 'info' },
+    ],
+  });
+  assert.deepEqual(packet?.tls.map(record => record.id), ['tls-included']);
+});
+
+test('protocol records without explicit event relationships are omitted', () => {
+  const includedEvent = event('evt-related');
+  const packet = buildInvestigationEvidencePacket(signal(['flow-related']), {
+    flows: [flow('flow-related', [includedEvent.id])],
+    events: [includedEvent],
+    dns: [{ id: 'dns-no-relation', timestamp, clientIp: includedEvent.sourceIp, query: 'same.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' }],
+    http: [],
+    tls: [],
+  });
+  assert.deepEqual(packet?.dns, []);
+});
+
+test('protocol records referencing nonexistent events are omitted', () => {
+  const includedEvent = event('evt-related');
+  const packet = buildInvestigationEvidencePacket(signal(['flow-related']), {
+    flows: [flow('flow-related', [includedEvent.id])],
+    events: [includedEvent],
+    dns: [{ id: 'dns-missing-event', relatedEventIds: ['evt-missing'], timestamp, clientIp: includedEvent.sourceIp, query: 'missing.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' }],
+    http: [],
+    tls: [],
+  });
+  assert.deepEqual(packet?.dns, []);
+});
+
+test('server validation rejects protocol evidence without a surviving explicit event reference', () => {
+  const { packet } = packetFixture();
+  const invalid = {
+    ...packet,
+    dns: [{ id: 'dns-invalid', relatedEventIds: ['evt-missing'], timestamp, clientIp: '10.0.0.5', query: 'invalid.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' }],
+  };
+  assert.throws(
+    () => validateInvestigationRequest({ evidence: invalid }),
+    /DNS evidence must reference supplied events/,
+  );
+});
+
+test('protocol records related only to an unselected flow are omitted', () => {
+  const includedEvent = event('evt-included');
+  const excludedEvent = event('evt-excluded');
+  const packet = buildInvestigationEvidencePacket(signal(['flow-included']), {
+    flows: [flow('flow-included', [includedEvent.id]), flow('flow-excluded', [excludedEvent.id])],
+    events: [includedEvent, excludedEvent],
+    dns: [{ id: 'dns-excluded-flow', relatedEventIds: [excludedEvent.id], timestamp, clientIp: excludedEvent.sourceIp, query: 'excluded.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' }],
+    http: [],
+    tls: [],
+  });
+  assert.deepEqual(packet?.dns, []);
+});
+
+test('protocol records whose related event is truncated are omitted', () => {
+  const events = Array.from({ length: MAX_INVESTIGATION_EVENTS + 1 }, (_, index) => event(`evt-${index}`));
+  const packet = buildInvestigationEvidencePacket(signal(['flow-many-events']), {
+    flows: [flow('flow-many-events', events.map(item => item.id))],
+    events,
+    dns: [{ id: 'dns-truncated-event', relatedEventIds: [events.at(-1)!.id], timestamp, clientIp: events[0].sourceIp, query: 'truncated.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' }],
+    http: [],
+    tls: [],
+  });
+  assert.equal(packet?.limitsApplied.eventsTruncated, true);
+  assert.deepEqual(packet?.dns, []);
+});
+
+test('multiple protocol event relationships retain only the surviving exact intersection', () => {
+  const first = event('evt-first');
+  const second = event('evt-second');
+  const packet = buildInvestigationEvidencePacket(signal(['flow-first']), {
+    flows: [flow('flow-first', [first.id])],
+    events: [first, second],
+    dns: [{ id: 'dns-multiple', relatedEventIds: [second.id, first.id, 'evt-missing', first.id], timestamp, clientIp: first.sourceIp, query: 'multiple.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' }],
+    http: [],
+    tls: [],
+  });
+  assert.deepEqual(packet?.dns[0].relatedEventIds, [first.id]);
+});
+
+test('protocol record limits apply after exact relationship filtering', () => {
+  const includedEvent = event('evt-related');
+  const unrelated = Array.from({ length: 10 }, (_, index) => ({
+    id: `dns-unrelated-${index}`,
+    relatedEventIds: ['evt-other'],
+    timestamp,
+    clientIp: includedEvent.sourceIp,
+    query: `unrelated-${index}.test`,
+    queryType: 'A',
+    response: 'Pending',
+    rcode: 'NOERROR',
+    riskLevel: 'info' as const,
+  }));
+  const related = Array.from({ length: MAX_INVESTIGATION_PROTOCOL_RECORDS + 1 }, (_, index) => ({
+    id: `dns-related-${index}`,
+    relatedEventIds: [includedEvent.id],
+    timestamp,
+    clientIp: includedEvent.sourceIp,
+    query: `related-${index}.test`,
+    queryType: 'A',
+    response: 'Pending',
+    rcode: 'NOERROR',
+    riskLevel: 'info' as const,
+  }));
+  const packet = buildInvestigationEvidencePacket(signal(['flow-related']), {
+    flows: [flow('flow-related', [includedEvent.id])], events: [includedEvent], dns: [...unrelated, ...related], http: [], tls: [],
+  });
+  assert.equal(packet?.dns.length, MAX_INVESTIGATION_PROTOCOL_RECORDS);
+  assert.equal(packet?.dns[0].id, 'dns-related-0');
+  assert.equal(packet?.limitsApplied.protocolRecordsTruncated, true);
+});
+
+test('normal protocol collections remain available and deterministic relationships are stable', () => {
+  const first = parseDemoData();
+  const second = parseDemoData();
+  assert.equal(first.dns.length, 19);
+  assert.equal(first.http.length, 1);
+  assert.equal(first.tls.length, 2);
+  assert.ok([...first.dns, ...first.http, ...first.tls].every(record => record.relatedEventIds?.length));
+  assert.deepEqual(
+    [first.dns, first.http, first.tls].map(records => records.map(record => ({ id: record.id, relatedEventIds: record.relatedEventIds }))),
+    [second.dns, second.http, second.tls].map(records => records.map(record => ({ id: record.id, relatedEventIds: record.relatedEventIds }))),
+  );
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function requestContext(signalId: string, packetIdentity: string): InvestigationRequestContext {
+  return { signalId, packetIdentity };
+}
+
+test('packet identity deterministically changes with effective evidence and truncation state', () => {
+  const { packet } = packetFixture();
+  assert.equal(investigationPacketIdentity(packet), investigationPacketIdentity(structuredClone(packet)));
+  const variants = [
+    { ...packet, signal: { ...packet.signal, id: 'sig-changed' } },
+    { ...packet, flows: [{ ...packet.flows[0], id: 'flow-changed' }] },
+    { ...packet, events: [{ ...packet.events[0], id: 'evt-changed' }] },
+    { ...packet, dns: [{ id: 'dns-changed', relatedEventIds: [packet.events[0].id], timestamp, clientIp: '10.0.0.5', query: 'changed.test', queryType: 'A', response: 'Pending', rcode: 'NOERROR', riskLevel: 'info' as const }] },
+    { ...packet, http: [{ id: 'http-changed', relatedEventIds: [packet.events[0].id], timestamp, clientIp: '10.0.0.5', host: 'changed.test', method: 'GET', uri: '/', statusCode: 200, cleartext: true, riskLevel: 'info' as const }] },
+    { ...packet, tls: [{ id: 'tls-changed', relatedEventIds: [packet.events[0].id], timestamp, clientIp: '10.0.0.5', serverIp: '198.51.100.20', sni: 'changed.test', riskLevel: 'info' as const }] },
+    { ...packet, limitsApplied: { ...packet.limitsApplied, eventsTruncated: true } },
+  ];
+  variants.forEach(variant => assert.notEqual(investigationPacketIdentity(variant), investigationPacketIdentity(packet)));
+});
+
+test('late success from signal A cannot replace signal B success', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  let current: InvestigationRequestContext | null = requestContext('signal-a', 'packet-a');
+  const a = deferred<string>();
+  const tokenA = coordinator.begin(current)!;
+  const outcomeA = runInvestigationRequest(coordinator, tokenA, () => current, () => a.promise);
+  current = requestContext('signal-b', 'packet-b');
+  const b = deferred<string>();
+  const tokenB = coordinator.begin(current)!;
+  const outcomeB = runInvestigationRequest(coordinator, tokenB, () => current, () => b.promise);
+  b.resolve('assessment-b');
+  assert.deepEqual(await outcomeB, { status: 'success', value: 'assessment-b' });
+  a.resolve('assessment-a');
+  assert.deepEqual(await outcomeA, { status: 'ignored' });
+});
+
+test('late failure from signal A cannot replace signal B success', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  let current: InvestigationRequestContext | null = requestContext('signal-a', 'packet-a');
+  const a = deferred<string>();
+  const outcomeA = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => a.promise);
+  current = requestContext('signal-b', 'packet-b');
+  const b = deferred<string>();
+  const outcomeB = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => b.promise);
+  b.resolve('assessment-b');
+  assert.equal((await outcomeB).status, 'success');
+  a.reject(new Error('late failure'));
+  assert.deepEqual(await outcomeA, { status: 'ignored' });
+});
+
+test('retry success remains after the invalidated first attempt completes', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  const current = requestContext('signal-a', 'packet-a');
+  const first = deferred<string>();
+  const firstOutcome = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => first.promise);
+  coordinator.invalidate();
+  const retry = deferred<string>();
+  const retryOutcome = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => retry.promise);
+  retry.resolve('retry-success');
+  assert.deepEqual(await retryOutcome, { status: 'success', value: 'retry-success' });
+  first.resolve('stale-success');
+  assert.deepEqual(await firstOutcome, { status: 'ignored' });
+});
+
+test('retry failure remains after the invalidated first attempt succeeds', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  const current = requestContext('signal-a', 'packet-a');
+  const first = deferred<string>();
+  const firstOutcome = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => first.promise);
+  coordinator.invalidate();
+  const retry = deferred<string>();
+  const retryOutcome = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => retry.promise);
+  retry.reject(new Error('retry failure'));
+  assert.equal((await retryOutcome).status, 'failure');
+  first.resolve('stale-success');
+  assert.deepEqual(await firstOutcome, { status: 'ignored' });
+});
+
+test('evidence changes invalidate and ignore an active completion', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  let current: InvestigationRequestContext | null = requestContext('signal-a', 'packet-a');
+  const pending = deferred<string>();
+  const token = coordinator.begin(current)!;
+  const outcome = runInvestigationRequest(coordinator, token, () => current, () => pending.promise);
+  current = requestContext('signal-a', 'packet-b');
+  coordinator.invalidate();
+  pending.resolve('stale');
+  assert.deepEqual(await outcome, { status: 'ignored' });
+  assert.equal(token.controller.signal.aborted, true);
+});
+
+test('switching to a signal without evidence aborts and invalidates the request', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  let current: InvestigationRequestContext | null = requestContext('signal-a', 'packet-a');
+  const pending = deferred<string>();
+  const token = coordinator.begin(current)!;
+  const outcome = runInvestigationRequest(coordinator, token, () => current, () => pending.promise);
+  current = null;
+  coordinator.invalidate();
+  pending.resolve('stale');
+  assert.equal(token.controller.signal.aborted, true);
+  assert.deepEqual(await outcome, { status: 'ignored' });
+});
+
+test('an aborted request does not become a visible failure', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  const current = requestContext('signal-a', 'packet-a');
+  const pending = deferred<string>();
+  const outcome = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => pending.promise);
+  coordinator.invalidate();
+  pending.reject(new DOMException('aborted', 'AbortError'));
+  assert.deepEqual(await outcome, { status: 'ignored' });
+});
+
+test('duplicate starts for the same analysing packet produce one request', () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  const current = requestContext('signal-a', 'packet-a');
+  const first = coordinator.begin(current);
+  const duplicate = coordinator.begin(current);
+  assert.ok(first);
+  assert.equal(duplicate, null);
+  assert.equal(first.requestId, 1);
+});
+
+test('a completion with the correct signal but wrong packet identity is ignored', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  let current: InvestigationRequestContext | null = requestContext('signal-a', 'packet-a');
+  const pending = deferred<string>();
+  const outcome = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => pending.promise);
+  current = requestContext('signal-a', 'packet-b');
+  pending.resolve('wrong-packet');
+  assert.deepEqual(await outcome, { status: 'ignored' });
+});
+
+test('a completion with an obsolete request identity is ignored', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  const current = requestContext('signal-a', 'packet-a');
+  const first = deferred<string>();
+  const firstOutcome = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => first.promise);
+  coordinator.invalidate();
+  const latestToken = coordinator.begin(current)!;
+  first.resolve('obsolete');
+  assert.deepEqual(await firstOutcome, { status: 'ignored' });
+  assert.equal(latestToken.requestId, 2);
+});
+
+test('changing signals never displays the previous signal assessment', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  let current: InvestigationRequestContext | null = requestContext('signal-a', 'packet-a');
+  let displayed: string | null = null;
+  const pending = deferred<string>();
+  const outcomePromise = runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, () => pending.promise);
+  current = requestContext('signal-b', 'packet-b');
+  displayed = null;
+  coordinator.invalidate();
+  pending.resolve('assessment-a');
+  const outcome = await outcomePromise;
+  if (outcome.status === 'success') displayed = outcome.value;
+  assert.equal(displayed, null);
+  assert.deepEqual(outcome, { status: 'ignored' });
+});
+
+test('success, failure and retry settle normally when context remains current', async () => {
+  const coordinator = new InvestigationRequestCoordinator();
+  const current = requestContext('signal-a', 'packet-a');
+  const success = await runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, async () => 'success');
+  assert.deepEqual(success, { status: 'success', value: 'success' });
+  const failure = await runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, async () => { throw new Error('failure'); });
+  assert.equal(failure.status, 'failure');
+  const retry = await runInvestigationRequest(coordinator, coordinator.begin(current)!, () => current, async () => 'retry-success');
+  assert.deepEqual(retry, { status: 'success', value: 'retry-success' });
 });

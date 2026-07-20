@@ -1,11 +1,11 @@
-import type { InvestigationAssessment, InvestigationEvidencePacket } from '../types';
-import { INVESTIGATION_TIMEOUT_MS } from '../lib/limits';
+import type { InvestigationAssessment, InvestigationEvidencePacket } from '../types.js';
+import { INVESTIGATION_TIMEOUT_MS } from '../lib/limits.js';
 import {
   evidenceIds,
   InvestigationValidationError,
   validateInvestigationAssessment,
   validateInvestigationRequest,
-} from '../lib/investigation';
+} from '../lib/investigation.js';
 
 export const OPENAI_INVESTIGATION_MODEL = 'gpt-5.6-sol';
 

@@ -13,7 +13,7 @@ import type {
   PacketEvent,
   SuspiciousSignal,
   TlsRecord,
-} from '../types';
+} from '../types.js';
 import {
   MAX_INVESTIGATION_EVENTS,
   MAX_INVESTIGATION_FLOWS,
@@ -22,9 +22,9 @@ import {
   MAX_INVESTIGATION_PROTOCOL_RECORDS,
   MAX_INVESTIGATION_REQUEST_BYTES,
   MAX_INVESTIGATION_TEXT_CHARACTERS,
-} from './limits';
-import { deterministicId } from './deterministic';
-import { resolveRelatedFlows } from './relatedFlows';
+} from './limits.js';
+import { deterministicId } from './deterministic.js';
+import { resolveRelatedFlows } from './relatedFlows.js';
 
 export interface InvestigationCollections {
   flows: readonly FlowSummary[];

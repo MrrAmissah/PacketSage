@@ -1,4 +1,4 @@
-import type { FlowSummary } from '../types';
+import type { FlowSummary } from '../types.js';
 
 export function resolveRelatedFlows(
   relatedFlowIds: readonly string[] | undefined,

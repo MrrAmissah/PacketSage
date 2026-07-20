@@ -6,7 +6,7 @@ import type {
   SuspiciousSignal,
   TlsRecord,
   UploadedEvidence,
-} from '../types';
+} from '../types.js';
 
 export interface EvidenceCollections {
   evidence: UploadedEvidence;

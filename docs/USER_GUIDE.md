@@ -106,6 +106,6 @@ Assemble your investigation findings for stakeholders:
 
 ## 6. Ending Your Session
 
-PacketSage operates with a volatile, browser-side memory architecture:
-* **Clearing Workspace**: To completely wipe all ingested records, click **Clear Data** or reload the page.
-* **Security Guard**: Wiping data instantly deletes all flows, handshakes, validation notes, and AI narratives from both your browser memory and the active server-side RAM. Save your generated reports before closing or reloading!
+PacketSage keeps active evidence in the application session:
+* **Clearing Workspace**: Click **Clear Data** or reload the page to clear active evidence and generated analysis from the workspace.
+* **Local Preferences**: Some review-status preferences may remain in browser storage. Raw captures are decoded locally; supported text exports are sent to the parsing endpoint.

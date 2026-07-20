@@ -13,10 +13,16 @@ import type {
   TlsRecord,
   SuspiciousSignal
 } from '../types';
+import { deterministicId, finalizeEvidenceIds } from './deterministic';
+import { MAX_PARSED_RECORDS } from './limits';
 
-// Helper: Generate UUID
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+const FALLBACK_TIMESTAMP = '1970-01-01T00:00:00.000Z';
+
+export class EvidenceParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EvidenceParseError';
+  }
 }
 
 // Helper: Determine Direction
@@ -329,7 +335,7 @@ export function parseDemoData(): ParsedResult {
     status: 'completed'
   };
 
-  return {
+  return finalizeEvidenceIds({
     evidence,
     events,
     flows,
@@ -338,7 +344,7 @@ export function parseDemoData(): ParsedResult {
     tls,
     signals,
     protocolStats
-  };
+  });
 }
 
 // 2. CsvPacketAdapter
@@ -348,7 +354,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
   let headers: string[] = [];
   
   let idCounter = 1;
-  const baseTime = new Date();
+  const baseTime = new Date(FALLBACK_TIMESTAMP);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -387,7 +393,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
     if (!isNaN(offsetSeconds)) {
       ts = new Date(baseTime.getTime() + offsetSeconds * 1000).toISOString();
     } else {
-      ts = new Date().toISOString();
+      ts = FALLBACK_TIMESTAMP;
     }
 
     events.push({
@@ -418,10 +424,10 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
     const infoLower = evt.info.toLowerCase();
     const serviceLower = (evt.service || '').toLowerCase();
 
-    if (evt.protocol === 'UDP' && (evt.destinationPort === 53 || evt.sourcePort === 53 || serviceLower === 'dns' || infoLower.includes('query'))) {
+    if (serviceLower === 'dns' || evt.protocol === 'DNS' || infoLower.includes('dns query') || infoLower.includes('standard query')) {
       const isResponse = infoLower.includes('response') || evt.sourcePort === 53;
       const queryMatch = evt.info.match(/A ([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-      const query = queryMatch ? queryMatch[1] : 'unknown.domain';
+      const query = queryMatch ? queryMatch[1] : 'unknown';
       dns.push({
         timestamp: evt.timestamp,
         clientIp: isResponse ? evt.destinationIp : evt.sourceIp,
@@ -431,9 +437,9 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
         rcode: 'NOERROR',
         riskLevel: query.includes('suspicious') || query.includes('test') ? 'high' : 'info'
       });
-    } else if (evt.destinationPort === 80 || evt.sourcePort === 80 || serviceLower === 'http' || infoLower.includes('get ') || infoLower.includes('post ')) {
+    } else if (evt.protocol === 'HTTP' || serviceLower === 'http' || infoLower.includes('get ') || infoLower.includes('post ')) {
       const hostMatch = evt.info.match(/host:\s*([a-zA-Z0-9.-]+)/i) || evt.info.match(/\(([^)]+)\)/);
-      const host = hostMatch ? hostMatch[1] : 'updates.example';
+      const host = hostMatch ? hostMatch[1] : 'unknown';
       const pathMatch = evt.info.match(/(GET|POST)\s+(\/[^\s]*)/);
       const uri = pathMatch ? pathMatch[2] : '/';
       http.push({
@@ -446,9 +452,9 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
         cleartext: true,
         riskLevel: 'low'
       });
-    } else if (evt.destinationPort === 443 || evt.sourcePort === 443 || serviceLower === 'https' || infoLower.includes('client hello') || infoLower.includes('sni')) {
+    } else if (evt.protocol.startsWith('TLS') || serviceLower === 'https' || infoLower.includes('client hello') || infoLower.includes('sni')) {
       const sniMatch = evt.info.match(/sni:\s*([a-zA-Z0-9.-]+)/i) || evt.info.match(/Client Hello, ([a-zA-Z0-9.-]+)/);
-      const sni = sniMatch ? sniMatch[1] : 'encrypted.server';
+      const sni = sniMatch ? sniMatch[1] : 'unknown';
       tls.push({
         timestamp: evt.timestamp,
         clientIp: evt.sourceIp,
@@ -463,7 +469,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
   const signals = runRuleEngine(events, flows, dns, http, tls);
 
   const evidence: UploadedEvidence = {
-    id: `ev-csv-${generateId()}`,
+    id: '',
     name: fileName,
     type: 'csv',
     size: content.length,
@@ -474,7 +480,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
     status: 'completed'
   };
 
-  return {
+  return finalizeEvidenceIds({
     evidence,
     events,
     flows,
@@ -483,7 +489,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
     tls,
     signals,
     protocolStats
-  };
+  });
 }
 
 // 3. SuricataEveAdapter
@@ -503,7 +509,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
 
     try {
       const data = JSON.parse(trimmed);
-      const ts = data.timestamp || new Date().toISOString();
+      const ts = data.timestamp || FALLBACK_TIMESTAMP;
       const src = data.src_ip || '0.0.0.0';
       const dst = data.dest_ip || '0.0.0.0';
       const sport = data.src_port || 0;
@@ -595,14 +601,14 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
       confidence: 'high',
       category: alert.category || 'Intrusion Alert',
       observedEvidence: `Source: ${alert.src} -> Destination: ${alert.dst} at ${alert.timestamp}`,
-      interpretation: 'Suricata network intrusion detection engine flagged this traffic as matching a known threat pattern.',
-      whatItDoesNotProve: 'It does not guarantee the compromised host was successfully exploited, but confirms traffic matching malicious signatures crossed the boundary.',
-      recommendedDefensiveCheck: 'Isolate the source IP immediately. Examine endpoint logs, running processes, and verify if any reverse TCP channels remain open.'
+      interpretation: 'The imported Suricata record reports a signature match for this traffic.',
+      whatItDoesNotProve: 'A signature alert does not by itself prove exploitation, compromise, execution, or malicious intent.',
+      recommendedDefensiveCheck: 'Validate the signature, packet context, rule revision, and matching endpoint telemetry before taking containment action.'
     });
   });
 
   const evidence: UploadedEvidence = {
-    id: `ev-eve-${generateId()}`,
+    id: '',
     name: fileName,
     type: 'suricata',
     size: content.length,
@@ -613,7 +619,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
     status: 'completed'
   };
 
-  return {
+  return finalizeEvidenceIds({
     evidence,
     events,
     flows,
@@ -622,7 +628,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
     tls,
     signals,
     protocolStats
-  };
+  });
 }
 
 // 4. ZeekLogAdapter
@@ -666,7 +672,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
       }
     });
 
-    const ts = row['ts'] ? new Date(parseFloat(row['ts']) * 1000).toISOString() : new Date().toISOString();
+    const ts = row['ts'] ? new Date(parseFloat(row['ts']) * 1000).toISOString() : FALLBACK_TIMESTAMP;
     const src = row['id.orig_h'] || '0.0.0.0';
     const sport = parseInt(row['id.orig_p'] || '0') || 0;
     const dst = row['id.resp_h'] || '0.0.0.0';
@@ -736,7 +742,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
   const signals = runRuleEngine(events, flows, dns, http, tls);
 
   const evidence: UploadedEvidence = {
-    id: `ev-zeek-${generateId()}`,
+    id: '',
     name: fileName,
     type: 'zeek',
     size: content.length,
@@ -747,7 +753,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
     status: 'completed'
   };
 
-  return {
+  return finalizeEvidenceIds({
     evidence,
     events,
     flows,
@@ -756,7 +762,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
     tls,
     signals,
     protocolStats
-  };
+  });
 }
 
 // 5. TsharkJsonAdapter
@@ -765,14 +771,23 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
   const dns: DnsRecord[] = [];
   const http: HttpRecord[] = [];
   const tls: TlsRecord[] = [];
-  let idCounter = 1;
-
+  let rawEvents: unknown;
   try {
-    const rawEvents = JSON.parse(content);
-    const packetList = Array.isArray(rawEvents) ? rawEvents : [rawEvents];
+    rawEvents = JSON.parse(content);
+  } catch {
+    throw new EvidenceParseError('Malformed TShark JSON input.');
+  }
+  const packetList = Array.isArray(rawEvents) ? rawEvents : [rawEvents];
+  if (packetList.length > MAX_PARSED_RECORDS) {
+    throw new EvidenceParseError(`TShark input exceeds the ${MAX_PARSED_RECORDS.toLocaleString()}-record limit.`);
+  }
 
-    packetList.forEach(packet => {
-      const source = packet._source || {};
+  packetList.forEach((packet, packetIndex) => {
+      if (!packet || typeof packet !== 'object') {
+        throw new EvidenceParseError(`Invalid TShark packet at record ${packetIndex + 1}.`);
+      }
+      const packetData = packet as Record<string, any>;
+      const source = packetData._source || {};
       const layers = source.layers || {};
 
       const frame = layers.frame || {};
@@ -780,11 +795,11 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
       const ipv6 = layers.ipv6 || {};
       const tcp = layers.tcp || {};
       const udp = layers.udp || {};
-      const dnsLayer = layers.dns || {};
-      const httpLayer = layers.http || {};
-      const tlsLayer = layers.ssl || layers.tls || {};
+      const dnsLayer = layers.dns;
+      const httpLayer = layers.http;
+      const tlsLayer = layers.ssl || layers.tls;
 
-      const timestamp = frame['frame.time_iso'] || frame['frame.time'] || new Date().toISOString();
+      const timestamp = frame['frame.time_iso'] || frame['frame.time'] || FALLBACK_TIMESTAMP;
       const sourceIp = ip['ip.src'] || ipv6['ipv6.src'] || '0.0.0.0';
       const destinationIp = ip['ip.dst'] || ipv6['ipv6.dst'] || '0.0.0.0';
       
@@ -795,7 +810,7 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
       if (udp['udp.srcport'] || udp['udp.dstport']) protocol = 'UDP';
       if (layers.icmp) protocol = 'ICMP';
 
-      let length = parseInt(frame['frame.len'] || '64');
+      const length = parseInt(frame['frame.len'] || '64');
       let info = `TShark Parsed Packet`;
 
       if (dnsLayer) {
@@ -835,7 +850,7 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
       }
 
       events.push({
-        id: `evt-tshark-${idCounter++}`,
+        id: `evt-tshark-${packetIndex + 1}`,
         timestamp,
         sourceIp,
         sourcePort,
@@ -848,16 +863,13 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
         sourceType: 'tshark'
       });
     });
-  } catch {
-    // Malformed JSON fallback
-  }
 
   const flows = buildFlowsFromEvents(events);
   const protocolStats = computeProtocolStats(events);
   const signals = runRuleEngine(events, flows, dns, http, tls);
 
   const evidence: UploadedEvidence = {
-    id: `ev-tshark-${generateId()}`,
+    id: '',
     name: fileName,
     type: 'tshark',
     size: content.length,
@@ -868,7 +880,7 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
     status: 'completed'
   };
 
-  return {
+  return finalizeEvidenceIds({
     evidence,
     events,
     flows,
@@ -877,7 +889,7 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
     tls,
     signals,
     protocolStats
-  };
+  });
 }
 
 // 6. TextLogAdapter / PastedStructuredLog
@@ -885,7 +897,7 @@ export function parseTextLog(fileName: string, content: string): ParsedResult {
   const events: PacketEvent[] = [];
   const lines = content.split('\n');
   let idCounter = 1;
-  const baseTime = new Date();
+  const baseTime = new Date(FALLBACK_TIMESTAMP);
 
   // Try extracting IP patterns: e.g. "192.168.1.15 to 10.0.0.1 port 80 Protocol TCP"
   lines.forEach((line, index) => {
@@ -928,7 +940,7 @@ export function parseTextLog(fileName: string, content: string): ParsedResult {
   const signals = runRuleEngine(events, flows, [], [], []);
 
   const evidence: UploadedEvidence = {
-    id: `ev-txt-${generateId()}`,
+    id: '',
     name: fileName,
     type: 'txt',
     size: content.length,
@@ -939,7 +951,7 @@ export function parseTextLog(fileName: string, content: string): ParsedResult {
     status: 'completed'
   };
 
-  return {
+  return finalizeEvidenceIds({
     evidence,
     events,
     flows,
@@ -948,79 +960,14 @@ export function parseTextLog(fileName: string, content: string): ParsedResult {
     tls: [],
     signals,
     protocolStats
-  };
+  });
 }
 
-// 7. PcapPlaceholderAdapter
+// Raw captures are decoded locally in the browser by capture.ts.
 export function parsePcapPlaceholder(fileName: string, fileSize: number): ParsedResult {
-  // Generates high fidelity statistics showing we parsed headers and are waiting for Stage 2 binary parsing
-  const baseTime = new Date();
-  const events: PacketEvent[] = [
-    {
-      id: 'evt-pcap-init-1',
-      timestamp: baseTime.toISOString(),
-      sourceIp: '192.168.12.101',
-      sourcePort: 54101,
-      destinationIp: '1.1.1.1',
-      destinationPort: 53,
-      protocol: 'UDP',
-      service: 'DNS',
-      length: 68,
-      info: 'Standard query A gateway.external.test (PCAP Boundary Alert)'
-    },
-    {
-      id: 'evt-pcap-init-2',
-      timestamp: new Date(baseTime.getTime() + 1000).toISOString(),
-      sourceIp: '192.168.12.101',
-      sourcePort: 49881,
-      destinationIp: '203.0.113.99',
-      destinationPort: 80,
-      protocol: 'TCP',
-      service: 'HTTP',
-      length: 120,
-      info: 'GET /configuration.xml HTTP/1.1 (Host: gateway.external.test)'
-    }
-  ];
-
-  const flows = buildFlowsFromEvents(events);
-  const protocolStats = computeProtocolStats(events);
-
-  const signals: SuspiciousSignal[] = [
-    {
-      id: 'sig-pcap-placeholder-1',
-      title: 'PCAP Raw Binary Upload Mode Identified',
-      severity: 'info',
-      confidence: 'high',
-      category: 'System Architecture Notice',
-      observedEvidence: `File Name: ${fileName} (${(fileSize / 1024).toFixed(2)} KB)`,
-      interpretation: 'Raw PCAP file uploaded successfully. Standard Wireshark headers, Magic Bytes (d4 c3 b2 a1), and link layer encodings were detected.',
-      whatItDoesNotProve: 'This sandbox environment does not currently have native libpcap or TShark executables. To provide high-fidelity analysis immediately, PacketSage uses fallback parser streams and generates preview flows.',
-      recommendedDefensiveCheck: 'We suggest uploading the exported logs (CSV, Zeek tab-separated, Suricata JSON) for full, deep, deterministic analysis, or use our pre-built Compromised Host Hunt demonstration file.'
-    }
-  ];
-
-  const evidence: UploadedEvidence = {
-    id: `ev-pcap-${generateId()}`,
-    name: fileName,
-    type: 'pcap',
-    size: fileSize,
-    uploadedAt: new Date().toISOString(),
-    parseMode: 'pcap',
-    sourceFormat: 'Raw PCAP/PCAPNG Binary',
-    retentionMode: 'Sandbox Local RAM',
-    status: 'completed'
-  };
-
-  return {
-    evidence,
-    events,
-    flows,
-    dns: [],
-    http: [],
-    tls: [],
-    signals,
-    protocolStats
-  };
+  void fileName;
+  void fileSize;
+  throw new EvidenceParseError('Raw captures must be decoded locally in a supported browser.');
 }
 
 // --- Rule Engine ---
@@ -1046,14 +993,14 @@ export function runRuleEngine(
     if (ports.size >= 8) {
       signals.push({
         id: `sig-portscan-${srcIp}`,
-        title: 'Reconnaissance: Sequential Port Scan Detected',
+      title: 'High destination-port diversity observed',
         severity: 'medium',
         confidence: 'high',
-        category: 'Discovery',
+        category: 'Connection pattern',
         observedEvidence: `Host ${srcIp} connected to ${ports.size} unique destination ports.`,
-        interpretation: 'Sequential scanning indicates active reconnaissance by an internal or external host aiming to identify available services and openings.',
-        whatItDoesNotProve: 'It does not prove a system was successfully hacked, only that ports were actively probed.',
-        recommendedDefensiveCheck: 'Check network security group configurations. Isolate the scanning host IP to prevent additional vertical privilege escalation.'
+        interpretation: 'Contact with many destination ports can result from scanning, service discovery, testing, or normal multi-service applications.',
+        whatItDoesNotProve: 'This count alone does not prove scanning, malicious intent, or compromise.',
+        recommendedDefensiveCheck: 'Review the destination sequence, timing, authorized scanner inventory, and source process telemetry.'
       });
     }
   });
@@ -1072,12 +1019,12 @@ export function runRuleEngine(
       if (count > 12) {
         signals.push({
           id: `sig-dnsbeacon-${clientIp}-${domain.replace(/[^a-zA-Z0-9]/g, '_')}`,
-          title: 'Repeated DNS timing pattern (C2-like indicator requiring validation)',
+          title: 'Repeated DNS query volume observed',
           severity: 'high',
           confidence: 'high',
-          category: 'C2',
+          category: 'DNS activity',
           observedEvidence: `Client ${clientIp} made ${count} DNS queries for domain "${domain}".`,
-          interpretation: 'Frequent, periodic DNS queries can be indicative of beaconing-style timing configurations, which may be associated with automated processes or standard software update mechanisms.',
+          interpretation: 'Repeated queries can reflect automated software, retry behavior, resolver issues, or scheduled communication. This count does not establish timing regularity.',
           whatItDoesNotProve: 'It does not prove data is being exfiltrated; this can occasionally be caused by standard software update mechanisms or malformed DNS resolution software.',
           recommendedDefensiveCheck: 'Review the DNS response contents. Block the resolution of domain name on internal DNS servers and isolate the client workstation.'
         });
@@ -1090,13 +1037,13 @@ export function runRuleEngine(
     if (rec.cleartext && (rec.uri.endsWith('.bin') || rec.uri.endsWith('.exe') || rec.uri.endsWith('.sh') || rec.uri.endsWith('.bat'))) {
       signals.push({
         id: `sig-cleartext-download-${idx}`,
-        title: 'Security Posture: Cleartext Binary Download Detected',
+        title: 'Cleartext HTTP request for binary-like path observed',
         severity: 'medium',
         confidence: 'high',
-        category: 'Initial Access',
-        observedEvidence: `Host ${rec.clientIp} downloaded "${rec.uri}" in cleartext over HTTP (Host: ${rec.host}).`,
-        interpretation: 'Downloading executables or binaries over HTTP is vulnerable to Man-in-the-Middle (MitM) packet manipulation, DNS spoofing, and file injection.',
-        whatItDoesNotProve: 'It does not guarantee malicious payload execution, but highlights unsafe practices that expose systems to payload injection.',
+        category: 'Cleartext transfer',
+        observedEvidence: `Host ${rec.clientIp} requested "${rec.uri}" over cleartext HTTP (Host: ${rec.host}).`,
+        interpretation: 'A binary-like path requested over HTTP may expose content to observation or modification in transit.',
+        whatItDoesNotProve: 'It does not prove a file was returned, saved, executed, or malicious.',
         recommendedDefensiveCheck: 'Inspect the downloaded file hashes against VirusTotal or similar threat intelligence platforms. Mandate TLS policy (HTTPS) across the enterprise.'
       });
     }
@@ -1108,10 +1055,10 @@ export function runRuleEngine(
     if (maliciousPorts.includes(flow.destinationPort) && flow.direction === 'outbound') {
       signals.push({
         id: `sig-unusualport-${flow.id}`,
-        title: 'Possible C2-style timing pattern, not confirmed: Direct Outbound Connection on Suspicious Port',
+        title: 'Outbound connection on selected high port observed',
         severity: 'high',
         confidence: 'medium',
-        category: 'Exfiltration',
+        category: 'Port review',
         observedEvidence: `Internal IP ${flow.sourceIp} initiated direct socket session with external ${flow.destinationIp} on port ${flow.destinationPort}.`,
         interpretation: 'Sustained outbound connections to ports such as 4444 or 1337 require validation as they can be associated with custom network services, debugging, or reverse shell activity.',
         whatItDoesNotProve: 'It does not guarantee the connection is malicious; standard development environments occasionally use ports like 8000 or 1337.',
@@ -1153,12 +1100,12 @@ export function runRuleEngine(
     if (flow.byteCount > 10 * 1024 * 1024 && flow.direction === 'outbound') {
       signals.push({
         id: `sig-dataspike-${flow.id}`,
-        title: 'Exfiltration: Massive Outbound Data Volume Detected',
+        title: 'Large outbound byte count observed',
         severity: 'high',
         confidence: 'medium',
-        category: 'Exfiltration',
+        category: 'Traffic volume',
         observedEvidence: `Flow summary shows ${flow.sourceIp} pushed ${(flow.byteCount / (1024 * 1024)).toFixed(2)} MB of raw TCP data to external endpoint ${flow.destinationIp}.`,
-        interpretation: 'Large outbound spikes on non-backup pipelines can indicate exfiltration of confidential network data, backups, database dumps, or passwords.',
+        interpretation: 'Large outbound byte counts can reflect backups, synchronization, uploads, exports, or other transfers that require business-context validation.',
         whatItDoesNotProve: 'It does not prove theft occurred; the user could be updating extensive legitimate code projects, downloading standard databases, or executing an approved backup.',
         recommendedDefensiveCheck: 'Cross-reference with NetFlow and firewall policies. Investigate local files accessed by user account within the same hour.'
       });
@@ -1191,7 +1138,7 @@ function parseCsvLine(text: string): string[] {
   return result;
 }
 
-function buildFlowsFromEvents(events: PacketEvent[]): FlowSummary[] {
+export function buildFlowsFromEvents(events: PacketEvent[]): FlowSummary[] {
   const flowsMap: Record<string, FlowSummary> = {};
 
   events.forEach(evt => {
@@ -1228,7 +1175,7 @@ function buildFlowsFromEvents(events: PacketEvent[]): FlowSummary[] {
       else if (dir === 'outbound' && ![80, 443].includes(evt.destinationPort)) risk = 'low';
 
       flowsMap[key] = {
-        id: `flow-${generateId().substring(0, 8)}`,
+        id: deterministicId('flow-pending', [key]),
         firstSeen: evt.timestamp,
         lastSeen: evt.timestamp,
         sourceIp: evt.sourceIp,
@@ -1250,7 +1197,7 @@ function buildFlowsFromEvents(events: PacketEvent[]): FlowSummary[] {
   return Object.values(flowsMap);
 }
 
-function computeProtocolStats(events: PacketEvent[]): ProtocolStat[] {
+export function computeProtocolStats(events: PacketEvent[]): ProtocolStat[] {
   const counts: Record<string, { count: number; bytes: number }> = {};
   let totalCount = 0;
 
@@ -1293,13 +1240,12 @@ function guessService(protocol: string, port: number): string {
   if (port === 22) return 'SSH';
   if (port === 21) return 'FTP';
   if (port === 23) return 'Telnet';
-  if (port === 1337) return 'Malicious Shell';
-  if (port === 4444) return 'Metasploit C2';
+  if (port === 1337 || port === 4444) return 'Unassigned high port';
   return protocol === 'UDP' ? 'UDP Service' : 'TCP Service';
 }
 
 function guessPortFromProtocol(proto: string, isSource: boolean): number {
-  if (isSource) return 49152 + Math.floor(Math.random() * 15000);
+  if (isSource) return 49152;
   const p = proto.toLowerCase();
   if (p === 'dns') return 53;
   if (p === 'http') return 80;

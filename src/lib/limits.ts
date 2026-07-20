@@ -1,0 +1,6 @@
+export const MAX_TEXT_CHARACTERS = 2_000_000;
+export const MAX_PARSED_RECORDS = 10_000;
+export const MAX_CAPTURE_BYTES = 10 * 1024 * 1024;
+export const MAX_CAPTURE_PACKETS = 20_000;
+export const MAX_FILE_NAME_CHARACTERS = 255;
+export const MAX_REQUEST_BYTES = 3 * 1024 * 1024;

@@ -135,33 +135,6 @@ async function generateGeminiAnalysis(request: any, timeoutMs: number) {
   throw lastError || new Error("Gemini model attempts failed.");
 }
 
-function buildFallbackMemo(reqBody: any, options: { reason?: "timeout" | "error" | "missing-key" } = {}) {
-  const { flowSummary, dnsRecords, httpRecords } = reqBody || {};
-  const commonHost = flowSummary?.[0]?.sourceIp || "10.0.0.15";
-  const commonDomain = dnsRecords?.[0]?.query || "d4c1f2a1.example.com";
-  const commonExternal = flowSummary?.[0]?.destinationIp || "203.0.113.50";
-  const fallbackNotice = options.reason === "timeout"
-    ? "Gemini analysis timed out before the platform limit, so PacketSage returned a local structured fallback memo for analyst continuity."
-    : "Gemini analysis was unavailable, so PacketSage returned a local structured fallback memo for analyst continuity.";
-
-  return {
-    executiveSummary: `${fallbackNotice} A forensic analysis of host ${commonHost} identified multiple review-worthy network behaviors, including periodic DNS query timing, cleartext HTTP transfer activity, and repeated outbound connections. These observations require endpoint, DNS resolver, and destination reputation validation before concluding compromise or command-and-control activity.`,
-    whatHappened: `• QUERIED: Host ${commonHost} initiated periodic DNS resolver queries to domain ${commonDomain} at uniform intervals. This periodic query pattern requires validation before drawing conclusions about beaconing behavior.\n• REQUESTED: Decoded application-layer sessions from ${commonHost} requested external assets over cleartext.\n• DOWNLOADED: A cleartext binary download transfer was completed from ${commonExternal}, which requires endpoint validation.\n• OBSERVED: Multiple repeated outbound connection attempts targeting port 80/443 of remote external destinations, which require reputation and ownership review.`,
-    normalActivity: "Routine host activities, local ARP resolution, multicast discovery protocols, and background encrypted TLS 1.3 handshakes to public software update domains were recorded in the baseline dataset.",
-    suspiciousActivity: `Host ${commonHost} sustained a sequence of application-layer transfers and repeated outbound connection attempts to external destinations over non-standard or unencrypted ports.`,
-    keyEvidence: `• Host Source IP: ${commonHost}\n• External Connection Targets: ${commonExternal}\n• Target DNS Query Domain: ${commonDomain}\n• Decoded Transport: HTTP Cleartext, DNS Recursive Lookups`,
-    analystQuestions: `• Is the file transfer from ${commonHost} to ${commonExternal} part of an expected software deployment process?\n• Do host operator logs identify legitimate administrative software performing queries to ${commonDomain}?\n• Were active domain credentials transmitted over plain text channels during these connection times?`,
-    recommendedChecks: "• Review DNS resolver logs for the queried domain and host.\n• Check endpoint process activity around the observed timestamps.\n• Review proxy, authentication, and EDR logs for matching events.\n• Confirm destination ownership, reputation, and expected business use.\n• Inspect adjacent flows for repeated timing or payload-transfer patterns.\n• Preserve relevant endpoint artifacts for follow-up investigation.\n• Add validated observations to the incident report.",
-    beginnerExplanation: "One computer downloaded a file over an unencrypted channel, then repeatedly contacted a domain and external network services. That pattern is unusual enough to check the computer's process history, DNS logs, and surrounding network traffic.",
-    technicalExplanation: `Transport/application behavior:\nThe network capture reveals a series of unencrypted application-layer transfers combined with periodic outbound socket configurations.\n\nDNS behavior:\nRepeated recursive DNS queries were generated targeting domain ${commonDomain}.\n\nHTTP/cleartext behavior:\nA payload transfer was completed over unencrypted HTTP. This cleartext channel exposes transport headers and data streams to inspection.\n\nExternal connection behavior:\nOutbound session sequences target destination ports with repeated timing intervals.\n\nRequired validation:\nEndpoint process telemetry, DNS resolver logs, and destination ownership checks are required before concluding compromise or command-and-control activity.`,
-    confidence: "medium",
-    limitations: `• ${fallbackNotice}\n• Payload contents may be incomplete.\n• Network metadata does not confirm endpoint compromise on its own.\n• Host process telemetry is required to validate execution.\n• Authentication logs are required to assess account impact.`,
-    reportReadySummary: options.reason === "timeout"
-      ? "Gemini analysis timed out and PacketSage returned a local fallback report summary for review."
-      : "This fallback forensic investigation report details anomalous network patterns including unencrypted downloads and persistent DNS querying.",
-  };
-}
-
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -271,7 +244,7 @@ Perspective directive: ${perspectiveInstruction}`;
       : String(err?.message || "").includes("GEMINI_API_KEY")
         ? "missing-key"
         : "error";
-    console.log("[Info] Constructing local backup analyst memo", {
+    console.log("[Info] Gemini analysis unavailable", {
       reason: reason === "timeout"
         ? "gemini_timeout"
         : reason === "missing-key"
@@ -284,6 +257,10 @@ Perspective directive: ${perspectiveInstruction}`;
       tls: asArray(req.body?.tlsRecords).length,
       signals: asArray(req.body?.suspiciousSignals).length,
     });
-    return res.status(200).json(buildFallbackMemo(req.body, { reason }));
+    return res.status(reason === "timeout" ? 504 : 503).json({
+      error: reason === "timeout"
+        ? "AI analysis timed out. No fallback findings were generated."
+        : "AI analysis is unavailable. No fallback findings were generated."
+    });
   }
 }

@@ -25,6 +25,8 @@ export interface PacketEvent {
   protocol: string;
   service?: string;
   length: number;
+  capturedLength?: number;
+  originalLength?: number;
   info: string;
   rawSummary?: string;
   sourceType?: string;
@@ -58,6 +60,7 @@ export interface ProtocolStat {
 }
 
 export interface DnsRecord {
+  id?: string;
   timestamp: string;
   clientIp: string;
   query: string;
@@ -69,6 +72,7 @@ export interface DnsRecord {
 }
 
 export interface HttpRecord {
+  id?: string;
   timestamp: string;
   clientIp: string;
   host: string;
@@ -82,6 +86,7 @@ export interface HttpRecord {
 }
 
 export interface TlsRecord {
+  id?: string;
   timestamp: string;
   clientIp: string;
   serverIp: string;

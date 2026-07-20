@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { SuspiciousSignal, FlowSummary, SignalReviewStatus } from '../types';
 import InfoPopover from './InfoPopover';
+import { selectPresentedSignals } from '../lib/signalPresentation';
 
 interface SuspiciousSignalsProps {
   signals: SuspiciousSignal[];
@@ -562,7 +563,7 @@ export default function SuspiciousSignals({
   onNavigateToFlows,
   onUpdateSignalStatus
 }: SuspiciousSignalsProps) {
-  // Rich local state populated from static data OR parsed rule signals
+  // Rich local state derived only from parser/rule-engine signals.
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
 
@@ -579,68 +580,30 @@ export default function SuspiciousSignals({
 
   // Load and enrich signals
   useEffect(() => {
-    if (signals.length > 0) {
-      // If we have parsed/rule-engine signals, we enrich them dynamically or use pre-populated ones for the demo file
-      const isDemoFile = signals.some(s => s.id.includes('sig-dnsbeacon') || s.id.includes('sig-portscan') || s.id.includes('sig-cleartext') || s.id.includes('sig-unusualport') || s.id.includes('sig-dataspike'));
-      
-      if (isDemoFile || signals.length > 1) {
-        // Merge demo PCAP signals with any actual rules generated so that the reference dataset is perfectly preserved!
-        const merged: EnrichedSignal[] = [];
-        PCAP_DEMO_SIGNALS.forEach(pcapSig => {
-          const activeStatus = getPersistedStatus(pcapSig, signals, signalStatusOverrides) || 'Needs review';
-          merged.push({
-            ...sanitizeSignal(pcapSig),
-            status: activeStatus
-          });
-        });
-
-        // Add any missing signals from engine
-        signals.forEach(engineSig => {
-          if (!merged.some(m => m.id === engineSig.id || m.title.toLowerCase() === engineSig.title.toLowerCase())) {
-            const mappedConfidence = engineSig.severity === 'high' ? 75 : engineSig.severity === 'medium' ? 60 : engineSig.severity === 'low' ? 45 : 30;
-            const cleanedSig = sanitizeSignal(engineSig);
-            merged.push({
-              ...cleanedSig,
-              subtitle: cleanedSig.observedEvidence.slice(0, 45) + '...',
-              confidenceScore: mappedConfidence,
-              observedSnippet: cleanedSig.observedEvidence.slice(0, 35),
-              relatedFlowsCount: 1,
-              firstSeenTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-              status: signalStatusOverrides[engineSig.id] || engineSig.status || 'Needs review'
-            });
-          }
-        });
-        setEnrichedSignals(merged);
-        if (merged.length > 0) {
-          // Keep selection synchronized on re-mount if we already have a selection or take the first one
-          setSelectedSignal(prev => merged.find(m => m.id === prev?.id) || merged[0]);
-        }
-      } else {
-        // Standard user upload data enrichment
-        const mapped = signals.map((sig, idx) => {
-          const confidenceScores: Record<string, number> = { high: 75, medium: 60, low: 45, info: 30 };
-          const cleanedSig = sanitizeSignal(sig);
-          return {
-            ...cleanedSig,
-            subtitle: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 50) + '...' : 'Pattern detected in stream',
-            confidenceScore: confidenceScores[cleanedSig.severity] || 50,
-            observedSnippet: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 30) : 'Telemetry trace',
-            relatedFlowsCount: 1,
-            firstSeenTime: new Date(Date.now() - idx * 60000).toISOString().replace('T', ' ').slice(0, 19),
-            status: signalStatusOverrides[sig.id] || sig.status || 'Needs review'
-          };
-        });
-        setEnrichedSignals(mapped);
-        if (mapped.length > 0) {
-          setSelectedSignal(prev => mapped.find(m => m.id === prev?.id) || mapped[0]);
-        }
-      }
-    } else {
-      // In case no signals are parsed at all, we populate some high-fidelity placeholders so the screen isn't bare
+    if (signals.length === 0) {
       setEnrichedSignals([]);
       setSelectedSignal(null);
+      return;
     }
-  }, [signals, signalStatusOverrides]);
+
+    const confidenceScores: Record<string, number> = { high: 75, medium: 60, low: 45, info: 30 };
+    const mapped = selectPresentedSignals(signals).map(sig => {
+      const cleanedSig = sanitizeSignal(sig);
+      const relatedFlows = flows.filter(flow => sig.relatedFlowIds?.includes(flow.id));
+      const firstSeen = relatedFlows.map(flow => flow.firstSeen).sort()[0] || '';
+      return {
+        ...cleanedSig,
+        subtitle: cleanedSig.observedEvidence ? `${cleanedSig.observedEvidence.substring(0, 50)}...` : 'Deterministic observation',
+        confidenceScore: confidenceScores[cleanedSig.confidence] || 50,
+        observedSnippet: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 30) : 'No evidence summary supplied',
+        relatedFlowsCount: relatedFlows.length,
+        firstSeenTime: firstSeen ? firstSeen.replace('T', ' ').slice(0, 19) : 'Not provided',
+        status: signalStatusOverrides[sig.id] || sig.status || 'Needs review'
+      };
+    });
+    setEnrichedSignals(mapped);
+    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id) || mapped[0]);
+  }, [signals, flows, signalStatusOverrides]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {

@@ -13,6 +13,8 @@ export interface UploadedEvidence {
   sourceFormat: string;
   retentionMode: string;
   status: 'parsing' | 'completed' | 'failed';
+  sha256?: string;
+  checksumStatus?: 'calculated' | 'demo-not-applicable' | 'not-calculated';
 }
 
 export interface PacketEvent {
@@ -236,19 +238,13 @@ export interface InvestigationAssessment {
   }>;
 }
 
-export interface AiAnalysisResult {
-  executiveSummary: string;
-  whatHappened: string;
-  normalActivity: string;
-  suspiciousActivity: string;
-  keyEvidence: string;
-  analystQuestions: string;
-  recommendedChecks: string;
-  beginnerExplanation: string;
-  technicalExplanation: string;
-  confidence: 'low' | 'medium' | 'high';
-  limitations: string;
-  reportReadySummary: string;
+export interface InvestigationRecord {
+  selectedEvidenceId: string;
+  signalId: string;
+  packetIdentity: string;
+  packet: InvestigationEvidencePacket;
+  assessment: InvestigationAssessment;
+  includedInReport: boolean;
 }
 
 export interface AnalysisReport {

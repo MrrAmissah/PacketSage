@@ -95,7 +95,7 @@ export default function ArchitectureRoadmap() {
                       {tile.value}
                     </span>
                     {tile.value === 'Browser Sandbox' && (
-                      <InfoPopover content="In sandbox mode, imported evidence is staged in browser/session memory for local review. AI memo generation may use selected decoded metadata or summaries through the server-side AI proxy." align="right" />
+                      <InfoPopover content="Imported evidence is held in browser/session memory. AI-assisted investigation sends only a bounded packet of exact evidence referenced by the selected signal through the server-side proxy." align="right" />
                     )}
                     {tile.value === 'Demo Decoder' && (
                       <InfoPopover content="Demo Decoder supports structured sample and exported evidence parsing in the browser workspace. Full native binary PCAP decoding is a planned production target." align="right" />
@@ -159,8 +159,8 @@ export default function ArchitectureRoadmap() {
                     icon: <ShieldCheck size={13} className="text-emerald-500 mt-0.5" />
                   },
                   {
-                    title: "Gemini Synthesis Engine",
-                    desc: "Safe, authenticated server proxy translates heuristic results into forensic reports and analogies.",
+                    title: "Evidence-scoped investigation",
+                    desc: "The server proxy assesses one selected signal using its bounded, exact evidence packet.",
                     icon: <Sparkles size={13} className="text-emerald-500 mt-0.5" />
                   }
                 ].map((item, idx) => (
@@ -268,8 +268,8 @@ export default function ArchitectureRoadmap() {
               },
               {
                 id: '04',
-                title: "AI Synthesis",
-                desc: "Server-side Gemini proxy correlates rule triggers and flows into diagnostic analogies.",
+                title: "AI-assisted investigation",
+                desc: "Server-side GPT-5.6 proxy assesses one signal using only its exact validated evidence packet.",
                 icon: <Sparkles size={16} />,
                 status: "AI proxy active",
                 statusClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10"
@@ -295,8 +295,8 @@ export default function ArchitectureRoadmap() {
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
                         <h4 className="text-xs font-bold text-text-primary tracking-tight">{stage.title}</h4>
-                        {stage.title === 'AI Synthesis' && (
-                          <InfoPopover content="AI memo generation uses a server-side proxy with redaction controls for selected decoded metadata and summaries. Raw packet storage is not part of sandbox mode." align="right" />
+                        {stage.title === 'AI-assisted investigation' && (
+                          <InfoPopover content="AI-assisted investigation uses a server-side proxy and bounded normalized evidence packets. Raw packet payloads and capture bytes are excluded." align="right" />
                         )}
                       </div>
                       <p className="text-[11px] text-text-secondary leading-relaxed">{stage.desc}</p>
@@ -397,7 +397,7 @@ export default function ArchitectureRoadmap() {
                   },
                   {
                     layer: "AI Processing",
-                    current: "Gemini memo generation from selected decoded metadata and summaries",
+                    current: "GPT-5.6 investigation from bounded, exact signal evidence",
                     target: "Isolated AI proxy with redaction, audit logs, and policy controls"
                   },
                   {
@@ -433,8 +433,8 @@ export default function ArchitectureRoadmap() {
               title: "Forensic Sandbox Workstation",
               status: "Active",
               statusClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-              desc: "Active browser-side workspace enabling in-memory structured log normalization, diagnostic heuristic threat matching, interactive Academy exercises, and server-side Gemini analytical memo synthesis.",
-              deliverables: ["In-memory structured schema normalization", "Diagnostic rules & threat indicator matches", "Incident timeline and report generator", "Server-side Gemini proxy integration"]
+              desc: "Active browser-side workspace enabling in-memory normalization, deterministic signal review, evidence-scoped GPT-5.6 investigation, and explicit report inclusion.",
+              deliverables: ["In-memory structured schema normalization", "Deterministic evidence relationships", "Evidence-only timeline and report generator", "Server-side GPT-5.6 investigation proxy"]
             },
             {
               id: 2,

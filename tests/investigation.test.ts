@@ -32,6 +32,7 @@ import {
   OPENAI_INVESTIGATION_MODEL,
   requestOpenAiInvestigation,
 } from '../src/server/investigationApi';
+import investigateHandler from '../api/investigate';
 import type { FlowSummary, InvestigationAssessment, PacketEvent, SuspiciousSignal } from '../src/types';
 
 const timestamp = '2026-07-20T09:00:00.000Z';
@@ -218,6 +219,45 @@ test('malformed and oversized investigation requests produce safe client errors'
       assert.doesNotMatch(safe.message, /stack|environment|credential|api key/i);
     }
   }
+});
+
+test('Vercel investigation handler exposes the validated server-only endpoint', async () => {
+  const { packet } = packetFixture();
+  const originalApiKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  let statusCode = 0;
+  let responseBody: unknown;
+  const req = {
+    method: 'POST',
+    body: { evidence: packet },
+    once() {},
+    removeListener() {},
+  };
+  const res = {
+    destroyed: false,
+    writableEnded: false,
+    once() {},
+    removeListener() {},
+    status(value: number) {
+      statusCode = value;
+      return this;
+    },
+    json(value: unknown) {
+      responseBody = value;
+      this.writableEnded = true;
+      return this;
+    },
+  };
+
+  try {
+    await investigateHandler(req, res);
+  } finally {
+    if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalApiKey;
+  }
+
+  assert.equal(statusCode, 503, JSON.stringify(responseBody));
+  assert.deepEqual(responseBody, { error: 'AI-assisted investigation is unavailable. Try again later.' });
 });
 
 test('OpenAI timeout and failure return safe errors with no fallback findings', async () => {

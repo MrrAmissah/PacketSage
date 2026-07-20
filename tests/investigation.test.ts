@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import InvestigationAssessmentPanel from '../src/components/InvestigationAssessment';
 import {
   buildInvestigationEvidencePacket,
   evidenceIds,
@@ -274,4 +277,20 @@ test('cited flow resolution opens only an exact supplied flow ID', () => {
   assert.equal(resolveCitedFlow(includedFlow.id, packet, [unrelated, includedFlow])?.id, includedFlow.id);
   assert.equal(resolveCitedFlow('flow-unknown', packet, [unrelated, includedFlow]), undefined);
   assert.equal(resolveCitedFlow(unrelated.id, packet, [unrelated, includedFlow]), undefined);
+});
+
+test('successful structured response renders all four investigation sections', () => {
+  const { packet, includedFlow } = packetFixture();
+  const markup = renderToStaticMarkup(React.createElement(InvestigationAssessmentPanel, {
+    assessment: assessment(),
+    packet,
+    flows: [includedFlow],
+    onNavigateToFlows: () => undefined,
+  }));
+  assert.match(markup, /Observed evidence/);
+  assert.match(markup, /Analyst inference/);
+  assert.match(markup, /Uncertainty \/ missing evidence/);
+  assert.match(markup, /Recommended next investigative steps/);
+  assert.match(markup, /Not confirmed/);
+  assert.match(markup, /Open exact flow flow-related/);
 });

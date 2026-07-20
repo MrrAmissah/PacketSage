@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Shield, 
   ShieldAlert, 
@@ -15,16 +15,39 @@ import {
   Clipboard, 
   Info,
   ExternalLink,
-  Ban
+  Ban,
+  LoaderCircle,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
-import { SuspiciousSignal, FlowSummary, SignalReviewStatus } from '../types';
+import {
+  DnsRecord,
+  FlowSummary,
+  HttpRecord,
+  InvestigationAssessment,
+  InvestigationEvidencePacket,
+  PacketEvent,
+  SignalReviewStatus,
+  SuspiciousSignal,
+  TlsRecord,
+} from '../types';
 import InfoPopover from './InfoPopover';
+import InvestigationAssessmentPanel from './InvestigationAssessment';
+import {
+  buildInvestigationEvidencePacket,
+  evidenceIds,
+  validateInvestigationAssessment,
+} from '../lib/investigation';
 import { selectPresentedSignals } from '../lib/signalPresentation';
 import { resolveRelatedFlows } from '../lib/relatedFlows';
 
 interface SuspiciousSignalsProps {
   signals: SuspiciousSignal[];
   flows: FlowSummary[];
+  events: PacketEvent[];
+  dns: DnsRecord[];
+  http: HttpRecord[];
+  tls: TlsRecord[];
   signalStatusOverrides?: Record<string, SignalReviewStatus>;
   onNavigateToFlows: (flows: FlowSummary[]) => void;
   onUpdateSignalStatus?: (id: string, status: SignalReviewStatus, linkedIds?: string[]) => void;
@@ -560,6 +583,10 @@ const sanitizeSignal = <T extends SuspiciousSignal>(sig: T): T => {
 export default function SuspiciousSignals({
   signals,
   flows,
+  events,
+  dns,
+  http,
+  tls,
   signalStatusOverrides = EMPTY_SIGNAL_STATUS_OVERRIDES,
   onNavigateToFlows,
   onUpdateSignalStatus
@@ -567,6 +594,23 @@ export default function SuspiciousSignals({
   // Rich local state derived only from parser/rule-engine signals.
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
+  const [investigationState, setInvestigationState] = useState<{
+    signalId: string;
+    status: 'analysing' | 'success' | 'failure';
+    packet: InvestigationEvidencePacket;
+    assessment?: InvestigationAssessment;
+    error?: string;
+  } | null>(null);
+
+  const investigationPacket = useMemo(() => {
+    if (!selectedSignal) return null;
+    try {
+      return buildInvestigationEvidencePacket(selectedSignal, { flows, events, dns, http, tls });
+    } catch {
+      return null;
+    }
+  }, [selectedSignal, flows, events, dns, http, tls]);
+  const activeInvestigation = investigationState?.signalId === selectedSignal?.id ? investigationState : null;
 
   // Filters State
   const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'>('ALL');
@@ -644,6 +688,38 @@ export default function SuspiciousSignals({
   const handleViewRelatedFlows = (sig: EnrichedSignal) => {
     const relatedFlows = resolveRelatedFlows(sig.relatedFlowIds, flows);
     if (relatedFlows.length > 0) onNavigateToFlows(relatedFlows);
+  };
+
+  const handleInvestigate = async () => {
+    if (!selectedSignal || !investigationPacket) return;
+    const signalId = selectedSignal.id;
+    setInvestigationState({ signalId, status: 'analysing', packet: investigationPacket });
+    try {
+      const response = await fetch('/api/investigate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ evidence: investigationPacket }),
+      });
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      if (!response.ok) {
+        const safeMessage = body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
+          ? (body as { error: string }).error.slice(0, 300)
+          : 'AI-assisted investigation could not be completed. Try again.';
+        throw new Error(safeMessage);
+      }
+      const validated = validateInvestigationAssessment(body, evidenceIds(investigationPacket));
+      setInvestigationState({ signalId, status: 'success', packet: investigationPacket, assessment: validated });
+    } catch (error) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : 'AI-assisted investigation could not be completed. Try again.';
+      setInvestigationState({ signalId, status: 'failure', packet: investigationPacket, error: message });
+    }
   };
 
   // Filter computation
@@ -1315,6 +1391,66 @@ export default function SuspiciousSignals({
                     ? 'Referenced flows are unavailable in the current evidence.'
                     : 'No related flows were recorded for this signal.'}
                 </div>
+              )}
+            </div>
+
+            {/* Evidence-scoped AI-assisted investigation */}
+            <div className="space-y-2 border-b border-border-subtle pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">AI-assisted investigation</h4>
+                  <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
+                    Uses only this signal and its exact referenced evidence IDs. Inference is not observed fact.
+                  </p>
+                </div>
+                {!activeInvestigation || activeInvestigation.status === 'failure' ? (
+                  <button
+                    type="button"
+                    onClick={handleInvestigate}
+                    disabled={!investigationPacket}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-accent-primary px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-accent-primary-hover cursor-pointer disabled:bg-surface-muted disabled:text-text-muted disabled:cursor-not-allowed"
+                    title={!investigationPacket ? 'No valid referenced evidence is available for this signal.' : undefined}
+                  >
+                    {activeInvestigation?.status === 'failure' ? <RotateCcw size={11} /> : <Sparkles size={11} />}
+                    {activeInvestigation?.status === 'failure' ? 'Retry' : 'Investigate with AI'}
+                  </button>
+                ) : null}
+              </div>
+
+              {!investigationPacket && (
+                <div className="rounded-lg border border-border-subtle bg-surface-muted/40 p-2 text-[10px] text-text-muted">
+                  AI-assisted investigation is unavailable because this signal has no valid referenced evidence.
+                </div>
+              )}
+              {activeInvestigation?.status === 'analysing' && (
+                <div className="flex items-center gap-2 rounded-lg border border-accent-primary/20 bg-accent-soft/30 p-2 text-[10px] text-accent-primary" role="status">
+                  <LoaderCircle size={12} className="animate-spin" />
+                  Analysing referenced evidence…
+                </div>
+              )}
+              {activeInvestigation?.status === 'failure' && (
+                <div className="rounded-lg border border-status-danger/20 bg-status-danger/5 p-2 text-[10px] text-text-secondary" role="alert">
+                  <div className="font-semibold text-status-danger">AI-assisted investigation was not completed.</div>
+                  <p className="mt-0.5">{activeInvestigation.error}</p>
+                  <p className="mt-1 text-text-muted">No fallback findings were generated.</p>
+                </div>
+              )}
+              {activeInvestigation?.status === 'success' && activeInvestigation.assessment && (
+                <>
+                  <InvestigationAssessmentPanel
+                    assessment={activeInvestigation.assessment}
+                    packet={activeInvestigation.packet}
+                    flows={flows}
+                    onNavigateToFlows={onNavigateToFlows}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleInvestigate}
+                    className="inline-flex items-center gap-1 text-[9px] font-semibold text-accent-primary hover:text-accent-primary-hover cursor-pointer"
+                  >
+                    <RotateCcw size={9} /> Run again with current referenced evidence
+                  </button>
+                </>
               )}
             </div>
 

@@ -241,6 +241,29 @@ test('OpenAI timeout and failure return safe errors with no fallback findings', 
   }
 });
 
+test('client abort signal cancels the upstream OpenAI request', async () => {
+  const { packet } = packetFixture();
+  const clientAbort = new AbortController();
+  let upstreamSignal: AbortSignal | null = null;
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    upstreamSignal = init?.signal || null;
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+    });
+  };
+  const request = requestOpenAiInvestigation(packet, {
+    apiKey: 'test-key',
+    fetchImpl,
+    signal: clientAbort.signal,
+  });
+  clientAbort.abort();
+  await assert.rejects(
+    request,
+    (error: unknown) => error instanceof InvestigationServiceError && error.status === 504,
+  );
+  assert.equal(upstreamSignal?.aborted, true);
+});
+
 test('malformed model JSON is rejected safely', async () => {
   const { packet } = packetFixture();
   const fetchImpl: typeof fetch = async () => new Response(JSON.stringify({

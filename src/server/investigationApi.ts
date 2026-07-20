@@ -20,6 +20,7 @@ export interface InvestigationApiOptions {
   apiKey: string | undefined;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 const assessmentSchema = {
@@ -128,6 +129,9 @@ export async function requestOpenAiInvestigation(
   if (!options.apiKey) throw new InvestigationServiceError(503, 'AI-assisted investigation is unavailable. Try again later.');
   const fetchImpl = options.fetchImpl || fetch;
   const controller = new AbortController();
+  const abortFromCaller = () => controller.abort();
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener('abort', abortFromCaller, { once: true });
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? INVESTIGATION_TIMEOUT_MS);
   try {
     const response = await fetchImpl('https://api.openai.com/v1/responses', {
@@ -166,6 +170,7 @@ export async function requestOpenAiInvestigation(
     throw new InvestigationServiceError(503, 'AI-assisted investigation is temporarily unavailable. Try again.');
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', abortFromCaller);
   }
 }
 

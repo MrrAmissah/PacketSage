@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, Shield, Terminal, AlertCircle, Database, Info, Lock } from 'lucide-react';
 import { ParsedResult } from '../lib/parser';
+import { parseCapture } from '../lib/capture';
+import { MAX_CAPTURE_BYTES, MAX_TEXT_CHARACTERS } from '../lib/limits';
 import InfoPopover from './InfoPopover';
 
 interface EvidenceImportProps {
@@ -23,30 +25,39 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
     processFile(file);
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     if (!authorizedChecked) {
       setErrorMessage('Confirm authorization to import your own evidence.');
+      return;
+    }
+
+    const lowerName = file.name.toLowerCase();
+    const isCapture = lowerName.endsWith('.pcap') || lowerName.endsWith('.pcapng');
+    if (isCapture && file.size > MAX_CAPTURE_BYTES) {
+      setErrorMessage(`Capture exceeds the ${MAX_CAPTURE_BYTES / 1024 / 1024} MB browser-decoding limit.`);
+      return;
+    }
+    if (!isCapture && file.size > MAX_TEXT_CHARACTERS) {
+      setErrorMessage(`Text evidence exceeds the ${MAX_TEXT_CHARACTERS.toLocaleString()} character limit.`);
       return;
     }
 
     setIsLoading(true);
     setErrorMessage(null);
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      
-      // Auto guess parse mode from file extension
-      let mode = parseMode;
-      const lowerName = file.name.toLowerCase();
-      if (lowerName.endsWith('.csv')) mode = 'csv';
-      else if (lowerName.endsWith('.json') && lowerName.includes('eve')) mode = 'suricata';
-      else if (lowerName.endsWith('.json')) mode = 'tshark';
-      else if (lowerName.endsWith('.log') || lowerName.includes('conn') || lowerName.includes('dns') || lowerName.includes('http')) mode = 'zeek';
-      else if (lowerName.endsWith('.pcap') || lowerName.endsWith('.pcapng')) mode = 'pcap';
-      else mode = 'txt';
+    try {
+      if (isCapture) {
+        const data = await parseCapture(file.name, await file.arrayBuffer());
+        onDataParsed(data);
+      } else {
+        const text = await file.text();
+        let mode = parseMode;
+        if (lowerName.endsWith('.csv')) mode = 'csv';
+        else if (lowerName.endsWith('.json') && lowerName.includes('eve')) mode = 'suricata';
+        else if (lowerName.endsWith('.json')) mode = 'tshark';
+        else if (lowerName.endsWith('.log') || lowerName.includes('conn') || lowerName.includes('dns') || lowerName.includes('http')) mode = 'zeek';
+        else mode = 'txt';
 
-      try {
         const response = await fetch('/api/parse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -65,24 +76,11 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
 
         const data: ParsedResult = await response.json();
         onDataParsed(data);
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Failed to parse file. Ensure format is valid.');
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    reader.onerror = () => {
-      setErrorMessage('Failed to read file on client side.');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to parse file. Ensure format is valid.');
+    } finally {
       setIsLoading(false);
-    };
-
-    // If pcap, read as a data URL, otherwise read as text
-    const lowerName = file.name.toLowerCase();
-    if (lowerName.endsWith('.pcap') || lowerName.endsWith('.pcapng')) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsText(file);
     }
   };
 
@@ -93,6 +91,10 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
     }
     if (!pastedLog.trim()) {
       setErrorMessage('Please paste structured log lines before submitting.');
+      return;
+    }
+    if (pastedLog.length > MAX_TEXT_CHARACTERS) {
+      setErrorMessage(`Pasted evidence exceeds the ${MAX_TEXT_CHARACTERS.toLocaleString()} character limit.`);
       return;
     }
 
@@ -197,7 +199,7 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
                 Upload network logs or packet captures
               </h4>
               <p className="text-xs text-text-muted leading-relaxed">
-                Stage your local forensic files directly in browser memory for instant interactive parsing.
+                Raw PCAP/PCAPNG captures are decoded in browser memory. Supported text exports are sent to the parsing endpoint.
               </p>
             </div>
           </div>
@@ -273,7 +275,7 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
                       onClick={() => setShowAuthInfo(false)}
                     />
                     <div className="absolute right-0 bottom-6 sm:bottom-auto sm:top-6 z-50 w-72 sm:w-80 p-3 bg-surface border border-border-strong rounded-xl text-[11px] text-text-muted leading-relaxed shadow-lg animate-fade-in">
-                      PacketSage is for defensive analysis of evidence you are authorized to inspect. Imported logs or captures may contain sensitive network, host, or account data. In sandbox mode, files are staged in browser memory during analysis and cleared on refresh. PacketSage does not initiate active probes or live network scans.
+                      PacketSage is for defensive analysis of authorized, non-sensitive evidence. PCAP/PCAPNG files are decoded in browser memory; supported text exports are sent to the serverless parsing endpoint. Active evidence is cleared on refresh, while some review-status preferences may persist locally. PacketSage does not initiate probes or live scans.
                     </div>
                   </>
                 )}
@@ -316,7 +318,7 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
 
           <div className="pt-2.5 border-t border-border-subtle/50 flex justify-between items-center text-[10px] text-text-muted font-mono">
             <span>Formats: CSV, JSON, LOG, TSV, PCAP</span>
-            <span>Max size: 20MB</span>
+            <span>Capture max: 10MB</span>
           </div>
         </div>
 

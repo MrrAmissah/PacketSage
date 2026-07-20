@@ -107,7 +107,7 @@ When a user uploads or pastes a text-based packet capture export, PacketSage loo
 * **Zeek Log TSV Adapter**: Normalizes tab-separated Zeek logs (dns.log, conn.log, http.log).
 * **TShark JSON Adapter**: Parses structured JSON extracts dumped via the command-line command `tshark -T json`.
 
-If a raw `.pcap`/`.pcapng` binary is uploaded, the parser catches the file signature and invokes the **PcapPlaceholderAdapter**, which parses basic header metadata and returns a clear educational modal explaining why binary decoding is deferred to Stage 2.
+Raw `.pcap`/`.pcapng` files are decoded in the browser with bounded container, packet-count, and byte-size limits. The current decoder supports Ethernet and practical IPv4/IPv6 TCP, UDP, ICMP, and basic DNS metadata; unsupported link types and malformed or truncated captures fail without synthetic evidence.
 
 ### 3.3 Signals & Verification Persistence
 Suspicious signals are dynamically calculated by deterministic rule evaluators. The user's action to mark a signal as **Validated** or **Dismissed** updates its status property locally. This changes its visual state and updates the *Report Builder*'s checklist in real-time.

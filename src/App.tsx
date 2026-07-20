@@ -343,7 +343,7 @@ export default function App() {
                     <span className="w-1.5 h-1.5 rounded-full bg-text-muted/40 shrink-0" />
                     Idle
                   </span>
-                  <InfoPopover content="Demo Decoder means PacketSage is using browser-side structured parsing for sample or exported evidence. Full binary PCAP decoding is a planned production decoder-worker target." align="left" />
+                  <InfoPopover content="Raw PCAP/PCAPNG files are decoded locally in a bounded browser parser. Supported text exports are sent to the parsing endpoint." align="left" />
                 </div>
 
                 <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
@@ -366,7 +366,7 @@ export default function App() {
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-muted border border-border-subtle/50 text-text-muted text-[10.5px] font-semibold tracking-wide uppercase select-none">
                     Volatile
                   </span>
-                  <InfoPopover content="Volatile means active evidence is staged in browser/session memory during sandbox analysis and cleared when the session is refreshed or reset." align="left" />
+                  <InfoPopover content="Active evidence is held in application memory and cleared on refresh or reset. Some review-status preferences may persist locally." align="left" />
                 </div>
               </>
             ) : (
@@ -389,7 +389,7 @@ export default function App() {
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10.5px] font-bold uppercase tracking-wide">
                     {parsedData.evidence.parseMode}
                   </span>
-                  <InfoPopover content="Demo Decoder means PacketSage is using browser-side structured parsing for sample or exported evidence. Full binary PCAP decoding is a planned production decoder-worker target." align="left" />
+                  <InfoPopover content="Raw PCAP/PCAPNG files are decoded locally in a bounded browser parser. Supported text exports are sent to the parsing endpoint." align="left" />
                 </div>
 
                 <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
@@ -417,13 +417,13 @@ export default function App() {
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10.5px] font-bold uppercase tracking-wide">
                     Volatile
                   </span>
-                  <InfoPopover content="Volatile means active evidence is staged in browser/session memory during sandbox analysis and cleared when the session is refreshed or reset." align="left" />
+                  <InfoPopover content="Active evidence is held in application memory and cleared on refresh or reset. Some review-status preferences may persist locally." align="left" />
                 </div>
               </>
             )}
           </div>
 
-          {/* Right actions sequence: Theme toggle → Build report → No cloud retention */}
+          {/* Right actions sequence: Theme toggle → Build report → local capture decode */}
           <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
             {/* Theme toggle */}
             <div className="flex items-center bg-surface-muted border border-border-subtle rounded-lg p-0.5 h-8">
@@ -469,10 +469,10 @@ export default function App() {
               </button>
             )}
 
-            {/* No cloud retention */}
+            {/* Capture processing boundary */}
             <div className="h-8 px-2 bg-status-success-bg border border-status-success/25 rounded-lg text-[10px] text-status-success font-semibold hidden sm:flex items-center gap-1 select-none">
               <Lock size={10} className="text-status-success" />
-              <span className="hidden xs:inline">No Cloud Retention</span>
+              <span className="hidden xs:inline">Local Capture Decode</span>
             </div>
           </div>
         </header>

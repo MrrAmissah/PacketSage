@@ -26,9 +26,9 @@ PacketSage is proprietary and source-available, not open source. Public access t
 To ensure professional forensic integrity, PacketSage operates on a strict **Evidence-First, AI-Second** engineering model. It is designed around the following boundaries:
 
 * **Defensive Analyst Workspace**: PacketSage is designed for defensive posture review and instructional forensics. It is **not** an active malware detector or breach containment system.
-* **Browser-Side Forensic Sandbox**: All session telemetry and parsing happen ephemerally in-memory. It is **not** a court-ready forensic evidence vault.
+* **Bounded Forensic Workspace**: Raw captures are decoded in browser memory; supported text exports use the parsing endpoint. It is **not** a court-ready forensic evidence vault.
 * **Evidence-Bound Assistant**: The AI-assisted memo generator is strictly constrained to the ingested dataset. It acts as a drafting helper and **does not** replace human validation, final judgment, or active incident scoping.
-* **Planned Production Decoder**: In sandbox mode, parsing is conducted using structured text imports (such as Wireshark CSVs and parsed summaries). Full native binary `.pcap`/`.pcapng` decoding is a planned enterprise target and is clearly indicated as a future architectural extension.
+* **Bounded Native Capture Decoder**: Browser-side `.pcap`/`.pcapng` decoding covers Ethernet and practical IPv4/IPv6 TCP, UDP, ICMP, and basic DNS metadata without stream reassembly, decryption, or payload reconstruction.
 
 ---
 
@@ -63,7 +63,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 ## 🔒 Security & Privacy Model
 
 * **Authorized Use Only**: Users must confirm authorization before importing custom logs. A pre-packaged simulated dataset is built-in for zero-credential training.
-* **In-Memory Sandbox**: All evidence, parsed network records, and validation states are loaded ephemerally. Reloading or clicking "Clear Data" immediately wipes all records from browser and server memory.
+* **Processing Boundary**: Raw PCAP/PCAPNG captures are decoded locally. Supported text evidence is sent to the parsing endpoint; selected metadata may later be sent through the AI proxy.
 * **Server-Side AI Proxy & Redaction**: To draft the AI memo, selected decoded metadata, packet volume metrics, port distributions, and triggered rules are submitted to a server-side Gemini API proxy. 
   * *No raw packet payloads* are transmitted to the proxy.
   * Credentials, JWT tokens, and sensitive headers are redacted locally on the client-side using regular expressions before transmission.

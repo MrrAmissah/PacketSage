@@ -1,5 +1,5 @@
-import type { ParsedResult } from './parser';
-import { MAX_FILE_NAME_CHARACTERS, MAX_PARSED_RECORDS, MAX_TEXT_CHARACTERS } from './limits';
+import type { ParsedResult } from './parser.js';
+import { MAX_FILE_NAME_CHARACTERS, MAX_PARSED_RECORDS, MAX_TEXT_CHARACTERS } from './limits.js';
 
 export const TEXT_PARSE_MODES = ['csv', 'suricata', 'zeek', 'tshark', 'txt'] as const;
 export type TextParseMode = typeof TEXT_PARSE_MODES[number];

@@ -29,6 +29,7 @@ import {
 
 import { AiAnalysisResult, FlowSummary, SignalReviewStatus } from './types';
 import { ParsedResult } from './lib/parser';
+import { resolveRelatedFlows } from './lib/relatedFlows';
 import { PacketSageLogo } from './components/Logo';
 import InfoPopover from './components/InfoPopover';
 import CommandCenter from './components/CommandCenter';
@@ -50,6 +51,7 @@ export default function App() {
   const [parsedData, setParsedData] = useState<ParsedResult | null>(null);
   const [aiResult, setAiResult] = useState<AiAnalysisResult | null>(null);
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
+  const [relatedFlowScopeIds, setRelatedFlowScopeIds] = useState<string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   const workspaceScrollRef = React.useRef<HTMLDivElement>(null);
@@ -103,6 +105,7 @@ export default function App() {
     setAiResult(null); // Reset AI result when new data is parsed
     setSignalStatusOverrides({});
     setSelectedFlow(null);
+    setRelatedFlowScopeIds(null);
     setActiveTab('overview'); // Take them to command center automatically
   };
 
@@ -112,6 +115,7 @@ export default function App() {
       setAiResult(null);
       setSignalStatusOverrides({});
       setSelectedFlow(null);
+      setRelatedFlowScopeIds(null);
       setActiveTab('import');
     }
   };
@@ -141,15 +145,23 @@ export default function App() {
   };
 
   const renderActiveContent = () => {
+    const availableFlows = parsedData?.flows || [];
+    const visibleFlows = relatedFlowScopeIds === null
+      ? availableFlows
+      : resolveRelatedFlows(relatedFlowScopeIds, availableFlows);
+
     switch (activeTab) {
       case 'overview':
-        return <CommandCenter data={parsedData} onNavigate={(tab) => setActiveTab(tab as TabType)} />;
+        return <CommandCenter data={parsedData} onNavigate={(tab) => {
+          if (tab === 'flows') setRelatedFlowScopeIds(null);
+          setActiveTab(tab as TabType);
+        }} />;
       case 'import':
         return <EvidenceImport onDataParsed={handleDataParsed} isLoading={isLoading} setIsLoading={setIsLoading} />;
       case 'flows':
         return (
           <FlowExplorer
-            flows={parsedData?.flows || []}
+            flows={visibleFlows}
             events={parsedData?.events || []}
             onSelectFlow={setSelectedFlow}
             selectedFlow={selectedFlow}
@@ -172,8 +184,9 @@ export default function App() {
             signals={parsedData?.signals || []}
             flows={parsedData?.flows || []}
             signalStatusOverrides={signalStatusOverrides}
-            onNavigateToFlows={(flow) => {
-              setSelectedFlow(flow);
+            onNavigateToFlows={(relatedFlows) => {
+              setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
+              setSelectedFlow(relatedFlows[0] || null);
               setActiveTab('flows');
             }}
             onUpdateSignalStatus={handleUpdateSignalStatus}
@@ -202,6 +215,7 @@ export default function App() {
             flows={parsedData?.flows || []}
             signals={parsedData?.signals || []}
             onNavigateToFlows={(flow) => {
+              setRelatedFlowScopeIds(null);
               setSelectedFlow(flow);
               setActiveTab('flows');
             }}
@@ -214,7 +228,10 @@ export default function App() {
       case 'architecture':
         return <ArchitectureRoadmap />;
       default:
-        return <CommandCenter data={parsedData} onNavigate={(tab) => setActiveTab(tab as TabType)} />;
+        return <CommandCenter data={parsedData} onNavigate={(tab) => {
+          if (tab === 'flows') setRelatedFlowScopeIds(null);
+          setActiveTab(tab as TabType);
+        }} />;
     }
   };
 
@@ -249,7 +266,10 @@ export default function App() {
                 <button
                   key={item.id}
                   disabled={!item.enabled}
-                  onClick={() => setActiveTab(item.id as TabType)}
+                  onClick={() => {
+                    if (item.id === 'flows') setRelatedFlowScopeIds(null);
+                    setActiveTab(item.id as TabType);
+                  }}
                   className={`relative flex-none md:flex-auto min-w-[124px] md:min-w-0 md:w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-3.5 py-2 md:py-2.5 text-xs font-medium rounded-lg transition-all text-left cursor-pointer group ${
                     !item.enabled
                       ? 'text-slate-500 hover:bg-transparent cursor-not-allowed border border-transparent'

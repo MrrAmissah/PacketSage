@@ -38,13 +38,47 @@ function ipv4(data: Uint8Array, offset: number): string {
   return `${data[offset]}.${data[offset + 1]}.${data[offset + 2]}.${data[offset + 3]}`;
 }
 
+export function formatIpv6Hextets(hextets: readonly number[]): string {
+  if (hextets.length !== 8 || hextets.some(value => !Number.isInteger(value) || value < 0 || value > 0xffff)) {
+    throw new CaptureParseError('Capture contains an invalid IPv6 address.');
+  }
+
+  let bestStart = -1;
+  let bestLength = 0;
+  for (let start = 0; start < hextets.length;) {
+    if (hextets[start] !== 0) {
+      start += 1;
+      continue;
+    }
+
+    let end = start + 1;
+    while (end < hextets.length && hextets[end] === 0) end += 1;
+    const length = end - start;
+    if (length >= 2 && length > bestLength) {
+      bestStart = start;
+      bestLength = length;
+    }
+    start = end;
+  }
+
+  const formatted = hextets.map(value => value.toString(16));
+  if (bestStart === -1) return formatted.join(':');
+
+  const left = formatted.slice(0, bestStart).join(':');
+  const right = formatted.slice(bestStart + bestLength).join(':');
+  if (!left && !right) return '::';
+  if (!left) return `::${right}`;
+  if (!right) return `${left}::`;
+  return `${left}::${right}`;
+}
+
 function ipv6(data: Uint8Array, offset: number): string {
   requireBytes(data, offset, 16);
-  const groups: string[] = [];
+  const hextets: number[] = [];
   for (let index = 0; index < 16; index += 2) {
-    groups.push(((data[offset + index] << 8) | data[offset + index + 1]).toString(16));
+    hextets.push((data[offset + index] << 8) | data[offset + index + 1]);
   }
-  return groups.join(':').replace(/(?:^|:)0(?::0)+(?=:|$)/, '::');
+  return formatIpv6Hextets(hextets);
 }
 
 function readU16(data: Uint8Array, offset: number): number {

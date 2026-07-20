@@ -60,6 +60,41 @@ export function validPcap(): ArrayBuffer {
   return concat(header, record, packet).buffer;
 }
 
+export function ipv6Pcap(source: readonly number[], destination: readonly number[]): ArrayBuffer {
+  if (source.length !== 8 || destination.length !== 8) throw new Error('IPv6 fixtures require eight hextets.');
+
+  const packet = new Uint8Array(40 + 20);
+  packet[0] = 0x60;
+  packet[4] = 0;
+  packet[5] = 20;
+  packet[6] = 6;
+  packet[7] = 64;
+  [...source, ...destination].forEach((hextet, index) => {
+    const offset = 8 + index * 2;
+    packet[offset] = (hextet >> 8) & 0xff;
+    packet[offset + 1] = hextet & 0xff;
+  });
+  packet[40] = 0xc3;
+  packet[41] = 0x50;
+  packet[42] = 0x01;
+  packet[43] = 0xbb;
+  packet[52] = 0x50;
+  packet[53] = 0x02;
+
+  const header = new Uint8Array(24);
+  header.set([0xd4, 0xc3, 0xb2, 0xa1]);
+  writeU16LE(header, 4, 2);
+  writeU16LE(header, 6, 4);
+  writeU32LE(header, 16, 65_535);
+  writeU32LE(header, 20, 101);
+  const record = new Uint8Array(16);
+  writeU32LE(record, 0, 1_716_285_600);
+  writeU32LE(record, 4, 123_456);
+  writeU32LE(record, 8, packet.length);
+  writeU32LE(record, 12, packet.length);
+  return concat(header, record, packet).buffer;
+}
+
 export function validPcapng(): ArrayBuffer {
   const packet = dnsEthernetPacket();
   const section = new Uint8Array(28);

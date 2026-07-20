@@ -17,6 +17,11 @@ import {
   parseTextLog
 } from "./src/lib/parser.js";
 import { clientSafeParseError, validateParsedResult, validateParseRequest } from "./src/lib/parseRequest.js";
+import {
+  clientSafeInvestigationError,
+  parseInvestigationRequest,
+  requestOpenAiInvestigation,
+} from "./src/server/investigationApi.js";
 
 // Load environment variables
 dotenv.config();
@@ -96,6 +101,31 @@ app.post("/api/parse", (req, res) => {
   } catch (error) {
     const safe = clientSafeParseError(error);
     return res.status(safe.status).json({ error: safe.message });
+  }
+});
+
+app.post("/api/investigate", async (req, res) => {
+  const clientAbort = new AbortController();
+  const abortUpstream = () => clientAbort.abort();
+  const abortOnDisconnect = () => {
+    if (!res.writableEnded) abortUpstream();
+  };
+  req.once('aborted', abortUpstream);
+  res.once('close', abortOnDisconnect);
+  try {
+    const evidence = parseInvestigationRequest(req.body);
+    const assessment = await requestOpenAiInvestigation(evidence, {
+      apiKey: process.env.OPENAI_API_KEY,
+      signal: clientAbort.signal,
+    });
+    return res.json(assessment);
+  } catch (error) {
+    if (clientAbort.signal.aborted || res.destroyed) return;
+    const safe = clientSafeInvestigationError(error);
+    return res.status(safe.status).json({ error: safe.message });
+  } finally {
+    req.removeListener('aborted', abortUpstream);
+    res.removeListener('close', abortOnDisconnect);
   }
 });
 

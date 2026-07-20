@@ -258,6 +258,7 @@ export function parseDemoData(): ParsedResult {
 
   const dns: DnsRecord[] = [
     {
+      relatedEventIds: ['evt-1', 'evt-2'],
       timestamp: baseTime.toISOString(),
       clientIp: '10.0.0.15',
       query: 'portal.example',
@@ -268,6 +269,7 @@ export function parseDemoData(): ParsedResult {
       notes: 'Standard lookup'
     },
     ...Array.from({ length: 18 }).map((_, index) => ({
+      relatedEventIds: [`evt-beacon-dns-${index}`],
       timestamp: new Date(baseTime.getTime() + 10000 + index * 15000).toISOString(),
       clientIp: '10.0.0.15',
       query: 'suspicious-lab.test',
@@ -281,6 +283,7 @@ export function parseDemoData(): ParsedResult {
 
   const http: HttpRecord[] = [
     {
+      relatedEventIds: ['evt-7', 'evt-8'],
       timestamp: new Date(baseTime.getTime() + 5000).toISOString(),
       clientIp: '10.0.0.15',
       host: 'updates.example',
@@ -296,6 +299,7 @@ export function parseDemoData(): ParsedResult {
 
   const tls: TlsRecord[] = [
     {
+      relatedEventIds: ['evt-6'],
       timestamp: new Date(baseTime.getTime() + 1200).toISOString(),
       clientIp: '10.0.0.15',
       serverIp: '203.0.113.15',
@@ -307,6 +311,7 @@ export function parseDemoData(): ParsedResult {
       notes: 'Secure TLS session.'
     },
     {
+      relatedEventIds: ['evt-heavy-1'],
       timestamp: new Date(baseTime.getTime() + 60000).toISOString(),
       clientIp: '10.0.0.15',
       serverIp: '203.0.113.150',
@@ -429,6 +434,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
       const queryMatch = evt.info.match(/A ([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
       const query = queryMatch ? queryMatch[1] : 'unknown';
       dns.push({
+        relatedEventIds: [evt.id],
         timestamp: evt.timestamp,
         clientIp: isResponse ? evt.destinationIp : evt.sourceIp,
         query: query,
@@ -443,6 +449,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
       const pathMatch = evt.info.match(/(GET|POST)\s+(\/[^\s]*)/);
       const uri = pathMatch ? pathMatch[2] : '/';
       http.push({
+        relatedEventIds: [evt.id],
         timestamp: evt.timestamp,
         clientIp: evt.sourceIp,
         host: host,
@@ -456,6 +463,7 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
       const sniMatch = evt.info.match(/sni:\s*([a-zA-Z0-9.-]+)/i) || evt.info.match(/Client Hello, ([a-zA-Z0-9.-]+)/);
       const sni = sniMatch ? sniMatch[1] : 'unknown';
       tls.push({
+        relatedEventIds: [evt.id],
         timestamp: evt.timestamp,
         clientIp: evt.sourceIp,
         serverIp: evt.destinationIp,
@@ -516,6 +524,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
       const dport = data.dest_port || 0;
       const proto = data.proto || 'TCP';
       const eventType = data.event_type;
+      const eventId = `evt-eve-${idCounter++}`;
 
       let info = `Suricata EVE: ${eventType || 'flow'}`;
       if (eventType === 'alert') {
@@ -532,6 +541,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
         const query = data.dns?.rrname || data.dns?.query?.[0]?.rrname || 'query.domain';
         info = `DNS ${data.dns?.type || 'A'} query for ${query}`;
         dns.push({
+          relatedEventIds: [eventId],
           timestamp: ts,
           clientIp: src,
           query: query,
@@ -543,6 +553,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
       } else if (eventType === 'http') {
         info = `HTTP ${data.http?.http_method || 'GET'} http://${data.http?.hostname || 'host'}${data.http?.url || '/'}`;
         http.push({
+          relatedEventIds: [eventId],
           timestamp: ts,
           clientIp: src,
           host: data.http?.hostname || 'unknown',
@@ -556,6 +567,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
       } else if (eventType === 'tls') {
         info = `TLS SNI: ${data.tls?.sni || 'encrypted'}`;
         tls.push({
+          relatedEventIds: [eventId],
           timestamp: ts,
           clientIp: src,
           serverIp: dst,
@@ -567,7 +579,7 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
       }
 
       events.push({
-        id: `evt-eve-${idCounter++}`,
+        id: eventId,
         timestamp: ts,
         sourceIp: src,
         sourcePort: sport,
@@ -678,6 +690,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
     const dst = row['id.resp_h'] || '0.0.0.0';
     const dport = parseInt(row['id.resp_p'] || '0') || 0;
     const proto = row['proto'] || 'TCP';
+    const eventId = `evt-zeek-${idCounter++}`;
 
     let info = `Zeek ${path} Log entry`;
 
@@ -689,6 +702,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
       const query = row['query'] || 'domain';
       info = `DNS query: ${query} (${row['qtype_name'] || 'A'})`;
       dns.push({
+        relatedEventIds: [eventId],
         timestamp: ts,
         clientIp: src,
         query: query,
@@ -700,6 +714,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
     } else if (path === 'http') {
       info = `HTTP ${row['method'] || 'GET'} http://${row['host'] || 'host'}${row['uri'] || '/'}`;
       http.push({
+        relatedEventIds: [eventId],
         timestamp: ts,
         clientIp: src,
         host: row['host'] || 'unknown',
@@ -713,6 +728,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
     } else if (path === 'ssl') {
       info = `SSL Client SNI: ${row['server_name'] || 'encrypted'}`;
       tls.push({
+        relatedEventIds: [eventId],
         timestamp: ts,
         clientIp: src,
         serverIp: dst,
@@ -723,7 +739,7 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
     }
 
     events.push({
-      id: `evt-zeek-${idCounter++}`,
+      id: eventId,
       timestamp: ts,
       sourceIp: src,
       sourcePort: sport,
@@ -812,11 +828,13 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
 
       const length = parseInt(frame['frame.len'] || '64');
       let info = `TShark Parsed Packet`;
+      const eventId = `evt-tshark-${packetIndex + 1}`;
 
       if (dnsLayer) {
         const query = dnsLayer['dns.qry.name'] || 'query.domain';
         info = `DNS query: ${query}`;
         dns.push({
+          relatedEventIds: [eventId],
           timestamp,
           clientIp: sourceIp,
           query,
@@ -828,6 +846,7 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
       } else if (httpLayer) {
         info = `HTTP: ${httpLayer['http.request.method'] || 'GET'} ${httpLayer['http.request.uri'] || '/'}`;
         http.push({
+          relatedEventIds: [eventId],
           timestamp,
           clientIp: sourceIp,
           host: httpLayer['http.host'] || 'unknown',
@@ -840,6 +859,7 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
       } else if (tlsLayer) {
         info = `TLS Client Hello SNI: ${tlsLayer['tls.handshake.extensions_server_name'] || 'encrypted'}`;
         tls.push({
+          relatedEventIds: [eventId],
           timestamp,
           clientIp: sourceIp,
           serverIp: destinationIp,
@@ -850,7 +870,7 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
       }
 
       events.push({
-        id: `evt-tshark-${packetIndex + 1}`,
+        id: eventId,
         timestamp,
         sourceIp,
         sourcePort,

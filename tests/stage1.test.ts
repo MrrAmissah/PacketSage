@@ -77,6 +77,7 @@ test('valid PCAP and PCAPNG fixtures decode real metadata with stable IDs', asyn
     assert.equal(first.events[0].destinationPort, 53);
     assert.equal(first.dns[0].query, 'example.com');
     assert.equal(first.dns[0].queryType, 'A');
+    assert.deepEqual(first.dns[0].relatedEventIds, [first.events[0].id]);
     assert.equal(first.events[0].id, second.events[0].id);
     assert.equal(first.dns[0].id, second.dns[0].id);
     assert.equal(first.flows[0].id, second.flows[0].id);
@@ -164,12 +165,23 @@ test('malformed and truncated captures fail without evidence', async () => {
 });
 
 test('all text adapters produce bounded normalized output', () => {
+  const csv = parseCsv('dns.csv', 'Time,Source,Destination,Protocol,Length,Info\n1,10.0.0.1,8.8.8.8,DNS,64,Standard query A example.com');
   const suricata = parseSuricataEve('eve.json', '{"timestamp":"2024-01-01T00:00:00Z","src_ip":"10.0.0.1","dest_ip":"8.8.8.8","src_port":50000,"dest_port":53,"proto":"UDP","event_type":"dns","dns":{"rrname":"example.com","type":"A"}}');
   const zeek = parseZeekLog('dns.log', '#path dns\n#fields\tts\tid.orig_h\tid.orig_p\tid.resp_h\tid.resp_p\tproto\tquery\tqtype_name\n1704067200\t10.0.0.1\t50000\t8.8.8.8\t53\tudp\texample.com\tA');
+  const tshark = parseTsharkJson('dns.json', JSON.stringify([{ _source: { layers: {
+    frame: { 'frame.time_iso': '2024-01-01T00:00:00.000Z', 'frame.len': '64' },
+    ip: { 'ip.src': '10.0.0.1', 'ip.dst': '8.8.8.8' },
+    udp: { 'udp.srcport': '50000', 'udp.dstport': '53' },
+    dns: { 'dns.qry.name': 'example.com', 'dns.qry.type': 'A' },
+  } } }]));
+  assert.equal(csv.dns[0].query, 'example.com');
   assert.equal(suricata.dns[0].query, 'example.com');
   assert.equal(zeek.dns[0].query, 'example.com');
-  assert.ok(suricata.events[0].id);
-  assert.ok(zeek.events[0].id);
+  assert.equal(tshark.dns[0].query, 'example.com');
+  for (const result of [csv, suricata, zeek, tshark]) {
+    assert.ok(result.events[0].id);
+    assert.deepEqual(result.dns[0].relatedEventIds, [result.events[0].id]);
+  }
 });
 
 test('bundled demo remains internally consistent', () => {
@@ -183,4 +195,7 @@ test('bundled demo remains internally consistent', () => {
   assert.deepEqual(first.events.map(event => event.id), second.events.map(event => event.id));
   const eventIds = new Set(first.events.map(event => event.id));
   first.flows.flatMap(flow => flow.relatedEvents || []).forEach(id => assert.ok(eventIds.has(id)));
+  [...first.dns, ...first.http, ...first.tls]
+    .flatMap(record => record.relatedEventIds || [])
+    .forEach(id => assert.ok(eventIds.has(id)));
 });

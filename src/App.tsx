@@ -183,6 +183,10 @@ export default function App() {
           <SuspiciousSignals
             signals={parsedData?.signals || []}
             flows={parsedData?.flows || []}
+            events={parsedData?.events || []}
+            dns={parsedData?.dns || []}
+            http={parsedData?.http || []}
+            tls={parsedData?.tls || []}
             signalStatusOverrides={signalStatusOverrides}
             onNavigateToFlows={(relatedFlows) => {
               setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));

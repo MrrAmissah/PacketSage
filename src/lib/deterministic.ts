@@ -82,7 +82,11 @@ export function finalizeEvidenceIds<T extends EvidenceCollections>(result: T): T
   ]);
   const flowIdMap = new Map(originalFlows.map((flow, index) => [flow.id, flows[index].id]));
 
-  const dns = assignIds(result.dns, 'dns', record => [
+  const dnsWithEvents = result.dns.map(record => ({
+    ...record,
+    relatedEventIds: record.relatedEventIds?.map(id => eventIdMap.get(id) ?? id),
+  }));
+  const dns = assignIds(dnsWithEvents, 'dns', record => [
     record.timestamp,
     record.clientIp,
     record.query,
@@ -90,7 +94,11 @@ export function finalizeEvidenceIds<T extends EvidenceCollections>(result: T): T
     record.response,
     record.rcode,
   ]);
-  const http = assignIds(result.http, 'http', record => [
+  const httpWithEvents = result.http.map(record => ({
+    ...record,
+    relatedEventIds: record.relatedEventIds?.map(id => eventIdMap.get(id) ?? id),
+  }));
+  const http = assignIds(httpWithEvents, 'http', record => [
     record.timestamp,
     record.clientIp,
     record.host,
@@ -99,7 +107,11 @@ export function finalizeEvidenceIds<T extends EvidenceCollections>(result: T): T
     record.statusCode,
     record.cleartext,
   ]);
-  const tls = assignIds(result.tls, 'tls', record => [
+  const tlsWithEvents = result.tls.map(record => ({
+    ...record,
+    relatedEventIds: record.relatedEventIds?.map(id => eventIdMap.get(id) ?? id),
+  }));
+  const tls = assignIds(tlsWithEvents, 'tls', record => [
     record.timestamp,
     record.clientIp,
     record.serverIp,

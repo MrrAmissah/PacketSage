@@ -59,7 +59,7 @@ Before opening a pull request:
    npm run lint
    npm run build
    ```
-3. Do not expose secrets or create `VITE_GEMINI_API_KEY`.
+3. Do not expose secrets or create `VITE_OPENAI_API_KEY`.
 4. Preserve the defensive, evidence-bound product boundary.
 5. Include screenshots or smoke-test notes for user-facing UI changes.
 

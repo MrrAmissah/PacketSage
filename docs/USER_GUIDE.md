@@ -79,16 +79,12 @@ The deterministic rules engine flags potential threats automatically:
 
 ---
 
-## 4. Generating the AI Analyst Memo
+## 4. Running an AI-Assisted Investigation
 
-To draft an executive summary of the incident:
-1. Open the **AI Analyst Memo** tab.
-2. Review the **Evidence Scope Sidebar** on the right to verify the exact telemetry metrics that will be compiled.
-3. Click **Synthesize Narrative Memo**.
-4. The server-side proxy will consult Gemini using redaction controls to draft:
-   * An **Executive Analogy** translating complex network behaviors into simple, relatable scenarios.
-   * A chronological **Reconstructed Timeline** detailing threat phases.
-   * **Defensive Recommendations** listing practical containment steps.
+1. Open **Signals & observations** and select a signal with exact related evidence.
+2. Click **Investigate with AI** and review the four labelled assessment sections.
+3. Verify exact evidence-ID citations and treat analyst inference as unconfirmed.
+4. Click **Add AI-assisted assessment to report** only when the current assessment belongs in the draft.
 
 ---
 

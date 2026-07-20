@@ -78,7 +78,7 @@ The platform maps to key functions within the [NIST Cybersecurity Framework 2.0]
 PacketSage aligns directly with [NIST SP 800-61 Rev. 3 (Incident Response Recommendations and Considerations for Cybersecurity Risk Management)](https://csrc.nist.gov/pubs/sp/800/61/r3/ipd):
 1. **Preparation**: Facilitated by the *Packet Academy* module, allowing teams to run dry-run forensics scenarios.
 2. **Detection & Analysis**: Conducted via the interactive parsing, flow grouping, and signal triage dashboards.
-3. **Containment, Eradication, & Recovery**: Aided by the AI Analyst Memo, which outputs explicit, non-destructive mitigation recommendations (e.g., host isolation, firewall blocks, or DNS sinkholing).
+3. **Containment, Eradication, & Recovery**: Supported by explicitly included, evidence-scoped next steps that remain subject to analyst validation.
 4. **Post-Incident Activity**: Codified by compiling an audit-ready PDF incident report containing timelines, validation notes, and technical limitations.
 
 ### C. MITRE ATT&CK®
@@ -168,7 +168,7 @@ The platform’s transition from a browser-side sandbox to a robust enterprise-r
 ### Stage 1: Current Forensic Sandbox (Implemented & Active)
 * **Ingestion**: In-memory text parsing (CSV, TSV, JSON alerts, pasted text).
 * **State**: Volatile React and Express state (lost on reload).
-* **AI Integration**: Server-side Gemini API proxy utilizing high-level summaries and triggered rules, with client-side redaction.
+* **AI Integration**: Server-side GPT-5.6 proxy using bounded normalized evidence for one selected signal.
 * **Storage**: No persistent cloud storage of raw packets.
 
 ```
@@ -182,7 +182,7 @@ The platform’s transition from a browser-side sandbox to a robust enterprise-r
 |         +---> Evaluates Heuristics locally                                              |
 |         |                                                                               |
 |         v (Strip Secrets via Regex)                                                     |
-|  [ Server-Side Proxy (Express) ] ---> [ Gemini API ] ---> [ Narrative Response ]       |
+|  [ Server-Side Proxy (Express) ] ---> [ GPT-5.6 ] ---> [ Validated Assessment ]        |
 |                                                                                         |
 +-----------------------------------------------------------------------------------------+
 ```
@@ -305,10 +305,10 @@ Generative AI is a powerful assistant, but it introduces forensic risks if misap
                      |       | ---> Enforce Schema           |
                      |       |      & Data Delimiters        |
                      |       v                               |
-                     |  [ Gemini Endpoint ]                  |
+                     |  [ GPT-5.6 Endpoint ]                 |
                      |       | ---> Strict Prompt Injection  |
                      |       v      Mitigation Controls      |
-                     |  [ Formatted Memo ]                   |
+                     |  [ Validated Assessment ]             |
                      |                                       |
                      +---------------------------------------+
 ```

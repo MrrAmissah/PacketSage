@@ -37,14 +37,14 @@ To enable AI-assisted incident description drafting without compromising sensiti
 ```
 +------------------+     +-------------------+     +-------------------------+     +------------------+
 | Ingested Evidence | --> | Parser & Adapter  | --> | Redaction Controller    | --> | Server-Side AI   |
-| Raw Wireshark,   |     | Normalizes packet |     | Removes credentials,   |     | Gemini API Proxy |
+| Raw Wireshark,   |     | Normalizes packet |     | Selects exact evidence |     | GPT-5.6 Proxy    |
 | Suricata, Zeek   |     | details in memory |     | filters payload details |     | (Selected logs)  |
 +------------------+     +-------------------+     +-------------------------+     +------------------+
 ```
 
 ### 3.1 What is Shared with the AI Proxy
-To generate the AI Analyst Memo, selected decoded metadata, packet volume metrics, port distributions, and triggered rule identifiers are compiled and sent to the server-side Gemini API.
-* **No Raw Packet Payloads**: Large raw packet files are never transmitted to the server or LLM. Only distilled, high-level structural logs (e.g., DNS queries, protocol summaries, port ratios) are submitted.
+To investigate a signal, PacketSage sends only its bounded normalized evidence packet and exact relationships to the server-side GPT-5.6 endpoint.
+* **No Raw Packet Payloads**: Capture bytes, packet payloads, and packet `info` fields are never transmitted to the model.
 * **Provider Boundary**: The proxy sends selected metadata to the configured model provider. Operators must review the provider and hosting platform retention settings for their deployment.
 
 ### 3.2 Redaction Controls

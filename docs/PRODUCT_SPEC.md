@@ -39,8 +39,8 @@ To ensure professional integrity and avoid overclaiming, PacketSage is defined b
 1. **Import**: The user loads authorized network evidence via drag-and-drop or pasting logs. For exploration or education, the built-in, pre-loaded sample dataset is available immediately.
 2. **Decode**: Deterministic browser-side adapters parse and normalize the ingested text format (CSV, Suricata JSON, Zeek TSV, or TShark dumps) into a standard in-memory metadata schema.
 3. **Inspect**: The analyst uses interactive views (Command Center, Flow Explorer, Protocol Intelligence, Suspicious Signals, and Incident Timeline) to examine anomalous connections, search specific host strings, and validate heuristic triggers.
-4. **Explain**: The analyst reviews a server-side generated AI memo containing distilled event summaries, chronological timelines, and educational analogies.
-5. **Report**: The analyst drafts their own Validation Notes, selects which sections to bundle, measures the Report Readiness Score, and prints/saves a clean forensic record.
+4. **Investigate**: The analyst runs a bounded GPT-5.6 assessment for one signal and reviews observations, inference, uncertainty, next steps, and exact citations.
+5. **Report**: The analyst explicitly includes selected validated assessments and reviewed findings, then previews or exports the evidence-grounded draft.
 
 ---
 
@@ -64,8 +64,8 @@ A dedicated deep-dive inspector separating key web and network services:
 ### 4.5 Signals & Observations
 A deterministic rule engine that surfaces suspicious activity based on observed heuristics. Triggers include unusual port maps, high-density inbound scanning, abnormal beaconing intervals, and plaintext credential transmission. Analysts can mark these findings as "Validated" or "Dismissed" to synchronize with the Report Builder.
 
-### 4.6 AI Analyst Memo
-Invokes the server-side Gemini AI model using distilled telemetry and rule metadata. It provides structured summaries, executive analogies, and defensive recommendations. Includes a sidebar verifying the exact telemetry scope used to prevent hallucination.
+### 4.6 AI-Assisted Investigation
+Invokes GPT-5.6 for one selected signal using only its bounded evidence packet. Structured observations, inference, uncertainty, next steps, and citations are validated before display.
 
 ### 4.7 Incident Timeline
 A clean, chronological timeline of reconstructed network events based on decoded packet timestamps. Features intuitive severity filtering, quick detail modals, and helps isolate the initial vector from subsequent lateral movements.
@@ -74,7 +74,7 @@ A clean, chronological timeline of reconstructed network events based on decoded
 A structured document compiler that dynamically tracks report completeness. Computes a "Report Readiness Score" based on:
 1. Investigator Name specification.
 2. Ingested Evidence volume.
-3. AI Analyst Memo state.
+3. Explicitly included investigation assessments.
 4. Scope/Target validation.
 5. Analyst Validation Notes completion.
 6. Optional section toggles (Limitations, Recommendations).
@@ -101,4 +101,4 @@ A transparent, visual system roadmap depicting the current sandbox workstation v
 * **No Active Scanner**: PacketSage is a passive review workspace. It does **not** scan, probe, or run active network checks.
 * **No Raw PCAP Storage**: Raw binary `.pcap`/`.pcapng` file ingestion is not handled in browser sandbox mode. File uploads are met with a friendly alert explaining the planned production ingestion architecture.
 * **No Persistent Backend Database**: Data is held entirely in transient React and Express memory and is lost on page reload. Case management and user accounts are deferred to future production milestones.
-* **AI-Drafting Helper Only**: The AI memo is purely supportive and cannot make authoritative forensic declarations. It does not replace independent human verification.
+* **AI-Assisted Assessment Only**: Model inference remains labelled and unconfirmed; inclusion in a report does not replace independent human verification.

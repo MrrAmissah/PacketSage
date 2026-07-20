@@ -42,7 +42,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
    * *HTTP Traffic*: Examines unencrypted HTTP requests, request URIs, User-Agents, and credential exposure.
    * *TLS Metadata*: Extracts Server Name Indications (SNI) and certificate versions to compare encrypted session behaviors without decryption.
 5. **Signals & Observations**: A deterministic rule engine that surfaces potential threat markers (e.g., scan patterns, unencrypted transfers, beaconing). Analysts can manually *Validate* or *Dismiss* these findings.
-6. **AI Analyst Memo**: Synthesizes an executive narrative from parsed telemetry using a server-side Gemini API proxy, featuring executive analogies and defensive recommendations.
+6. **AI-Assisted Investigation**: Assesses one selected signal with GPT-5.6 using only its bounded, validated evidence packet. Assessments require explicit inclusion in a report draft.
 7. **Incident Timeline**: A clean, chronological timeline of reconstructed network events based on packet timestamps, with severity filters and detail modals.
 8. **Report Builder**: A document compiler with a "Report Readiness Score" that tracks investigation completeness and compiles a print-optimized PDF/paper report.
 9. **Packet Academy**: An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles to evaluate defensive reasoning skills.
@@ -56,7 +56,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 * **FlowSummary**: Reconstructs TCP/UDP sessions between source and destination endpoints, detailing timestamps, volumes, and calculated risk indicators.
 * **DnsRecord / HttpRecord / TlsRecord**: Normalized protocol-specific structures containing queried domains, requested paths, response codes, and certificate SNIs.
 * **SuspiciousSignal**: Deterministic indicators computed on-the-fly (e.g., cleartext credentials, unusual inbound ports, data transfer spikes, scan patterns).
-* **AiAnalysisResult**: Gemini's structured, schema-compliant summary.
+* **InvestigationRecord**: Stores a validated, evidence-scoped assessment and its explicit report-inclusion state.
 
 ---
 
@@ -64,9 +64,9 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 
 * **Authorized Use Only**: Users must confirm authorization before importing custom logs. A pre-packaged simulated dataset is built-in for zero-credential training.
 * **Processing Boundary**: Raw PCAP/PCAPNG captures are decoded locally. Supported text evidence is sent to the parsing endpoint; selected metadata may later be sent through the AI proxy.
-* **Server-Side AI Proxy & Redaction**: To draft the AI memo, selected decoded metadata, packet volume metrics, port distributions, and triggered rules are submitted to a server-side Gemini API proxy. 
-  * *No raw packet payloads* are transmitted to the proxy.
-  * Credentials, JWT tokens, and sensitive headers are redacted locally on the client-side using regular expressions before transmission.
+* **Server-Side AI Proxy**: One selected signal and only its exact related normalized evidence are submitted to the server-side GPT-5.6 investigation endpoint.
+  * Raw packet payloads and capture bytes are not transmitted to the proxy.
+  * Returned citations are validated against the supplied evidence-ID set before display or report inclusion.
 * **Passive Forensics**: PacketSage is purely passive. It does not perform active network port scans, host pings, or live interface sniffing.
 
 ---
@@ -81,10 +81,10 @@ npm install
 ### 2. Configure Environment Variables
 Create a `.env` file in the project root based on `.env.example`:
 ```env
-GEMINI_API_KEY="your-gemini-api-key"
+OPENAI_API_KEY="your-openai-api-key"
 APP_URL="http://localhost:3000"
 ```
-*(Note: Do not prefix `GEMINI_API_KEY` with `VITE_` to ensure it remains hidden from the browser).*
+*(Do not prefix `OPENAI_API_KEY` with `VITE_`; it must remain server-only.)*
 
 ### 3. Run the Development Server
 ```bash
@@ -100,7 +100,7 @@ Open your browser and navigate to `http://localhost:3000`.
 
 * **Stage 1: Forensic Sandbox Workstation (Current)**:
   - Ephemeral browser-side workspace, text-based parser adapters, and deterministic rule engine.
-  - Server-side Gemini proxy integration for analytical memos.
+  - Server-side GPT-5.6 evidence-scoped investigation.
   - Report Builder with print-clean layouts.
   - Built-in Packet Academy.
 * **Stage 2: Microservice-Based Binary Parser (Planned)**:

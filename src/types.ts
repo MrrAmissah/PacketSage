@@ -115,6 +115,121 @@ export interface SuspiciousSignal {
   status?: SignalReviewStatus;
 }
 
+export interface InvestigationSignalEvidence {
+  id: string;
+  title: string;
+  severity: SuspiciousSignal['severity'];
+  confidence: SuspiciousSignal['confidence'];
+  category: string;
+  observedEvidence: string;
+  interpretation: string;
+  whatItDoesNotProve: string;
+  recommendedDefensiveCheck: string;
+  relatedFlowIds: string[];
+  relatedEventIds: string[];
+}
+
+export interface InvestigationFlowEvidence {
+  id: string;
+  firstSeen: string;
+  lastSeen: string;
+  sourceIp: string;
+  sourcePort: number;
+  destinationIp: string;
+  destinationPort: number;
+  protocol: string;
+  service?: string;
+  packetCount: number;
+  byteCount: number;
+  duration: number;
+  direction: FlowSummary['direction'];
+  riskLevel: FlowSummary['riskLevel'];
+  relatedEventIds: string[];
+}
+
+export interface InvestigationEventEvidence {
+  id: string;
+  timestamp: string;
+  sourceIp: string;
+  sourcePort: number;
+  destinationIp: string;
+  destinationPort: number;
+  protocol: string;
+  service?: string;
+  length: number;
+  capturedLength?: number;
+  originalLength?: number;
+  sourceType?: string;
+}
+
+export interface InvestigationDnsEvidence {
+  id: string;
+  timestamp: string;
+  clientIp: string;
+  query: string;
+  queryType: string;
+  response: string;
+  rcode: string;
+  riskLevel: DnsRecord['riskLevel'];
+}
+
+export interface InvestigationHttpEvidence {
+  id: string;
+  timestamp: string;
+  clientIp: string;
+  host: string;
+  method: string;
+  uri: string;
+  statusCode: number;
+  cleartext: boolean;
+  riskLevel: HttpRecord['riskLevel'];
+}
+
+export interface InvestigationTlsEvidence {
+  id: string;
+  timestamp: string;
+  clientIp: string;
+  serverIp: string;
+  sni: string;
+  version?: string;
+  ja3?: string;
+  certificateSubject?: string;
+  riskLevel: TlsRecord['riskLevel'];
+}
+
+export interface InvestigationEvidencePacket {
+  version: '1';
+  signal: InvestigationSignalEvidence;
+  flows: InvestigationFlowEvidence[];
+  events: InvestigationEventEvidence[];
+  dns: InvestigationDnsEvidence[];
+  http: InvestigationHttpEvidence[];
+  tls: InvestigationTlsEvidence[];
+  limitsApplied: {
+    flowsTruncated: boolean;
+    eventsTruncated: boolean;
+    protocolRecordsTruncated: boolean;
+  };
+}
+
+export interface InvestigationAssessment {
+  summary: string;
+  observedEvidence: Array<{
+    statement: string;
+    evidenceIds: string[];
+  }>;
+  inferences: Array<{
+    statement: string;
+    confidence: 'low' | 'medium' | 'high';
+    evidenceIds: string[];
+  }>;
+  uncertainties: string[];
+  nextSteps: Array<{
+    action: string;
+    reason: string;
+  }>;
+}
+
 export interface AiAnalysisResult {
   executiveSummary: string;
   whatHappened: string;

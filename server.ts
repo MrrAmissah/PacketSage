@@ -17,6 +17,11 @@ import {
   parseTextLog
 } from "./src/lib/parser.js";
 import { clientSafeParseError, validateParsedResult, validateParseRequest } from "./src/lib/parseRequest.js";
+import {
+  clientSafeInvestigationError,
+  parseInvestigationRequest,
+  requestOpenAiInvestigation,
+} from "./src/server/investigationApi.js";
 
 // Load environment variables
 dotenv.config();
@@ -95,6 +100,17 @@ app.post("/api/parse", (req, res) => {
     return res.json(validateParsedResult(parsedResult));
   } catch (error) {
     const safe = clientSafeParseError(error);
+    return res.status(safe.status).json({ error: safe.message });
+  }
+});
+
+app.post("/api/investigate", async (req, res) => {
+  try {
+    const evidence = parseInvestigationRequest(req.body);
+    const assessment = await requestOpenAiInvestigation(evidence, { apiKey: process.env.OPENAI_API_KEY });
+    return res.json(assessment);
+  } catch (error) {
+    const safe = clientSafeInvestigationError(error);
     return res.status(safe.status).json({ error: safe.message });
   }
 });

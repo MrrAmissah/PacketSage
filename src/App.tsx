@@ -50,7 +50,16 @@ import LearningMode from './components/LearningMode';
 import CaptureOverview from './components/CaptureOverview';
 import GuidedSampleJourney from './components/GuidedSampleJourney';
 import { setCaptureOverviewInclusion } from './lib/captureOverview';
-import { createJudgePathSession, deriveJudgePathProgress, shouldShowGuidedJourney, type JudgePathDestination, type JudgePathSession } from './lib/judgePath';
+import {
+  createJudgePathSession,
+  deriveJudgePathProgress,
+  findGuidedInvestigationSignal,
+  shouldShowGuidedJourney,
+  type GuidedSignalAction,
+  type JudgePathActionId,
+  type JudgePathDestination,
+  type JudgePathSession,
+} from './lib/judgePath';
 
 type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy';
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -65,7 +74,11 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   const [guideSession, setGuideSession] = useState<JudgePathSession | null>(null);
+  const [guidedSignalAction, setGuidedSignalAction] = useState<GuidedSignalAction | null>(null);
   const workspaceScrollRef = React.useRef<HTMLDivElement>(null);
+  const recommendedGuidedSignal = React.useMemo(() => parsedData
+    ? findGuidedInvestigationSignal(parsedData.evidence.parseMode, parsedData.signals, parsedData.flows, parsedData.events)
+    : null, [parsedData]);
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('packet-sage-theme');
@@ -120,6 +133,7 @@ export default function App() {
     setSelectedFlow(null);
     setRelatedFlowScopeIds(null);
     setGuideSession(createJudgePathSession(data.evidence.id));
+    setGuidedSignalAction(null);
     setActiveTab('overview'); // Take them to command center automatically
   };
 
@@ -132,6 +146,7 @@ export default function App() {
       setSelectedFlow(null);
       setRelatedFlowScopeIds(null);
       setGuideSession(null);
+      setGuidedSignalAction(null);
       setActiveTab('import');
     }
   };
@@ -173,6 +188,29 @@ export default function App() {
     includedInReport: boolean,
   ) => {
     setInvestigations(previous => setInvestigationReportInclusion(previous, context, includedInReport));
+  };
+
+  const handleSignalSelected = React.useCallback(() => {
+    setGuideSession(previous => previous && !previous.signalSelected ? { ...previous, signalSelected: true } : previous);
+  }, []);
+
+  const handleGuidedSignalActionHandled = React.useCallback((requestId: number) => {
+    setGuidedSignalAction(previous => previous?.requestId === requestId ? null : previous);
+  }, []);
+
+  const handleGuidePrimaryAction = (actionId: JudgePathActionId) => {
+    if (actionId === 'open-report') {
+      setActiveTab('report');
+      return;
+    }
+
+    setActiveTab('signals');
+    if (!recommendedGuidedSignal) return;
+    setGuidedSignalAction(previous => ({
+      signalId: recommendedGuidedSignal.id,
+      focusTarget: actionId === 'focus-investigation' ? 'investigation' : 'signal-detail',
+      requestId: (previous?.requestId || 0) + 1,
+    }));
   };
 
   const renderActiveContent = () => {
@@ -221,10 +259,13 @@ export default function App() {
             signalStatusOverrides={signalStatusOverrides}
             selectedEvidenceId={parsedData?.evidence.id || ''}
             investigationRecords={investigations}
+            recommendedSignalId={recommendedGuidedSignal?.id || null}
+            guidedSignalAction={guidedSignalAction}
+            onGuidedSignalActionHandled={handleGuidedSignalActionHandled}
             onInvestigationCompleted={handleInvestigationCompleted}
             onInvestigationInvalidated={handleInvestigationInvalidated}
             onInvestigationInclusionChange={handleInvestigationInclusion}
-            onSignalSelected={() => setGuideSession(previous => previous ? { ...previous, signalSelected: true } : previous)}
+            onSignalSelected={handleSignalSelected}
             onOpenReport={() => setActiveTab('report')}
             onNavigateToFlows={(relatedFlows) => {
               setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
@@ -540,6 +581,7 @@ export default function App() {
                 })}
                 onDismiss={() => setGuideSession(previous => previous ? { ...previous, dismissed: true } : previous)}
                 onNavigate={(destination: JudgePathDestination) => setActiveTab(destination)}
+                onPrimaryAction={handleGuidePrimaryAction}
               />
             )}
             {renderActiveContent()}

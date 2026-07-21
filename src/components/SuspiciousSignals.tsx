@@ -50,6 +50,7 @@ import {
   completedInvestigationRecord,
   currentInvestigationRecord,
 } from '../lib/investigationRecords';
+import type { GuidedSignalAction } from '../lib/judgePath';
 
 interface SuspiciousSignalsProps {
   signals: SuspiciousSignal[];
@@ -61,6 +62,9 @@ interface SuspiciousSignalsProps {
   signalStatusOverrides?: Record<string, SignalReviewStatus>;
   selectedEvidenceId: string;
   investigationRecords: InvestigationRecord[];
+  recommendedSignalId?: string | null;
+  guidedSignalAction?: GuidedSignalAction | null;
+  onGuidedSignalActionHandled?: (requestId: number) => void;
   onNavigateToFlows: (flows: FlowSummary[]) => void;
   onUpdateSignalStatus?: (id: string, status: SignalReviewStatus, linkedIds?: string[]) => void;
   onInvestigationCompleted: (record: InvestigationRecord) => void;
@@ -610,6 +614,9 @@ export default function SuspiciousSignals({
   signalStatusOverrides = EMPTY_SIGNAL_STATUS_OVERRIDES,
   selectedEvidenceId,
   investigationRecords,
+  recommendedSignalId = null,
+  guidedSignalAction = null,
+  onGuidedSignalActionHandled,
   onNavigateToFlows,
   onUpdateSignalStatus,
   onInvestigationCompleted,
@@ -714,6 +721,29 @@ export default function SuspiciousSignals({
     setEnrichedSignals(mapped);
     setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id) || null);
   }, [signals, flows, signalStatusOverrides]);
+
+  useEffect(() => {
+    if (!guidedSignalAction) return;
+    const guidedSignal = enrichedSignals.find(signal => signal.id === guidedSignalAction.signalId);
+    if (!guidedSignal) return;
+
+    setSelectedSignal(guidedSignal);
+    onSignalSelected?.(guidedSignal.id);
+    const frame = window.requestAnimationFrame(() => {
+      const targetId = guidedSignalAction.focusTarget === 'investigation'
+        ? 'evidence-grounded-investigation'
+        : `signal-detail-${guidedSignal.id}`;
+      const target = document.getElementById(targetId);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      });
+      onGuidedSignalActionHandled?.(guidedSignalAction.requestId);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [guidedSignalAction, enrichedSignals, onGuidedSignalActionHandled, onSignalSelected]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {
@@ -1070,6 +1100,11 @@ export default function SuspiciousSignals({
                           <div className="font-semibold text-text-primary text-xs leading-snug line-clamp-2" title={sig.title}>
                             {sig.title}
                           </div>
+                          {recommendedSignalId === sig.id && (
+                            <span className="mt-1 inline-flex rounded border border-accent-primary/20 bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent-primary">
+                              Investigation ready
+                            </span>
+                          )}
                           <div className="text-[11px] text-text-muted mt-0.5 line-clamp-1" title={sig.subtitle}>
                             {sig.subtitle}
                           </div>
@@ -1172,6 +1207,11 @@ export default function SuspiciousSignals({
                             </span>
                             <div>
                               <div className="font-semibold text-text-primary text-xs leading-snug line-clamp-2" title={sig.title}>{sig.title}</div>
+                              {recommendedSignalId === sig.id && (
+                                <span className="mt-1 inline-flex rounded border border-accent-primary/20 bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent-primary">
+                                  Investigation ready
+                                </span>
+                              )}
                               <div className="text-[11px] text-text-muted mt-0.5 line-clamp-1" title={sig.subtitle}>{sig.subtitle}</div>
                             </div>
                           </div>
@@ -1306,7 +1346,7 @@ export default function SuspiciousSignals({
 
         {/* Selected Finding Detail Sidebar */}
         {selectedSignal && (
-          <div className="w-full bg-surface rounded-2xl border border-border-subtle p-4 space-y-4 shadow-lg h-fit xl:sticky xl:top-[84px] xl:max-h-[calc(100vh-140px)] overflow-y-auto animate-in slide-in-from-right duration-200 order-1 xl:order-none">
+          <div id={`signal-detail-${selectedSignal.id}`} tabIndex={-1} className="w-full scroll-mt-4 bg-surface rounded-2xl border border-border-subtle p-4 space-y-4 shadow-lg h-fit xl:sticky xl:top-[84px] xl:max-h-[calc(100vh-140px)] overflow-y-auto animate-in slide-in-from-right duration-200 order-1 xl:order-none focus:outline-none focus:ring-2 focus:ring-accent-primary/30">
             
             {/* Title Block & Close Action */}
             <div className="flex justify-between items-start pb-2.5 border-b border-border-subtle">
@@ -1327,6 +1367,11 @@ export default function SuspiciousSignals({
               <h3 className="text-xs font-bold text-text-primary leading-snug">
                 {selectedSignal.title}
               </h3>
+              {recommendedSignalId === selectedSignal.id && (
+                <span className="inline-flex rounded border border-accent-primary/20 bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent-primary">
+                  Investigation ready
+                </span>
+              )}
               
               <div className="flex flex-wrap items-center gap-1.5">
                 {/* Severity Badge */}
@@ -1474,7 +1519,7 @@ export default function SuspiciousSignals({
             </div>
 
             {/* Evidence-scoped AI-assisted investigation */}
-            <div className="space-y-2 border-b border-border-subtle pb-3">
+            <div id="evidence-grounded-investigation" tabIndex={-1} className="scroll-mt-4 space-y-2 border-b border-border-subtle pb-3 focus:outline-none focus:ring-2 focus:ring-accent-primary/30">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Evidence-grounded investigation</h4>

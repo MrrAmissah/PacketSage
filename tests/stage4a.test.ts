@@ -4,7 +4,7 @@ import test from 'node:test';
 import { completedCaptureOverview, validateCaptureOverviewResponse } from '../src/lib/captureOverview';
 import { deterministicId } from '../src/lib/deterministic';
 import { InvestigationRequestCoordinator } from '../src/lib/investigationRequests';
-import { createJudgePathSession, deriveJudgePathProgress, shouldShowGuidedJourney } from '../src/lib/judgePath';
+import { createJudgePathSession, deriveJudgePathProgress, findGuidedInvestigationSignal, shouldShowGuidedJourney } from '../src/lib/judgePath';
 import { parseDemoData } from '../src/lib/parser';
 import { buildReportModel } from '../src/lib/report';
 
@@ -42,15 +42,57 @@ test('bundled guided sample satisfies the stable evidence contract', () => {
 test('guided progress derives only from real workflow state and uses correct destinations', () => {
   const loaded = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: false, investigationIncluded: false, reportVisited: false });
   assert.equal(loaded.completedCount, 1);
-  assert.deepEqual(loaded.nextAction, { label: 'Review signals', destination: 'signals' });
+  assert.deepEqual(loaded.nextAction, { id: 'review-recommended-signal', label: 'Review recommended signal', destination: 'signals' });
 
   const selected = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: true, investigationIncluded: false, reportVisited: false });
   assert.equal(selected.completedCount, 2);
-  assert.equal(selected.nextAction.destination, 'signals');
+  assert.deepEqual(selected.nextAction, { id: 'focus-investigation', label: 'Run evidence-grounded investigation', destination: 'signals' });
 
   const included = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: true, investigationIncluded: true, reportVisited: false });
   assert.equal(included.completedCount, 3);
-  assert.deepEqual(included.nextAction, { label: 'Build report', destination: 'report' });
+  assert.deepEqual(included.nextAction, { id: 'open-report', label: 'Build report', destination: 'report' });
+});
+
+test('guided sample identifies one investigation-ready signal through valid deterministic relationships', () => {
+  const first = parseDemoData();
+  const second = parseDemoData();
+  const recommended = findGuidedInvestigationSignal(first.evidence.parseMode, first.signals, first.flows, first.events);
+  const repeated = findGuidedInvestigationSignal(second.evidence.parseMode, second.signals, second.flows, second.events);
+
+  assert.ok(recommended);
+  assert.equal(recommended.id, repeated?.id);
+  assert.equal(recommended.category, 'Repeated outbound activity');
+  assert.equal(recommended.relatedFlowIds?.length, 10);
+  assert.equal(recommended.relatedEventIds?.length, 11);
+});
+
+test('invalid relationships and normal custom evidence never receive sample-specific recommendation', () => {
+  const demo = parseDemoData();
+  const candidate = findGuidedInvestigationSignal(demo.evidence.parseMode, demo.signals, demo.flows, demo.events);
+  assert.ok(candidate);
+  const unavailable = [{ ...candidate, relatedFlowIds: ['flow-missing-1'] }];
+
+  assert.equal(findGuidedInvestigationSignal('demo', unavailable, demo.flows, demo.events), null);
+  assert.equal(findGuidedInvestigationSignal('txt', demo.signals, demo.flows, demo.events), null);
+});
+
+test('guide actions select and focus the recommended signal without starting an AI request', () => {
+  const appSource = source('src/App.tsx');
+  const signalsSource = source('src/components/SuspiciousSignals.tsx');
+  assert.match(appSource, /findGuidedInvestigationSignal/);
+  assert.match(appSource, /signalId: recommendedGuidedSignal\.id/);
+  assert.match(signalsSource, /setSelectedSignal\(guidedSignal\)/);
+  assert.match(signalsSource, /`signal-detail-\$\{guidedSignal\.id\}`/);
+  assert.match(signalsSource, /'evidence-grounded-investigation'/);
+  assert.match(signalsSource, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(appSource, /fetch\(['"]\/api\/investigate/);
+});
+
+test('only the validated recommendation displays the provider-neutral investigation-ready label', () => {
+  const signalsSource = source('src/components/SuspiciousSignals.tsx');
+  assert.match(signalsSource, /recommendedSignalId === sig\.id/);
+  assert.match(signalsSource, /Investigation ready/);
+  assert.doesNotMatch('Investigation ready', /OpenAI|GPT|Google|Gemini/i);
 });
 
 test('guide dismissal is session-scoped and replacement evidence resets it', () => {
@@ -66,6 +108,8 @@ test('Capture Overview remains optional and never advances the primary stages', 
   const before = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: true, investigationIncluded: false, reportVisited: false });
   assert.deepEqual(before.stages.map(stage => stage.id), ['evidence', 'signal', 'investigation', 'report']);
   assert.equal(before.completedCount, 2);
+  assert.equal(before.stages.find(stage => stage.id === 'investigation')?.complete, false);
+  assert.equal(before.nextAction.id, 'focus-investigation');
 });
 
 test('model output remains excluded from reports until explicit inclusion', () => {

@@ -10,7 +10,8 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/**/*.test.ts"
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "verify:pdf": "node scripts/verify-report-pdf.mjs"
   },
   "dependencies": {
     "@cto.af/pcap-ng-parser": "^3.0.2",

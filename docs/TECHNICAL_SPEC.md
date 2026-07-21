@@ -1,6 +1,6 @@
 # PacketSage Technical Specification
 
-This document provides a detailed technical breakdown of PacketSage’s current sandbox implementation, in-memory state models, and the planned production architecture.
+This document describes PacketSage’s current bounded browser workspace, serverless parsing and AI boundaries, and in-memory state models.
 
 ---
 
@@ -9,11 +9,10 @@ This document provides a detailed technical breakdown of PacketSage’s current 
 PacketSage is built on a modern, robust, full-stack JavaScript/TypeScript architecture:
 
 ### 1.1 Frontend Architecture
-* **Library/Framework**: React 18+ bootstrapped with Vite.
-* **Styling**: Tailwind CSS utilizing the **Prince Product UI ("Cool Trust")** design language.
+* **Library/Framework**: React 19 with Vite.
+* **Styling**: Tailwind CSS 4 with semantic CSS variables.
 * **Animations**: Fluid layouts, entering fades, and interactive transitions using `motion` (imported from `motion/react`).
 * **Icons**: Standard SVG vector icons imported from `lucide-react`.
-* **Charts & Visualizations**: Interactive data rendering and protocol ratios built with `recharts` and `d3`.
 
 ### 1.2 Backend Architecture
 * **Server Framework**: Node.js with Express.
@@ -27,78 +26,14 @@ PacketSage is built on a modern, robust, full-stack JavaScript/TypeScript archit
 
 All imported data is normalized into a standard, in-memory TypeScript schema.
 
-```typescript
-// Core Data Model Definitions
-export interface UploadedEvidence {
-  id: string;
-  name: string;
-  size: number;
-  type: 'csv' | 'json' | 'tsv' | 'pasted' | 'sample';
-  timestamp: string;
-}
-
-export interface FlowSummary {
-  id: string;
-  timestamp: string;
-  duration: number;
-  srcIp: string;
-  srcPort: number;
-  destIp: string;
-  destPort: number;
-  protocol: 'TCP' | 'UDP' | 'ICMP' | 'Unknown';
-  bytesSent: number;
-  bytesReceived: number;
-  packets: number;
-  riskScore: 'Low' | 'Medium' | 'High' | 'Critical';
-  riskReason?: string;
-}
-
-export interface DnsRecord {
-  timestamp: string;
-  query: string;
-  type: string;
-  response: string;
-}
-
-export interface HttpRecord {
-  timestamp: string;
-  method: string;
-  host: string;
-  uri: string;
-  userAgent: string;
-  statusCode: number;
-  contentType: string;
-}
-
-export interface TlsRecord {
-  timestamp: string;
-  sni: string;
-  version: string;
-  cipher?: string;
-  fingerprint?: string;
-}
-
-export interface SuspiciousSignal {
-  id: string;
-  title: string;
-  description: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  confidence: 'possible' | 'likely' | 'confirmed';
-  type: 'scan' | 'cleartext' | 'beaconing' | 'protocol_mismatch';
-  category: string;
-  timestamp: string;
-  flowId?: string;
-  endpoint?: string;
-  status: 'needs_review' | 'validated' | 'dismissed';
-}
-```
+The canonical definitions live in `src/types.ts`. `UploadedEvidence` records deterministic identity, source format, parse mode, status, retention wording, and checksum state. `PacketEvent` records timestamp, endpoints, ports, protocol, observed length, and a bounded decoded description. `FlowSummary` records the observed five-tuple, interval, counts, direction/risk labels, and exact `relatedEvents` IDs. DNS, HTTP, and TLS records carry optional IDs plus explicit `relatedEventIds`. `SuspiciousSignal` carries observed evidence, separately worded interpretation/limitations/checks, and optional exact `relatedFlowIds`/`relatedEventIds`. `InvestigationRecord` and `CaptureOverviewRecord` retain schema, provider, model, generation time/state, evidence identity, and explicit report-inclusion state.
 
 ---
 
 ## 3. Data Pipelines & Integration Flows
 
 ### 3.1 Sample Dataset Pipeline
-For demonstration and training (Packet Academy), a rich mock dataset representing a multi-stage intrusion sequence (reconnaissance, brute-force, cleartext transmission, and external beaconing) is packaged locally. Clicking "Load Sample Dataset" triggers an immediate in-memory state hydrate.
+For demonstration and training, a generated defensive-analysis dataset containing routine and review-worthy activity is packaged with PacketSage. **Load guided investigation sample** hydrates the same deterministic evidence state used by the normal workflow; it does not assert an intrusion or compromise.
 
 ### 3.2 File Upload & Copy-Paste Flow
 When a user uploads or pastes a text-based packet capture export, PacketSage loops through registered parser adapters:
@@ -106,24 +41,22 @@ When a user uploads or pastes a text-based packet capture export, PacketSage loo
 * **Suricata EVE JSON Adapter**: Normalizes alerts, DNS queries, and flow data from JSON lines.
 * **Zeek Log TSV Adapter**: Normalizes tab-separated Zeek logs (dns.log, conn.log, http.log).
 * **TShark JSON Adapter**: Parses structured JSON extracts dumped via the command-line command `tshark -T json`.
+* **Strict Text Adapter**: Accepts one event per line using `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`. Timestamp, valid IPv4 endpoints, destination port, protocol, and length are required. An omitted source port is stored as unknown (`0`) and rendered as `unknown`; incomplete or ambiguous lines fail with a line-specific error and produce no partial evidence.
 
 Raw `.pcap`/`.pcapng` files are decoded in the browser with bounded container, packet-count, and byte-size limits. The current decoder supports Ethernet and practical IPv4/IPv6 TCP, UDP, ICMP, and basic DNS metadata; unsupported link types and malformed or truncated captures fail without synthetic evidence.
 
 ### 3.3 Signals & Verification Persistence
-Suspicious signals are dynamically calculated by deterministic rule evaluators. The user's action to mark a signal as **Validated** or **Dismissed** updates its status property locally. This changes its visual state and updates the *Report Builder*'s checklist in real-time.
+Signals are calculated by deterministic rule evaluators. **Add finding to report** and **Dismiss noise** update local review state; running an AI investigation alone never marks a signal as reviewed.
+
+### 3.4 Exact Relationship Resolution
+Flow Explorer resolves events only from `flow.relatedEvents` and signals only when `signal.relatedFlowIds` contains the exact flow ID. Incident Timeline resolves flows only when a flow's `relatedEvents` contains the event ID and signals only when `signal.relatedEventIds` contains it. Shared IPs, partial five-tuples, prose, protocol names, severity, and temporary IDs never create navigation relationships.
 
 ---
 
 ## 4. Synchronization & Rendering Architecture
 
 ### 4.1 Report Builder Sync
-The Report Builder monitors global React states. Any updates to:
-* The active investigator name.
-* The parsed flows and total counts.
-* The count of validated suspicious signals.
-* Explicitly included, validated investigation records.
-* Analyst validation text notes.
-re-trigger the **Report Readiness Score** algorithm instantly.
+The Report Builder derives its document from parsed events, exact relationships, reviewed deterministic signals, explicitly included investigation records, and an independently included contextual overview. Flow and event inclusion controls are not part of the report model. Its readiness status indicates whether reviewed or explicitly included evidence-grounded content exists; optional overview text cannot make a report evidence-ready.
 
 ### 4.2 InfoPopover Engine (Fixed Viewport Clamping)
 To solve clipping issues common to interactive dashboards (caused by tables, scroll containers, or page edges), the `InfoPopover` component uses a robust fixed-coordinate placement algorithm:
@@ -135,9 +68,16 @@ To solve clipping issues common to interactive dashboards (caused by tables, scr
 ### 4.3 App Theming & Print Layouts
 * **Theme**: Structured on Tailwind CSS utilizing CSS variables under the `@theme` block in `src/index.css`. The palette matches deep slates, cool navies, and high-contrast primary buttons.
 * **Print Stylesheet**: Implements rigorous `@media print` CSS overrides. When exporting or printing reports:
-  - Sidebar and navigation modules are automatically hidden (`print:hidden`).
-  - Font sizes are standardized to clean, readable values.
-  - Interactive controls (input borders, toggles, run-buttons) are hidden or flattened into standard text blocks to support high-quality PDF preservation.
+  - The sidebar, primary navigation, guided journey, preview overlay, and interactive controls are hidden.
+  - Fixed viewport heights and overflow clipping are reset so the complete bounded report paginates.
+  - Evidence summary, checksum, reviewed findings, contextual overview, included assessments, citations, timeline, recommendations, provenance, and limitations print when available.
+  - `npm run verify:pdf` drives the guided sample, generates a real PDF, checks its signature/text, verifies early and late report markers, confirms multiple timeline rows, and rejects application-shell labels.
+
+### 4.4 Active Routes
+The active workspace routes are Command center, Import evidence, Flow explorer, Protocol intelligence, Signals & observations, Capture overview, Incident timeline, Report builder, Packet Academy, and Architecture spec. Architecture spec is evidence-independent and remains available before a case is loaded. At narrow widths every route is exposed through a labelled keyboard-operable menu that keeps the active route visible.
+
+### 4.5 Architecture Spec
+The in-product Architecture spec is a current-state technical blueprint rather than a promise of unavailable infrastructure. It distinguishes browser responsibilities from serverless/provider boundaries, traces the evidence-to-report pipeline, displays enforced limits from the shared runtime constants where available, documents completed Build Week stages, and labels authentication, persistent case storage, large-capture workers, enterprise policy controls, and external intelligence integrations as not implemented.
 
 ---
 
@@ -163,11 +103,11 @@ node dist/server.cjs
 
 ## 6. Current Implementation vs. Planned Production Target
 
-| Architectural Component | Current Sandbox (Stage 1) | Planned Production Target (Stage 2 & 3) |
+| Architectural Component | Current implementation | Possible future extension |
 | :--- | :--- | :--- |
-| **Parsing Location** | Browser-side (Web Worker) | Distributed, sandboxed microservices |
-| **Parsing Engine** | In-memory text-based adapters | Containerized `libpcap`, `tshark`, `zeek`, `suricata` |
+| **Parsing Location** | Raw captures in the bounded browser decoder; supported text via the serverless endpoint | Isolated workers for larger captures if required |
+| **Parsing Engine** | Native PCAP/PCAPNG metadata decoder plus CSV, Suricata, Zeek, TShark and text adapters | Additional sandboxed decoders without weakening current bounds |
 | **Data Payload Store** | Transient React and Express RAM | Encrypted Cloud Storage (GCS / S3) |
 | **Case Retention** | Volatile (lost on page reload) | Durable database persistence (Firebase/Firestore) |
 | **User Management** | None (Single Session Sandbox) | Multi-tenant Firebase Authentication |
-| **AI Processing** | Server-side evidence-scoped GPT-5.6 proxy | Isolated enterprise API gateway with auditing |
+| **AI Processing** | Separate server-side GPT-5.6 signal-investigation and Gemini capture-overview proxies | Isolated enterprise API gateway with organization policy and auditing |

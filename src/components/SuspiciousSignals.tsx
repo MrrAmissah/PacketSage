@@ -12,7 +12,6 @@ import {
   X, 
   Check, 
   AlertCircle, 
-  Clipboard, 
   Info,
   ExternalLink,
   Ban,
@@ -33,7 +32,8 @@ import {
   TlsRecord,
 } from '../types';
 import InfoPopover from './InfoPopover';
-import InvestigationAssessmentPanel from './InvestigationAssessment';
+import CompactInvestigationResult from './CompactInvestigationResult';
+import EvidenceGroundedAssessment from './EvidenceGroundedAssessment';
 import {
   buildInvestigationEvidencePacket,
   evidenceIds,
@@ -48,8 +48,9 @@ import { selectPresentedSignals } from '../lib/signalPresentation';
 import { resolveRelatedFlows } from '../lib/relatedFlows';
 import {
   completedInvestigationRecord,
-  currentInvestigationRecord,
 } from '../lib/investigationRecords';
+import { assessmentCitationIds, retainedAssessmentForContext } from '../lib/assessmentWorkspace';
+import type { GuidedSignalAction } from '../lib/judgePath';
 
 interface SuspiciousSignalsProps {
   signals: SuspiciousSignal[];
@@ -61,6 +62,10 @@ interface SuspiciousSignalsProps {
   signalStatusOverrides?: Record<string, SignalReviewStatus>;
   selectedEvidenceId: string;
   investigationRecords: InvestigationRecord[];
+  selectedSignalId?: string | null;
+  recommendedSignalId?: string | null;
+  guidedSignalAction?: GuidedSignalAction | null;
+  onGuidedSignalActionHandled?: (requestId: number) => void;
   onNavigateToFlows: (flows: FlowSummary[]) => void;
   onUpdateSignalStatus?: (id: string, status: SignalReviewStatus, linkedIds?: string[]) => void;
   onInvestigationCompleted: (record: InvestigationRecord) => void;
@@ -69,6 +74,10 @@ interface SuspiciousSignalsProps {
     context: { selectedEvidenceId: string; signalId: string; packetIdentity: string },
     includedInReport: boolean,
   ) => void;
+  onSignalSelected?: (signalId: string) => void;
+  onAssessmentWorkspaceChange?: (signalId: string | null) => void;
+  onNavigateToEvent: (eventId: string) => void;
+  onOpenReport: () => void;
 }
 
 // Rich high-fidelity signals matching the reference image layout and metadata
@@ -400,23 +409,7 @@ const DEMO_SIGNAL_MATCHERS: Record<string, (signal: SuspiciousSignal) => boolean
 };
 
 const getLinkedSignalIds = (displaySignal: SuspiciousSignal, sourceSignals: SuspiciousSignal[]) => {
-  const exact = sourceSignals.filter(signal => signal.id === displaySignal.id).map(signal => signal.id);
-  if (exact.length > 0) return exact;
-
-  const matcher = DEMO_SIGNAL_MATCHERS[displaySignal.id];
-  if (matcher) {
-    return sourceSignals.filter(matcher).map(signal => signal.id);
-  }
-
-  const displayTitle = normalizeSignalText(displaySignal.title);
-  const displayEvidence = normalizeSignalText(displaySignal.observedEvidence).slice(0, 80);
-  return sourceSignals
-    .filter(signal => {
-      const sourceTitle = normalizeSignalText(signal.title);
-      const sourceEvidence = normalizeSignalText(signal.observedEvidence);
-      return sourceTitle === displayTitle || (!!displayEvidence && sourceEvidence.includes(displayEvidence));
-    })
-    .map(signal => signal.id);
+  return sourceSignals.some(signal => signal.id === displaySignal.id) ? [displaySignal.id] : [];
 };
 
 const getPersistedStatus = (
@@ -608,15 +601,25 @@ export default function SuspiciousSignals({
   signalStatusOverrides = EMPTY_SIGNAL_STATUS_OVERRIDES,
   selectedEvidenceId,
   investigationRecords,
+  selectedSignalId = null,
+  recommendedSignalId = null,
+  guidedSignalAction = null,
+  onGuidedSignalActionHandled,
   onNavigateToFlows,
   onUpdateSignalStatus,
   onInvestigationCompleted,
   onInvestigationInvalidated,
   onInvestigationInclusionChange,
+  onSignalSelected,
+  onAssessmentWorkspaceChange,
+  onNavigateToEvent,
+  onOpenReport,
 }: SuspiciousSignalsProps) {
   // Rich local state derived only from parser/rule-engine signals.
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
+  const [fullAssessmentOpen, setFullAssessmentOpen] = useState(false);
+  const fullAssessmentTriggerRef = useRef<HTMLButtonElement>(null);
   const [investigationState, setInvestigationState] = useState<{
     signalId: string;
     packetIdentity: string;
@@ -645,7 +648,7 @@ export default function SuspiciousSignals({
   const currentInvestigationContextRef = useRef(currentInvestigationContext);
   currentInvestigationContextRef.current = currentInvestigationContext;
   const completedRecord = currentInvestigationContext
-    ? currentInvestigationRecord(investigationRecords, { selectedEvidenceId, ...currentInvestigationContext })
+    ? retainedAssessmentForContext(investigationRecords, { selectedEvidenceId, ...currentInvestigationContext })
     : null;
   const activeInvestigation = investigationState
     && investigationState.signalId === currentInvestigationContext?.signalId
@@ -664,8 +667,17 @@ export default function SuspiciousSignals({
   useEffect(() => {
     requestCoordinator.current.invalidate();
     setInvestigationState(null);
+    setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
     return () => requestCoordinator.current.invalidate();
-  }, [selectedEvidenceId, currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity]);
+  }, [selectedEvidenceId, currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity, onAssessmentWorkspaceChange]);
+
+  useEffect(() => {
+    if (fullAssessmentOpen && !completedRecord) {
+      setFullAssessmentOpen(false);
+      onAssessmentWorkspaceChange?.(null);
+    }
+  }, [fullAssessmentOpen, completedRecord, onAssessmentWorkspaceChange]);
 
   // Filters State
   const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'>('ALL');
@@ -686,7 +698,6 @@ export default function SuspiciousSignals({
       return;
     }
 
-    const confidenceScores: Record<string, number> = { high: 75, medium: 60, low: 45, info: 30 };
     const mapped = selectPresentedSignals(signals).map(sig => {
       const cleanedSig = sanitizeSignal(sig);
       const relatedFlows = resolveRelatedFlows(sig.relatedFlowIds, flows);
@@ -694,7 +705,7 @@ export default function SuspiciousSignals({
       return {
         ...cleanedSig,
         subtitle: cleanedSig.observedEvidence ? `${cleanedSig.observedEvidence.substring(0, 50)}...` : 'Deterministic observation',
-        confidenceScore: confidenceScores[cleanedSig.confidence] || 50,
+        confidenceScore: 0,
         observedSnippet: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 30) : 'No evidence summary supplied',
         relatedFlowsCount: relatedFlows.length,
         flowsList: relatedFlows.map(flow => ({
@@ -706,14 +717,75 @@ export default function SuspiciousSignals({
         firstSeenTime: firstSeen ? firstSeen.replace('T', ' ').slice(0, 19) : 'Not provided',
         status: signalStatusOverrides[sig.id] || sig.status || 'Needs review'
       };
-    });
+    }).sort((left, right) => (right.relatedFlowIds?.length || 0) - (left.relatedFlowIds?.length || 0));
     setEnrichedSignals(mapped);
-    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id) || mapped[0]);
-  }, [signals, flows, signalStatusOverrides]);
+    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id)
+      || mapped.find(signal => signal.id === selectedSignalId)
+      || null);
+  }, [signals, flows, signalStatusOverrides, selectedSignalId]);
+
+  useEffect(() => {
+    if (!guidedSignalAction) return;
+    const guidedSignal = enrichedSignals.find(signal => signal.id === guidedSignalAction.signalId);
+    if (!guidedSignal) return;
+
+    if (guidedSignalAction.focusTarget === 'signal-list') {
+      setFullAssessmentOpen(false);
+      onAssessmentWorkspaceChange?.(null);
+      setSelectedSignal(null);
+      const frame = window.requestAnimationFrame(() => {
+        const target = Array.from(document.querySelectorAll<HTMLElement>('[data-tour-target="recommended-signal-action"]'))
+          .find(element => {
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+        const focusable = target?.matches('button, [tabindex], [role="button"]')
+          ? target
+          : target?.closest<HTMLElement>('button, [tabindex], [role="button"]');
+        focusable?.focus({ preventScroll: true });
+        target?.scrollIntoView({
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        });
+        onGuidedSignalActionHandled?.(guidedSignalAction.requestId);
+      });
+
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    const shouldOpenAssessment = guidedSignalAction.focusTarget === 'open-assessment'
+      && completedRecord?.signalId === guidedSignal.id;
+    setFullAssessmentOpen(shouldOpenAssessment);
+    onAssessmentWorkspaceChange?.(shouldOpenAssessment ? guidedSignal.id : null);
+    setSelectedSignal(guidedSignal);
+    onSignalSelected?.(guidedSignal.id);
+    const frame = window.requestAnimationFrame(() => {
+      const targetId = shouldOpenAssessment
+        ? 'assessment-report-inclusion'
+        : guidedSignalAction.focusTarget === 'investigation'
+        ? 'evidence-grounded-investigation'
+        : guidedSignalAction.focusTarget === 'assessment-summary'
+          ? 'open-full-assessment'
+          : `signal-detail-${guidedSignal.id}`;
+      const target = document.getElementById(targetId);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      });
+      onGuidedSignalActionHandled?.(guidedSignalAction.requestId);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [guidedSignalAction, enrichedSignals, completedRecord, onAssessmentWorkspaceChange, onGuidedSignalActionHandled, onSignalSelected]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {
+    setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
     setSelectedSignal(sig);
+    onSignalSelected?.(sig.id);
   };
 
   // Status modifier functions (Simulating real integration/workflow status persistence)
@@ -796,6 +868,32 @@ export default function SuspiciousSignals({
     }
   };
 
+  const handleOpenFullAssessment = () => {
+    if (!completedRecord) return;
+    setFullAssessmentOpen(true);
+    onAssessmentWorkspaceChange?.(completedRecord.signalId);
+  };
+
+  const handleCloseFullAssessment = () => {
+    setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
+    window.requestAnimationFrame(() => fullAssessmentTriggerRef.current?.focus());
+  };
+
+  const handleAssessmentInclusion = (includedInReport: boolean) => {
+    if (!completedRecord) return;
+    onInvestigationInclusionChange(
+      { selectedEvidenceId, signalId: completedRecord.signalId, packetIdentity: completedRecord.packetIdentity },
+      includedInReport,
+    );
+  };
+
+  const handleRerunFromFullAssessment = () => {
+    setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
+    void handleInvestigate();
+  };
+
   // Filter computation
   const filteredSignals = enrichedSignals.filter(sig => {
     // Tab category filter
@@ -871,6 +969,22 @@ export default function SuspiciousSignals({
     }
   };
 
+  if (fullAssessmentOpen && completedRecord) {
+    return (
+      <EvidenceGroundedAssessment
+        record={completedRecord}
+        flows={flows}
+        events={events}
+        onBack={handleCloseFullAssessment}
+        onInclusionChange={handleAssessmentInclusion}
+        onInspectFlow={onNavigateToFlows}
+        onInspectEvent={onNavigateToEvent}
+        onOpenReport={onOpenReport}
+        onRerun={handleRerunFromFullAssessment}
+      />
+    );
+  }
+
   return (
     <div className="space-y-5 font-sans">
       
@@ -878,7 +992,7 @@ export default function SuspiciousSignals({
       <div className="pb-3 border-b border-border-subtle">
         <h1 className="text-xl font-bold tracking-tight text-text-primary">Signals & observations</h1>
         <p className="text-xs text-text-muted mt-0.5">
-          Review detections from deterministic analysis and custom rules. Validate findings and add important items to your report.
+          Review deterministic signals, inspect exact relationships, and explicitly add independently reviewed findings to the report.
         </p>
       </div>
 
@@ -973,7 +1087,7 @@ export default function SuspiciousSignals({
                   <button 
                     onClick={() => {
                       const csvRows = ['id,title,severity,confidence,category,status,firstSeen'];
-                      enrichedSignals.forEach(s => csvRows.push(`"${s.id}","${s.title}","${s.severity}","${s.confidenceScore}%","${s.category}","${s.status}","${s.firstSeenTime}"`));
+                      enrichedSignals.forEach(s => csvRows.push(`"${s.id}","${s.title}","${s.severity}","${s.confidence}","${s.category}","${s.status}","${s.firstSeenTime}"`));
                       const blob = new Blob([csvRows.join('\n')], {type: 'text/csv'});
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
@@ -1045,6 +1159,7 @@ export default function SuspiciousSignals({
                     id={`signal-card-${sig.id}`}
                     key={sig.id}
                     type="button"
+                    data-tour-target={recommendedSignalId === sig.id ? 'recommended-signal-action' : undefined}
                     onClick={() => handleSelectSignal(sig)}
                     className={`w-full text-left p-4 transition-all cursor-pointer ${
                       isSelected ? 'bg-accent-soft border-l-4 border-accent-primary' : 'hover:bg-surface-muted/40 border-l-4 border-transparent'
@@ -1065,6 +1180,11 @@ export default function SuspiciousSignals({
                           <div className="font-semibold text-text-primary text-xs leading-snug line-clamp-2" title={sig.title}>
                             {sig.title}
                           </div>
+                          {recommendedSignalId === sig.id && (
+                            <span className="mt-1 inline-flex rounded border border-accent-primary/20 bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent-primary">
+                              Investigation ready
+                            </span>
+                          )}
                           <div className="text-[11px] text-text-muted mt-0.5 line-clamp-1" title={sig.subtitle}>
                             {sig.subtitle}
                           </div>
@@ -1089,7 +1209,7 @@ export default function SuspiciousSignals({
                       </div>
                       <div className="space-y-1">
                         <span className="block text-text-muted font-bold uppercase tracking-wider">Confidence</span>
-                        <span className="font-mono text-text-primary font-semibold">{sig.confidenceScore}%</span>
+                        <span className="font-mono text-text-primary font-semibold uppercase">{sig.confidence}</span>
                       </div>
                       <div className="space-y-1">
                         <span className="block text-text-muted font-bold uppercase tracking-wider">Related flows</span>
@@ -1148,7 +1268,17 @@ export default function SuspiciousSignals({
                       <tr
                         id={`signal-row-${sig.id}`}
                         key={sig.id}
+                        data-tour-target={recommendedSignalId === sig.id ? 'recommended-signal-action' : undefined}
                         onClick={() => handleSelectSignal(sig)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Review signal ${sig.title}`}
+                        aria-pressed={isSelected}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return;
+                          event.preventDefault();
+                          handleSelectSignal(sig);
+                        }}
                         className={`hover:bg-surface-muted/50 cursor-pointer transition-all ${
                           isSelected ? 'bg-accent-soft font-medium' : ''
                         }`}
@@ -1167,6 +1297,11 @@ export default function SuspiciousSignals({
                             </span>
                             <div>
                               <div className="font-semibold text-text-primary text-xs leading-snug line-clamp-2" title={sig.title}>{sig.title}</div>
+                              {recommendedSignalId === sig.id && (
+                                <span className="mt-1 inline-flex rounded border border-accent-primary/20 bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent-primary">
+                                  Investigation ready
+                                </span>
+                              )}
                               <div className="text-[11px] text-text-muted mt-0.5 line-clamp-1" title={sig.subtitle}>{sig.subtitle}</div>
                             </div>
                           </div>
@@ -1182,12 +1317,7 @@ export default function SuspiciousSignals({
 
                         {/* Confidence indicator column */}
                         <td className="py-3.5 px-4 whitespace-nowrap min-w-[95px]">
-                          <div className="space-y-1 w-16">
-                            <div className="font-mono text-[11px] text-text-primary font-semibold">{sig.confidenceScore}%</div>
-                            <div className="w-16 h-1 bg-surface-muted rounded-full overflow-hidden">
-                              <div className="bg-accent-primary h-full" style={{ width: `${sig.confidenceScore}%` }} />
-                            </div>
-                          </div>
+                          <span className="font-mono text-[11px] font-semibold uppercase text-text-primary">{sig.confidence}</span>
                         </td>
 
                         {/* Category column */}
@@ -1301,7 +1431,7 @@ export default function SuspiciousSignals({
 
         {/* Selected Finding Detail Sidebar */}
         {selectedSignal && (
-          <div className="w-full bg-surface rounded-2xl border border-border-subtle p-4 space-y-4 shadow-lg h-fit xl:sticky xl:top-[84px] xl:max-h-[calc(100vh-140px)] overflow-y-auto animate-in slide-in-from-right duration-200 order-1 xl:order-none">
+          <div id={`signal-detail-${selectedSignal.id}`} tabIndex={-1} className="w-full scroll-mt-4 bg-surface rounded-2xl border border-border-subtle p-4 space-y-4 shadow-lg h-fit xl:sticky xl:top-[84px] xl:max-h-[calc(100vh-140px)] overflow-y-auto animate-in slide-in-from-right duration-200 order-1 xl:order-none focus:outline-none focus:ring-2 focus:ring-accent-primary/30">
             
             {/* Title Block & Close Action */}
             <div className="flex justify-between items-start pb-2.5 border-b border-border-subtle">
@@ -1322,6 +1452,11 @@ export default function SuspiciousSignals({
               <h3 className="text-xs font-bold text-text-primary leading-snug">
                 {selectedSignal.title}
               </h3>
+              {recommendedSignalId === selectedSignal.id && (
+                <span className="inline-flex rounded border border-accent-primary/20 bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent-primary">
+                  Investigation ready
+                </span>
+              )}
               
               <div className="flex flex-wrap items-center gap-1.5">
                 {/* Severity Badge */}
@@ -1344,7 +1479,7 @@ export default function SuspiciousSignals({
 
                 {/* Confidence Badge */}
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-[9.5px] font-bold bg-surface-muted border border-border-subtle text-text-secondary">
-                  Confidence: {selectedSignal.confidenceScore}%
+                  Confidence: {selectedSignal.confidence}
                 </span>
 
                 {/* Status Badge */}
@@ -1359,14 +1494,6 @@ export default function SuspiciousSignals({
               </div>
             </div>
 
-            {/* Finding Summary Section */}
-            <div className="space-y-1.5 py-1 border-b border-border-subtle pb-3">
-              <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Finding summary</h4>
-              <p className="text-[11px] text-text-secondary leading-relaxed">
-                {FINDING_SUMMARIES[selectedSignal.id] || `An observation of ${selectedSignal.category.toLowerCase()} was recorded for this host. Review the observed evidence and corresponding telemetry below.`}
-              </p>
-            </div>
-
             {/* Observed Evidence Section - structured with compact table-like fields */}
             <div className="space-y-2 py-1 border-b border-border-subtle pb-3">
               <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Observed evidence</h4>
@@ -1374,36 +1501,13 @@ export default function SuspiciousSignals({
                 {redactSensitive(selectedSignal.observedEvidence)}
               </p>
 
-              {/* Structured Key/Value Rows */}
-              <div className="bg-surface-muted/20 border border-border-subtle/50 rounded-xl overflow-hidden divide-y divide-border-subtle/30 text-[10px] mt-2">
-                <div className="flex justify-between items-center px-3 py-1.5">
-                  <span className="text-text-muted">Source host</span>
-                  <span className="font-mono text-text-primary font-semibold">10.0.0.15</span>
-                </div>
-
-                <div className="flex justify-between items-center px-3 py-1.5">
-                  <span className="text-text-muted">Target / Destination</span>
-                  <span className="font-mono text-text-primary font-semibold text-right truncate max-w-[200px]" title={selectedSignal.observedSnippet}>
-                    {redactSensitive(selectedSignal.observedSnippet)}
-                  </span>
-                </div>
-
-                {selectedSignal.metrics && selectedSignal.metrics.map((m, idx) => (
-                  <div key={idx} className="flex justify-between items-center px-3 py-1.5">
-                    <span className="text-text-muted">{m.label}</span>
-                    <span className="font-mono text-text-primary font-semibold text-right truncate max-w-[200px]" title={m.value}>
-                      {redactSensitive(m.value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
             </div>
 
             {/* Analyst Interpretation - neutral & forensic */}
             <div className="space-y-1.5 py-1 border-b border-border-subtle pb-3">
               <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Analyst interpretation</h4>
               <p className="text-[11px] leading-relaxed text-text-secondary">
-                {ANALYST_INTERPRETATIONS[selectedSignal.id] || selectedSignal.interpretation}
+                {selectedSignal.interpretation || 'No deterministic interpretation was recorded.'}
               </p>
             </div>
 
@@ -1414,7 +1518,7 @@ export default function SuspiciousSignals({
                 <span>What this does NOT prove</span>
               </h4>
               <p className="text-[11px] text-text-secondary leading-relaxed">
-                {WHAT_IT_DOES_NOT_PROVE[selectedSignal.id] || "This observation does not confirm endpoint compromise or unauthorized activity on its own. Similar patterns can also result from legitimate services or resolver behaviors."}
+                {selectedSignal.whatItDoesNotProve || 'No limitation statement was recorded.'}
               </p>
             </div>
 
@@ -1469,7 +1573,7 @@ export default function SuspiciousSignals({
             </div>
 
             {/* Evidence-scoped AI-assisted investigation */}
-            <div className="space-y-2 border-b border-border-subtle pb-3">
+            <div id="evidence-grounded-investigation" tabIndex={-1} className="scroll-mt-4 space-y-2 border-b border-border-subtle pb-3 focus:outline-none focus:ring-2 focus:ring-accent-primary/30">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Evidence-grounded investigation</h4>
@@ -1485,9 +1589,20 @@ export default function SuspiciousSignals({
                     </div>
                   </details>
                 </div>
-                {!activeInvestigation || activeInvestigation.status === 'failure' ? (
+                {activeInvestigation?.status === 'analysing' ? (
                   <button
                     type="button"
+                    data-tour-target="investigation-trigger"
+                    disabled
+                    className="inline-flex shrink-0 cursor-wait items-center gap-1 rounded-lg bg-surface-muted px-2.5 py-1.5 text-[10px] font-bold text-text-muted"
+                  >
+                    <LoaderCircle size={11} className="animate-spin" />
+                    Analysing…
+                  </button>
+                ) : !activeInvestigation || activeInvestigation.status === 'failure' ? (
+                  <button
+                    type="button"
+                    data-tour-target="investigation-trigger"
                     onClick={handleInvestigate}
                     disabled={!investigationPacket}
                     className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-accent-primary px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-accent-primary-hover cursor-pointer disabled:bg-surface-muted disabled:text-text-muted disabled:cursor-not-allowed"
@@ -1518,35 +1633,17 @@ export default function SuspiciousSignals({
                 </div>
               )}
               {activeInvestigation?.status === 'success' && activeInvestigation.assessment && (
-                <>
-                  <InvestigationAssessmentPanel
-                    assessment={activeInvestigation.assessment}
-                    packet={activeInvestigation.packet}
-                    flows={flows}
-                    onNavigateToFlows={onNavigateToFlows}
+                completedRecord ? (
+                  <CompactInvestigationResult
+                    record={completedRecord}
+                    citationCount={assessmentCitationIds(completedRecord.assessment).length}
+                    openButtonRef={fullAssessmentTriggerRef}
+                    onOpen={handleOpenFullAssessment}
+                    onRerun={handleInvestigate}
                   />
-                  <button
-                    type="button"
-                    disabled={!completedRecord}
-                    onClick={() => {
-                      if (!completedRecord) return;
-                      onInvestigationInclusionChange(
-                        { selectedEvidenceId, signalId: completedRecord.signalId, packetIdentity: completedRecord.packetIdentity },
-                        !completedRecord.includedInReport,
-                      );
-                    }}
-                    className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${completedRecord?.includedInReport ? 'border-status-success/30 bg-status-success/10 text-status-success' : 'border-accent-primary bg-accent-primary text-white hover:bg-accent-primary-hover'}`}
-                  >
-                    {completedRecord?.includedInReport ? <><Check size={11} /> Included in report draft — Remove from report</> : <><Clipboard size={11} /> Add AI-assisted assessment to report</>}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleInvestigate}
-                    className="inline-flex items-center gap-1 text-[9px] font-semibold text-accent-primary hover:text-accent-primary-hover cursor-pointer"
-                  >
-                    <RotateCcw size={9} /> Run again with current referenced evidence
-                  </button>
-                </>
+                ) : (
+                  <div className="rounded-lg border border-border-subtle bg-surface-muted/40 p-2 text-[10px] text-text-muted">The completed assessment could not be retained for this evidence identity.</div>
+                )
               )}
             </div>
 
@@ -1555,16 +1652,7 @@ export default function SuspiciousSignals({
               <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
                 Recommended defensive checks
               </h4>
-              <ul className="text-[11px] text-text-secondary leading-relaxed space-y-1.5 list-disc pl-4.5">
-                {(DEFENSIVE_CHECKS[selectedSignal.id] || [
-                  'Confirm whether the destination/domain is expected.',
-                  'Review DNS query logs for surrounding activity.',
-                  'Compare with endpoint process or scheduled task telemetry.',
-                  'Add validated findings to the report.'
-                ]).map((check, idx) => (
-                  <li key={idx} className="marker:text-text-muted">{check}</li>
-                ))}
-              </ul>
+              <p className="text-[11px] leading-relaxed text-text-secondary">{selectedSignal.recommendedDefensiveCheck || 'No defensive check was recorded.'}</p>
             </div>
 
             {/* Workflow Action Buttons at the bottom */}

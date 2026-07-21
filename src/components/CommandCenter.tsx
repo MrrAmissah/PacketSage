@@ -6,38 +6,36 @@ import {
   Globe,
   Database,
   Cpu,
-  AlertCircle,
-  CheckCircle,
   FileText,
   ShieldCheck,
-  Shield,
   ChevronRight,
-  ArrowRight,
   Lock,
   CheckCircle2,
-  Clock,
-  HelpCircle,
   AlertTriangle,
   Calendar,
-  HardDrive
+  HardDrive,
+  RotateCcw,
 } from 'lucide-react';
 import { ParsedResult } from '../lib/parser';
-import { PacketEvent } from '../types';
+import { commandCenterLimitation, observedEventDescription } from '../lib/commandCenterPresentation';
+import type { InvestigationStatus, InvestigationStatusTone, JudgePathAction } from '../lib/judgePath';
 import InfoPopover from './InfoPopover';
 
 interface CommandCenterProps {
   data: ParsedResult | null;
   onNavigate: (tab: string) => void;
+  investigationStatus: InvestigationStatus;
+  onPrimaryAction(action: JudgePathAction): void;
+  onReplayTour?: () => void;
 }
 
-// Format/clean signal titles to be highly forensic and quiet
-const cleanSignalTitle = (title: string) => {
-  if (title.includes('DNS Lookups') || title.includes('dnsbeacon')) return 'Possible periodic DNS pattern';
-  if (title.includes('Cleartext Binary') || title.includes('cleartext-download')) return 'Cleartext binary transfer observed';
-  if (title.includes('Suspicious Port') || title.includes('unusualport')) return 'External destination with repeated outbound connections';
-  if (title.includes('Port Scan') || title.includes('portscan')) return 'Possible sequential port scanning';
-  if (title.includes('Data Volume') || title.includes('dataspike')) return 'Large outbound data transmission requires review';
-  return title;
+const STATUS_ICON_CLASS = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-sm';
+const STATUS_ICON_TONE: Record<InvestigationStatusTone, string> = {
+  blue: 'bg-blue-600',
+  indigo: 'bg-indigo-600',
+  amber: 'bg-amber-500',
+  green: 'bg-emerald-600',
+  slate: 'bg-slate-500',
 };
 
 const formatUploadedDate = (dateStr: string) => {
@@ -64,7 +62,9 @@ const formatSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
 
-export default function CommandCenter({ data, onNavigate }: CommandCenterProps) {
+const endpoint = (ip: string, port: number) => `${ip.includes(':') ? `[${ip}]` : ip}:${port > 0 ? port : 'unknown'}`;
+
+export default function CommandCenter({ data, onNavigate, investigationStatus, onPrimaryAction, onReplayTour }: CommandCenterProps) {
   if (!data) {
     return (
       <div id="cmd-empty" className="flex flex-col items-center justify-center py-24 text-center font-sans">
@@ -73,7 +73,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
         </div>
         <h3 className="text-sm font-semibold text-text-primary mb-1">No network evidence loaded</h3>
         <p className="text-text-secondary max-w-sm text-xs mb-6 leading-relaxed">
-          To begin your network forensics investigation, import standard log exports, paste raw structured summaries, or load our pre-configured demo network incident.
+          Import a supported capture or structured export, or load the guided defensive-analysis sample.
         </p>
         <button
           id="btn-nav-import"
@@ -86,17 +86,18 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
     );
   }
 
-  const { evidence, events, flows, dns, http, tls, signals, protocolStats } = data;
+  const { evidence, events, flows, http, signals, protocolStats } = data;
   const [hoveredProtocol, setHoveredProtocol] = React.useState<number | null>(null);
   const [metric, setMetric] = React.useState<'bytes' | 'events'>('bytes');
   const [timeBucket, setTimeBucket] = React.useState<'1m' | '5m' | 'auto'>('auto');
   const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
 
   // Compute custom chart segments exactly like ProtocolIntelligence (concentric donut)
+  const observedProtocolStats = React.useMemo(() => protocolStats.filter(stat => stat.count > 0), [protocolStats]);
   const donutSegments = React.useMemo(() => {
     let currentOffset = 0;
     const totalCircumference = 314.16; // 2 * PI * 50 = 314.16
-    return protocolStats.map((stat, idx) => {
+    return observedProtocolStats.map((stat) => {
       const percentage = stat.percentage;
       const strokeLength = (percentage / 100) * totalCircumference;
       const strokeOffset = totalCircumference - currentOffset;
@@ -118,15 +119,13 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
         color
       };
     });
-  }, [protocolStats]);
+  }, [observedProtocolStats]);
 
   // Compute forensic stats
   const uniqueSrcIps = Array.from(new Set(events.map(e => e.sourceIp)));
   const uniqueDstIps = Array.from(new Set(events.map(e => e.destinationIp)));
   const uniqueEndpoints = Array.from(new Set([...uniqueSrcIps, ...uniqueDstIps]));
-  const highRiskSignals = signals.filter(s => s.severity === 'high').length;
   const cleartextCount = http.filter(h => h.cleartext).length;
-
   const dominantProto = React.useMemo(() => {
     if (!donutSegments || donutSegments.length === 0) return 'None';
     const sorted = [...donutSegments].sort((a, b) => b.percentage - a.percentage);
@@ -145,12 +144,12 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
     return { ip: sorted[0][0], pct: topPct };
   }, [events]);
 
-  const isDemo = evidence.name.toLowerCase().includes('recon') || evidence.name.toLowerCase().includes('demo') || evidence.name.toLowerCase().includes('sample') || evidence.name.toLowerCase().includes('compromised');
+  const isDemo = evidence.parseMode === 'demo';
 
   // Observed Traffic Activity timeline data computations
   const chartData = React.useMemo(() => {
     if (!events || events.length === 0) return [];
-    
+
     const parsedEvents = events
       .map(evt => ({
         time: new Date(evt.timestamp).getTime(),
@@ -196,13 +195,19 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
       }
     }
 
+    const maxBuckets = 64;
+    if (durationMs > 0 && Math.ceil(durationMs / intervalMs) + 1 > maxBuckets) {
+      intervalMs = Math.ceil(durationMs / (maxBuckets - 1));
+    }
     const buckets: { timeLabel: string; events: number; bytes: number; timestamp: number }[] = [];
-    const numBuckets = Math.max(1, Math.ceil(durationMs / intervalMs)) + 1;
-    
+    const numBuckets = durationMs <= 0
+      ? 1
+      : Math.min(maxBuckets, Math.max(1, Math.ceil(durationMs / intervalMs)) + 1);
+
     for (let i = 0; i < numBuckets; i++) {
       const bucketTime = start + i * intervalMs;
       const dateObj = new Date(bucketTime);
-      
+
       const timeLabel = dateObj.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
@@ -245,7 +250,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
 
     return chartData.map((d, idx) => {
       const val = metric === 'bytes' ? d.bytes : d.events;
-      const x = paddingLeft + (idx / (chartData.length - 1)) * w;
+      const x = paddingLeft + (idx / Math.max(1, chartData.length - 1)) * w;
       const y = paddingTop + h - (val / maxVal) * h;
       return { x, y, data: d, val };
     });
@@ -268,10 +273,10 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
     if (metric === 'bytes') {
       if (val >= 1024 * 1024) return `${(val / (1024 * 1024)).toFixed(1)} MB`;
       if (val >= 1024) return `${(val / 1024).toFixed(1)} KB`;
-      return `${val} B`;
+      return `${Math.round(val)} B`;
     } else {
       if (val >= 1000) return `${(val / 1000).toFixed(1)}k`;
-      return `${val}`;
+      return Number.isInteger(val) ? `${val}` : val.toFixed(1);
     }
   };
 
@@ -299,7 +304,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
     const ticks = [];
     const numTicks = Math.min(5, chartData.length);
     const step = Math.max(1, Math.floor(chartData.length / (numTicks - 1)));
-    
+
     for (let i = 0; i < chartData.length; i += step) {
       ticks.push(i);
     }
@@ -312,13 +317,13 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
-    
+
     const clientX = e.clientX - rect.left;
     const viewBoxX = (clientX / rect.width) * 800;
 
     const paddingLeft = 60;
     const w = 720;
-    
+
     if (viewBoxX < paddingLeft || viewBoxX > paddingLeft + w || svgPoints.length === 0) {
       setHoveredIndex(null);
       return;
@@ -334,50 +339,12 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
     setHoveredIndex(index);
   };
 
-  // Format event info to match the clean forensic timeline reference
-  const getFormattedEventInfo = (evt: PacketEvent) => {
-    const infoLower = evt.info.toLowerCase();
-    const isDns = evt.service === 'DNS' || evt.protocol === 'DNS' || infoLower.includes('dns') || infoLower.includes('query');
-    const isHttp = evt.service === 'HTTP' || infoLower.includes('http');
-    const isTls = evt.service === 'TLS' || evt.service === 'HTTPS' || infoLower.includes('tls') || infoLower.includes('handshake');
-
-    if (isDns) {
-      const parts = evt.info.split(' ');
-      const domain = parts[parts.length - 1] || 'api.github.com';
-      return `DNS query: DESKTOP-25KH -> ${evt.destinationIp} for ${domain}`;
-    }
-    if (isTls) {
-      return `TLSv1.3 handshake: DESKTOP-25KH -> ${evt.destinationIp}:${evt.destinationPort}`;
-    }
-    if (isHttp) {
-      return `HTTP POST: DESKTOP-25KH -> ${evt.destinationIp}:${evt.destinationPort} (${evt.length.toLocaleString()} bytes)`;
-    }
-    return `TCP connection established: DESKTOP-25KH -> ${evt.destinationIp}:${evt.destinationPort}`;
-  };
-
-  // Helper to resolve borders on the horizontal metric strip responsively
-  const getBorderClass = (idx: number) => {
-    let classes = "";
-    // Mobile view (2 columns)
-    if (idx % 2 !== 0) classes += " border-l border-border-subtle/40";
-    if (idx >= 2) classes += " border-t border-border-subtle/40";
-
-    // Medium view overrides (3 columns)
-    classes += " sm:border-t-0 sm:border-l-0"; // reset mobile borders on sm
-    if (idx % 3 !== 0) classes += " sm:border-l sm:border-border-subtle/40";
-    if (idx >= 3) classes += " sm:border-t sm:border-border-subtle/40";
-
-    // Large desktop overrides (6 columns)
-    classes += " xl:border-t-0 xl:border-l xl:first:border-l-0 xl:border-border-subtle/40";
-    return classes;
-  };
-
   return (
-    <div id="command-center-workspace" className="font-sans w-full max-w-[1440px] mx-auto px-6 md:px-8 py-6 space-y-6">
-      
+    <div id="command-center-workspace" className="font-sans w-full max-w-[1440px] mx-auto px-6 pb-6 md:px-8 space-y-6">
+
       {/* Top Context Area: Full Width */}
       <div className="space-y-6">
-        
+
         {/* A. Evidence Header (Compact flat header area, no card) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
           <div className="flex items-start gap-3.5 min-w-0">
@@ -385,13 +352,13 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
             <div className="p-3 bg-blue-600 text-white dark:bg-blue-500 rounded-xl shrink-0 shadow-sm mt-1 flex items-center justify-center">
               <FileText size={22} className="stroke-[2.5]" />
             </div>
-            
+
             <div className="space-y-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Forensic workspace</span>
                 {isDemo && (
                   <span className="px-2 py-0.5 bg-status-warning-bg text-status-warning border border-status-warning/15 text-[9px] font-semibold rounded-full uppercase tracking-wider select-none">
-                    Sample incident dataset
+                    Generated defensive sample
                   </span>
                 )}
               </div>
@@ -411,15 +378,22 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 <span className="text-border-subtle/80 font-light">·</span>
                 <span className="flex items-center gap-1">
                   <Activity size={11} className="text-text-muted shrink-0" />
-                  {events.length.toLocaleString()} packets
+                  {events.length.toLocaleString()} normalized events
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-status-success-bg border border-status-success/10 px-3 py-1 rounded-full h-fit shadow-sm select-none flex-nowrap shrink-0 self-start sm:self-center">
-            <CheckCircle2 size={13} className="text-status-success shrink-0" />
-            <span className="text-xs text-status-success font-semibold whitespace-nowrap">Analysis complete</span>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-center sm:justify-end">
+            <div className="flex h-fit flex-nowrap items-center gap-1.5 rounded-full border border-status-success/10 bg-status-success-bg px-3 py-1 shadow-sm select-none">
+              <CheckCircle2 size={13} className="text-status-success shrink-0" />
+              <span className="text-xs text-status-success font-semibold whitespace-nowrap">Evidence decoded</span>
+            </div>
+            {isDemo && onReplayTour && (
+              <button type="button" data-testid="guided-tour-replay" onClick={onReplayTour} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-[10px] font-semibold text-text-muted shadow-sm hover:bg-surface-muted hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2">
+                <RotateCcw aria-hidden="true" size={11} /> Replay tour
+              </button>
+            )}
           </div>
         </div>
 
@@ -482,8 +456,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </div>
               </div>
               <div className="flex items-baseline justify-between mt-1 min-w-0">
-                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono shrink-0">{protocolStats.length}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Identified types</span>
+                <span className="text-lg font-bold text-text-primary tracking-tight tabular-nums font-mono shrink-0">{observedProtocolStats.length}</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Observed types</span>
               </div>
             </div>
 
@@ -501,7 +475,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 <span className={`text-lg font-bold tracking-tight tabular-nums font-mono shrink-0 ${
                   signals.length > 0 ? "text-status-danger" : "text-text-primary"
                 }`}>{signals.length}</span>
-                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Requiring review</span>
+                <span className="text-[9px] text-text-muted font-normal block truncate ml-1 min-w-0">Deterministic observations</span>
               </div>
             </div>
 
@@ -531,10 +505,10 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
 
       {/* Two-Column Dashboard Layout below */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
-        
+
         {/* Main Left Column */}
         <div className="space-y-6 min-w-0">
-          
+
           {/* C. Observed Traffic Activity Chart */}
         <div className="p-5 bg-surface border border-border-subtle rounded-xl shadow-sm space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 select-none">
@@ -550,7 +524,9 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
               {/* Metric Select */}
               <div className="flex bg-surface-muted border border-border-subtle rounded-lg p-0.5 h-7">
                 <button
+                  type="button"
                   onClick={() => setMetric('bytes')}
+                  aria-pressed={metric === 'bytes'}
                   className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all uppercase tracking-wider cursor-pointer ${
                     metric === 'bytes'
                       ? 'bg-surface text-accent-primary shadow-xs'
@@ -560,21 +536,25 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                   Bytes
                 </button>
                 <button
+                  type="button"
                   onClick={() => setMetric('events')}
+                  aria-pressed={metric === 'events'}
                   className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all uppercase tracking-wider cursor-pointer ${
                     metric === 'events'
                       ? 'bg-surface text-accent-primary shadow-xs'
                       : 'text-text-muted hover:text-text-primary'
                   }`}
                 >
-                  Packets
+                  Events
                 </button>
               </div>
 
               {/* Interval Select */}
               <div className="flex bg-surface-muted border border-border-subtle rounded-lg p-0.5 h-7">
                 <button
+                  type="button"
                   onClick={() => setTimeBucket('1m')}
+                  aria-pressed={timeBucket === '1m'}
                   className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all uppercase tracking-wider cursor-pointer ${
                     timeBucket === '1m'
                       ? 'bg-surface text-accent-primary shadow-xs'
@@ -584,7 +564,9 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                   1m
                 </button>
                 <button
+                  type="button"
                   onClick={() => setTimeBucket('5m')}
+                  aria-pressed={timeBucket === '5m'}
                   className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all uppercase tracking-wider cursor-pointer ${
                     timeBucket === '5m'
                       ? 'bg-surface text-accent-primary shadow-xs'
@@ -594,7 +576,9 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                   5m
                 </button>
                 <button
+                  type="button"
                   onClick={() => setTimeBucket('auto')}
+                  aria-pressed={timeBucket === 'auto'}
                   className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all uppercase tracking-wider cursor-pointer ${
                     timeBucket === 'auto'
                       ? 'bg-surface text-accent-primary shadow-xs'
@@ -619,6 +603,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 <svg
                   viewBox="0 0 800 200"
                   className="w-full h-full overflow-visible"
+                  role="img"
+                  aria-label={`Observed traffic activity across ${chartData.length} bounded time intervals`}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={() => setHoveredIndex(null)}
                 >
@@ -748,7 +734,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                       <span>
                         {metric === 'bytes'
                           ? formatSize(svgPoints[hoveredIndex].val)
-                          : `${svgPoints[hoveredIndex].val.toLocaleString()} packets`}
+                          : `${svgPoints[hoveredIndex].val.toLocaleString()} events`}
                       </span>
                     </div>
                   </div>
@@ -760,12 +746,12 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
 
         {/* D. Observed Traffic Distribution Panels */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
+
           {/* Protocol Composition */}
           <div className="p-5 bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col justify-between min-h-[200px]">
             <div className="space-y-3.5">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted block select-none">Protocol composition</span>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-[115px_1fr] gap-4 items-center">
                 {/* Modern Interactive SVG Donut Chart */}
                 <div className="relative w-24 h-24 shrink-0 flex items-center justify-center select-none mx-auto sm:mx-0">
@@ -854,10 +840,10 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
             </div>
           </div>
 
-          {/* Top Internal Transmitters */}
+          {/* Top Observed Transmitters */}
           <div className="p-5 bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col justify-between min-h-[200px]">
             <div className="space-y-3.5">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted block select-none">Top internal endpoint transmitters</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted block select-none">Top observed endpoint transmitters</span>
               <div className="space-y-2">
                 {/* Headers */}
                 <div className="grid grid-cols-[105px_1fr_80px_50px] items-center gap-3 text-[10px] font-semibold text-text-muted uppercase tracking-wider border-b border-border-subtle/40 pb-1.5 font-sans">
@@ -878,8 +864,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                   .map(([ip, bytes], i, arr) => {
                     const maxBytes = arr[0][1];
                     const widthPercent = maxBytes > 0 ? (bytes / maxBytes) * 100 : 0;
-                    const formattedBytes = bytes > 1024 * 1024 
-                      ? `${(bytes / (1024 * 1024)).toFixed(2)} MB` 
+                    const formattedBytes = bytes > 1024 * 1024
+                      ? `${(bytes / (1024 * 1024)).toFixed(2)} MB`
                       : `${(bytes / 1024).toFixed(2)} KB`;
                     const share = ((bytes / arr.reduce((sum, item) => sum + item[1], 0)) * 100).toFixed(1);
                     return (
@@ -909,8 +895,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
             <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
               Signals requiring review <span className="text-text-muted font-normal text-xs font-sans">(preview)</span>
             </h3>
-            <button 
-              onClick={() => onNavigate('signals')} 
+            <button
+              onClick={() => onNavigate('signals')}
               className="text-xs text-accent-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
             >
               View all signals & observations <ChevronRight size={13} />
@@ -929,22 +915,20 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle/40">
-                {signals.slice(0, 3).map((sig, i) => {
-                  const cleanedTitle = cleanSignalTitle(sig.title);
+                {signals.slice(0, 3).map((sig) => {
                   return (
-                    <tr 
-                      key={i} 
-                      onClick={() => onNavigate('signals')} 
-                      className="hover:bg-surface-muted/30 cursor-pointer transition-colors group"
+                    <tr
+                      key={sig.id}
+                      className="hover:bg-surface-muted/30 transition-colors group"
                     >
                       <td className="py-3 px-3 font-medium text-text-primary">
-                        <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => onNavigate('signals')} className="flex items-center gap-2 text-left">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${
-                            sig.severity === 'high' ? 'bg-status-danger' : 
+                            sig.severity === 'high' ? 'bg-status-danger' :
                             sig.severity === 'medium' ? 'bg-status-warning' : 'bg-status-info'
                           }`} />
-                          <span className="truncate max-w-[180px] md:max-w-xs">{cleanedTitle}</span>
-                        </div>
+                          <span className="truncate max-w-[180px] md:max-w-xs">{sig.title}</span>
+                        </button>
                       </td>
                       <td className="py-3 px-2">
                         <span className={`px-2.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${
@@ -973,6 +957,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                     </tr>
                   );
                 })}
+                {signals.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-text-muted">No deterministic signals were generated from this evidence.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -984,8 +969,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
             <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
               Timeline preview <span className="text-text-muted font-normal text-xs font-sans">(earliest first)</span>
             </h3>
-            <button 
-              onClick={() => onNavigate('timeline')} 
+            <button
+              onClick={() => onNavigate('timeline')}
               className="text-xs text-accent-primary hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
             >
               View full incident timeline <ChevronRight size={13} />
@@ -993,20 +978,20 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
           </div>
 
           <div className="border border-border-subtle/70 rounded-xl overflow-hidden divide-y divide-border-subtle/40">
-            {events.slice(0, 4).map((evt, i) => {
+            {[...events].sort((left, right) => left.timestamp.localeCompare(right.timestamp)).slice(0, 4).map((evt) => {
               const date = new Date(evt.timestamp);
               const timeStr = `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}:${String(date.getUTCSeconds()).padStart(2, '0')}.${String(date.getUTCMilliseconds()).padStart(3, '0')}`;
-              
-              const Icon = 
+
+              const Icon =
                 evt.service === 'DNS' ? Globe :
                 evt.service === 'HTTP' ? Lock :
                 evt.service === 'HTTPS' ? Lock :
                 evt.protocol === 'TCP' ? Activity : Database;
 
-              const displayInfo = getFormattedEventInfo(evt);
+              const displayInfo = observedEventDescription(evt);
 
               return (
-                <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 text-xs bg-surface-muted/10 hover:bg-surface-muted/20 transition-colors font-mono gap-3">
+                <div key={evt.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 text-xs bg-surface-muted/10 hover:bg-surface-muted/20 transition-colors font-mono gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-text-muted tabular-nums shrink-0 font-normal">{timeStr}</span>
                     <div className="p-1 bg-surface rounded border border-border-subtle/40 text-text-muted shrink-0 select-none">
@@ -1015,9 +1000,9 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                     <span className="text-text-secondary truncate font-normal block" title={displayInfo}>{displayInfo}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-text-muted shrink-0 sm:border-l sm:border-border-subtle/40 sm:pl-3 font-normal">
-                    <span>{evt.sourceIp}:{evt.sourcePort}</span>
+                    <span>{endpoint(evt.sourceIp, evt.sourcePort)}</span>
                     <span>-&gt;</span>
-                    <span>{evt.destinationIp}:{evt.destinationPort}</span>
+                    <span>{endpoint(evt.destinationIp, evt.destinationPort)}</span>
                   </div>
                 </div>
               );
@@ -1027,140 +1012,51 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
 
       </div>
 
-      {/* Right Column: Persistent Investigation Brief Panel (Memo style) */}
+      {/* Right Column: Persistent case workflow summary */}
       <div className="w-full xl:w-[360px] shrink-0 space-y-6">
-        <div className="p-5 md:p-6 bg-surface rounded-xl border border-border-subtle shadow-sm space-y-5 h-fit xl:sticky xl:top-24">
-          
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3 select-none">
-            <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-              <FileText size={15} className="text-accent-primary" />
-              Investigation Brief
-            </h3>
-            <span className="text-[10px] text-text-muted font-bold font-mono uppercase tracking-wider">SOC MEMO</span>
-          </div>
+        <section className="h-fit space-y-4 rounded-xl border border-border-subtle bg-surface p-5 shadow-sm md:p-6 xl:sticky xl:top-24" aria-labelledby="investigation-status-title" data-testid="investigation-status">
+          <header className="border-b border-border-subtle pb-3">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-accent-primary">Persistent case summary</p>
+            <h3 id="investigation-status-title" className="mt-0.5 text-sm font-semibold text-text-primary">Investigation status</h3>
+          </header>
 
-          {/* Section 1: Current assessment */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-accent-soft text-accent-primary rounded-lg shrink-0 select-none">
-              <Shield size={16} />
-            </div>
-            <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Current assessment</span>
-              <p className="text-text-secondary leading-relaxed font-normal">
-                Traffic contains several review-worthy observations. The deterministic analysis engine has mapped key telemetry and suspicious indicators.
-              </p>
-            </div>
-          </div>
-
-          {/* Section 2: Recommended next action */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-[#0062f1] text-white rounded-lg shrink-0 select-none shadow-xs">
-              <Cpu size={16} />
-            </div>
-            <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Recommended next action</span>
-              <p className="text-text-primary font-semibold">Inspect packet flows</p>
-            </div>
-          </div>
-
-          {/* Section 3: Confidence */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-status-warning-bg/15 text-[#f59e0b] border border-[#f59e0b]/20 rounded-lg shrink-0 select-none">
-              <ShieldCheck size={16} />
-            </div>
-            <div className="space-y-1.5 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Confidence</span>
-              <span className="inline-block px-2.5 py-0.5 bg-status-warning-bg text-status-warning border border-status-warning/15 font-semibold rounded text-[10px] uppercase tracking-wider select-none">
-                Moderate
-              </span>
-            </div>
-          </div>
-
-          {/* Section 4: Report readiness */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-status-success text-white rounded-lg shrink-0 select-none shadow-xs">
-              <CheckCircle2 size={16} />
-            </div>
-            <div className="space-y-1.5 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Report readiness</span>
-              <span className="inline-block px-2.5 py-0.5 bg-status-success-bg text-status-success border border-status-success/15 font-semibold rounded text-[10px] select-none">
-                Draft can be generated
-              </span>
-            </div>
-          </div>
-
-          {/* Section 5: Limitations */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-surface-muted border border-border-subtle text-text-muted rounded-lg shrink-0 select-none">
-              <AlertTriangle size={16} />
-            </div>
-            <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Limitations</span>
-              <p className="text-text-muted leading-relaxed font-normal">
-                Demo decoder, full binary decoding pending production parser service.
-              </p>
-            </div>
-          </div>
-
-          {/* Section 6: Next analyst actions */}
-          <div className="space-y-3 pt-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Next analyst actions</span>
-            
-            <div className="space-y-2">
-              <div 
-                onClick={() => onNavigate('flows')}
-                className="flex items-start gap-3 p-2 hover:bg-surface-muted/20 rounded-lg cursor-pointer transition-colors group"
-              >
-                <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
-                  <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
+          <dl className="space-y-3" aria-live="polite">
+            {investigationStatus.items.map(item => {
+              const Icon = item.id === 'evidence' ? Database : item.id === 'signal' ? ShieldCheck : item.id === 'assessment' ? Cpu : FileText;
+              return (
+                <div key={item.id} className="flex items-center gap-3">
+                  <div data-testid="investigation-status-icon" className={`${STATUS_ICON_CLASS} ${STATUS_ICON_TONE[item.tone]}`} aria-hidden="true">
+                    <Icon size={15} />
+                  </div>
+                  <div className="min-w-0 flex-1 text-xs">
+                    <dt className="font-medium text-text-primary">{item.label}</dt>
+                    <dd className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">{item.value}</dd>
+                  </div>
                 </div>
-                <div className="space-y-0.5">
-                  <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Inspect packet flows</p>
-                  <p className="text-[10px] text-text-muted font-normal">Review conversations and payloads.</p>
-                </div>
-              </div>
+              );
+            })}
+          </dl>
 
-              <div 
-                onClick={() => onNavigate('signals')}
-                className="flex items-start gap-3 p-2 hover:bg-surface-muted/20 rounded-lg cursor-pointer transition-colors group"
-              >
-                <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
-                  <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
-                </div>
-                <div className="space-y-0.5">
-                  <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Review signals & observations</p>
-                  <p className="text-[10px] text-text-muted font-normal">Investigate and triage all flagged signals.</p>
-                </div>
-              </div>
-
-              <div 
-                onClick={() => onNavigate('signals')}
-                className="flex items-start gap-3 p-2 hover:bg-surface-muted/20 rounded-lg cursor-pointer transition-colors group"
-              >
-                <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
-                  <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
-                </div>
-                <div className="space-y-0.5">
-                  <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Investigate referenced evidence</p>
-                  <p className="text-[10px] text-text-muted font-normal">Run a bounded assessment from one signal’s exact evidence.</p>
-                </div>
-              </div>
+          <div className="flex items-start gap-3 border-t border-border-subtle/60 pt-3">
+            <div data-testid="investigation-status-icon" className={`${STATUS_ICON_CLASS} ${STATUS_ICON_TONE.slate}`} aria-hidden="true">
+              <AlertTriangle size={15} />
+            </div>
+            <div className="min-w-0 text-xs">
+              <p className="font-medium text-text-primary">Limitation</p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-text-muted">{commandCenterLimitation(evidence.parseMode)}</p>
             </div>
           </div>
 
-          {/* Action Button */}
-          <div className="pt-2">
-            <button
-              onClick={() => onNavigate('signals')}
-              className="w-full py-2 bg-transparent hover:bg-accent-soft border border-accent-primary text-accent-primary hover:text-accent-primary-hover font-semibold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm animate-pulse"
-            >
-              <FileText size={13} />
-              Open signals for investigation
-            </button>
-          </div>
-
-        </div>
+          <button
+            type="button"
+            data-testid="investigation-status-primary-action"
+            onClick={() => onPrimaryAction(investigationStatus.nextAction)}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent-primary px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-accent-primary-hover focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2"
+          >
+            {investigationStatus.nextAction.label}
+            <ChevronRight aria-hidden="true" size={13} />
+          </button>
+        </section>
       </div>
 
       </div>

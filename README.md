@@ -1,8 +1,8 @@
 # PacketSage
 
-PacketSage is a defensive network forensics sandbox for reviewing packet exports, decoded telemetry, protocol behavior, evidence-linked observations, AI-assisted analyst memos, incident timelines, and report-ready investigation notes.
+PacketSage is a defensive network forensics sandbox for reviewing packet exports, decoded telemetry, protocol behavior, evidence-linked observations, AI-assisted assessments, incident timelines, and report-ready investigation notes.
 
-It is built for security analysts, incident responders, students, and SOC operators who need a structured workspace for passive packet review. PacketSage ingests text-based packet logs, Wireshark CSVs, Suricata EVE alerts, Zeek summaries, and demo PCAP-style metadata, then reconstructs flows, highlights review-worthy observations, and helps draft evidence-bound reports.
+It is built for security analysts, incident responders, students, and SOC operators who need a structured workspace for passive packet review. PacketSage ingests raw PCAP/PCAPNG captures, text packet logs, Wireshark CSVs, Suricata EVE alerts, Zeek summaries, TShark JSON, and generated sample metadata, then reconstructs flows, highlights review-worthy observations, and helps draft evidence-bound reports.
 
 ## License & Use
 
@@ -41,13 +41,12 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
    * *DNS Log*: Reconstructs lookup types (A, AAAA, TXT, MX) and queried domains.
    * *HTTP Traffic*: Examines unencrypted HTTP requests, request URIs, User-Agents, and credential exposure.
    * *TLS Metadata*: Extracts Server Name Indications (SNI) and certificate versions to compare encrypted session behaviors without decryption.
-5. **Signals & Observations**: A deterministic rule engine that surfaces potential threat markers (e.g., scan patterns, unencrypted transfers, beaconing). Analysts can manually *Validate* or *Dismiss* these findings.
+5. **Signals & Observations**: A deterministic rule engine surfaces review-worthy patterns. Analysts can add a reviewed finding to the report or dismiss it as noise.
 6. **AI-Assisted Investigation**: Assesses one selected signal with GPT-5.6 using only its bounded, validated evidence packet. Assessments require explicit inclusion in a report draft.
 7. **Capture Overview**: Optionally asks Google Gemini for broad orientation, traffic-pattern explanation, learning perspectives, and triage questions from a bounded summary. It remains separate from evidence-linked investigation and is excluded from reports by default.
 8. **Incident Timeline**: A clean, chronological timeline of reconstructed network events based on packet timestamps, with severity filters and detail modals.
 9. **Report Builder**: Compiles deterministic findings and explicitly included assessments. A capture overview can only appear as a labelled, non-evidence-linked contextual note through explicit user action.
 10. **Packet Academy**: An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles to evaluate defensive reasoning skills.
-11. **Architecture Spec**: A transparent roadmap comparison of the current browser-side sandbox versus the planned production microservice architecture.
 
 ---
 
@@ -109,13 +108,13 @@ Open your browser and navigate to `http://localhost:3000`.
 
 ## 🗺️ Production Roadmap
 
-* **Stage 1: Forensic Sandbox Workstation (Current)**:
-  - Ephemeral browser-side workspace, text-based parser adapters, and deterministic rule engine.
+* **Current forensic workstation**:
+  - Ephemeral browser-side workspace, bounded native PCAP/PCAPNG decoder, text adapters, and deterministic rule engine.
   - Server-side GPT-5.6 evidence-scoped investigation.
   - Report Builder with print-clean layouts.
   - Built-in Packet Academy.
-* **Stage 2: Microservice-Based Binary Parser (Planned)**:
-  - Containerized parsing using `libpcap`, `tshark`, `zeek`, and `suricata`.
+* **Potential large-capture extension**:
+  - Isolated decoder workers may supplement, rather than replace, the current bounded browser decoder.
   - Secure Cloud Storage buckets with signed short-lived URLs.
 * **Stage 3: Workspace Authorization & Case Management (Planned)**:
   - Multi-tenant Firebase Authentication and Firestore persistent case storage.

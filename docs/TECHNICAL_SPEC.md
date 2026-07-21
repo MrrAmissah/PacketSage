@@ -1,6 +1,6 @@
 # PacketSage Technical Specification
 
-This document provides a detailed technical breakdown of PacketSage’s current sandbox implementation, in-memory state models, and the planned production architecture.
+This document describes PacketSage’s current bounded browser workspace, serverless parsing and AI boundaries, and in-memory state models.
 
 ---
 
@@ -98,7 +98,7 @@ export interface SuspiciousSignal {
 ## 3. Data Pipelines & Integration Flows
 
 ### 3.1 Sample Dataset Pipeline
-For demonstration and training (Packet Academy), a rich mock dataset representing a multi-stage intrusion sequence (reconnaissance, brute-force, cleartext transmission, and external beaconing) is packaged locally. Clicking "Load Sample Dataset" triggers an immediate in-memory state hydrate.
+For demonstration and training, a generated defensive-analysis dataset containing routine and review-worthy activity is packaged with PacketSage. **Load guided investigation sample** hydrates the same deterministic evidence state used by the normal workflow; it does not assert an intrusion or compromise.
 
 ### 3.2 File Upload & Copy-Paste Flow
 When a user uploads or pastes a text-based packet capture export, PacketSage loops through registered parser adapters:
@@ -110,20 +110,14 @@ When a user uploads or pastes a text-based packet capture export, PacketSage loo
 Raw `.pcap`/`.pcapng` files are decoded in the browser with bounded container, packet-count, and byte-size limits. The current decoder supports Ethernet and practical IPv4/IPv6 TCP, UDP, ICMP, and basic DNS metadata; unsupported link types and malformed or truncated captures fail without synthetic evidence.
 
 ### 3.3 Signals & Verification Persistence
-Suspicious signals are dynamically calculated by deterministic rule evaluators. The user's action to mark a signal as **Validated** or **Dismissed** updates its status property locally. This changes its visual state and updates the *Report Builder*'s checklist in real-time.
+Signals are calculated by deterministic rule evaluators. **Add finding to report** and **Dismiss noise** update local review state; running an AI investigation alone never marks a signal as reviewed.
 
 ---
 
 ## 4. Synchronization & Rendering Architecture
 
 ### 4.1 Report Builder Sync
-The Report Builder monitors global React states. Any updates to:
-* The active investigator name.
-* The parsed flows and total counts.
-* The count of validated suspicious signals.
-* Explicitly included, validated investigation records.
-* Analyst validation text notes.
-re-trigger the **Report Readiness Score** algorithm instantly.
+The Report Builder derives its document from parsed events, exact relationships, reviewed deterministic signals, explicitly included investigation records, and an independently included contextual overview. Its readiness status indicates whether reviewed or explicitly included evidence-grounded content exists; optional overview text cannot make a report evidence-ready.
 
 ### 4.2 InfoPopover Engine (Fixed Viewport Clamping)
 To solve clipping issues common to interactive dashboards (caused by tables, scroll containers, or page edges), the `InfoPopover` component uses a robust fixed-coordinate placement algorithm:
@@ -163,10 +157,10 @@ node dist/server.cjs
 
 ## 6. Current Implementation vs. Planned Production Target
 
-| Architectural Component | Current Sandbox (Stage 1) | Planned Production Target (Stage 2 & 3) |
+| Architectural Component | Current implementation | Possible future extension |
 | :--- | :--- | :--- |
-| **Parsing Location** | Browser-side (Web Worker) | Distributed, sandboxed microservices |
-| **Parsing Engine** | In-memory text-based adapters | Containerized `libpcap`, `tshark`, `zeek`, `suricata` |
+| **Parsing Location** | Raw captures in the bounded browser decoder; supported text via the serverless endpoint | Isolated workers for larger captures if required |
+| **Parsing Engine** | Native PCAP/PCAPNG metadata decoder plus CSV, Suricata, Zeek, TShark and text adapters | Additional sandboxed decoders without weakening current bounds |
 | **Data Payload Store** | Transient React and Express RAM | Encrypted Cloud Storage (GCS / S3) |
 | **Case Retention** | Volatile (lost on page reload) | Durable database persistence (Firebase/Firestore) |
 | **User Management** | None (Single Session Sandbox) | Multi-tenant Firebase Authentication |

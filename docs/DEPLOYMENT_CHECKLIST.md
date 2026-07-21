@@ -90,7 +90,7 @@ Once deployed, run these sequential verifications on the live instance:
 ### 5.1 Import Verification
 1. Access the deployment URL.
 2. Verify the **Import Evidence** panel renders and displays the authorized-use notice.
-3. Click **Load sample dataset**.
+3. Click **Load guided investigation sample**.
 4. Confirm data parses in under 2 seconds and redirects or activates the dashboard.
 
 ### 5.2 Heuristic & Signal Check
@@ -107,11 +107,11 @@ Once deployed, run these sequential verifications on the live instance:
 
 ### 5.4 Report Compiler & Print Layouts
 1. Go to the **Report Builder** tab.
-2. Check that the Report Readiness score correctly registers the validated signal and investigator details.
-3. Add custom text to the Analyst Notes field.
-4. Click **Print / Export PDF**.
-5. Confirm the print overlay displays only the structured report, hiding application navigation headers and action controls.
-6. Confirm browser/headless PDF output is not blank and contains the report title, evidence summary, findings table, analyst memo if linked, validation notes, and limitations.
+2. Confirm report readiness reflects reviewed deterministic findings and explicitly included assessments.
+3. Confirm Capture Overview remains a separately included contextual note and cannot make the report evidence-ready by itself.
+4. Click **Print / PDF**.
+5. Confirm the print view displays only the structured report, hiding application navigation headers and action controls.
+6. Confirm browser/headless PDF output is not blank and contains the report title, evidence summary, separate findings and assessment sections, exact citations, provenance, and limitations.
 
 ---
 

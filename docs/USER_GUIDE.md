@@ -1,6 +1,6 @@
 # PacketSage User Guide
 
-Welcome to the PacketSage Forensic Sandbox. This guide walks you through the core workflows of importing evidence, inspecting network protocols, validating suspicious signals, generating AI analyst drafts, and exporting professional incident reports.
+Welcome to the PacketSage Forensic Sandbox. This guide covers importing evidence, inspecting protocols, reviewing deterministic signals, running evidence-grounded investigation, optionally generating contextual orientation, and exporting a report draft.
 
 ---
 
@@ -13,7 +13,7 @@ When you first open PacketSage, the workspace is blank, awaiting network logs. Y
 |                                 CHOOSE INGEST METHOD                            |
 +---------------------------------------------------------------------------------+
 |                                                                                 |
-|  [ 1. LOAD SAMPLE DATASET ]   --> Immediate simulation of multi-stage intrusion  |
+|  [ 1. LOAD GUIDED SAMPLE ]   --> Generated routine and review-worthy activity   |
 |                                                                                 |
 |  [ 2. DRAG & DROP EXPORTS ]  --> Drop Wireshark CSVs, Suricata JSONs, Zeek TSVs  |
 |                                                                                 |
@@ -25,12 +25,12 @@ When you first open PacketSage, the workspace is blank, awaiting network logs. Y
 ### 1.1 Ingesting the Sample Dataset (Recommended for First-Time Users)
 For training or product demonstration:
 1. Navigate to the **Import Evidence** tab.
-2. Under "Load sample network incident dataset", click **Load sample dataset**.
-3. The platform will immediately hydrate the workspace with a simulated multi-stage intrusion profile (including reconnaissance scanning, credential leaks, and persistent external beaconing).
+2. Under "Guided defensive-analysis sample", click **Load guided investigation sample**.
+3. Follow the compact four-stage guide. The generated dataset contains routine and review-worthy metadata and does not establish an attack or compromise.
 
 ### 1.2 Importing Authorized Logs
 To analyze your own captures:
-1. Export your network logs as text-based summaries (e.g., File -> Export Packet Dissections -> As CSV in Wireshark; or gather your Zeek or Suricata logs).
+1. Use a supported raw PCAP/PCAPNG capture or export structured CSV, JSON, Zeek, Suricata, or TShark evidence.
 2. Confirm you have full authorization to analyze this data.
 3. Drag-and-drop the files onto the dashed import dropzone, or click **Browse Files** to select them manually.
 
@@ -74,7 +74,7 @@ The deterministic rules engine flags potential threats automatically:
 1. Go to the **Signals & Observations** tab.
 2. Select any flagged anomaly (e.g., "Abnormal DNS Beaconing Detected").
 3. Investigate the details and evidence references provided.
-4. If verified, click **Validate**. If it is standard traffic, click **Dismiss**.
+4. If independently reviewed, click **Add finding to report**. If it is standard traffic, click **Dismiss noise**.
 5. Your verification state will synchronize with the **Report Builder** immediately.
 
 ---
@@ -96,11 +96,10 @@ Open **Capture Overview** to generate broad orientation from a bounded summary o
 
 Assemble your investigation findings for stakeholders:
 1. Navigate to the **Report Builder** tab.
-2. Fill in the **Investigator Name** and confirm the **Incident Scope/Target**.
-3. Enter your independent observations under **Analyst Validation Notes**.
-4. Review the **Report Readiness panel** on the right side. Ensure key items are resolved to boost the readiness meter.
-5. Under the Report Document editor, toggle optional sections (e.g., Recommendations, Technical Limitations).
-6. Click **Print / Export PDF** in the top right. A print-optimized overlay will open, allowing you to save a clean, professional, styled paper or PDF record.
+2. Confirm reviewed deterministic findings and explicitly included assessments are listed separately.
+3. Check the contextual-overview inclusion state; it remains optional and is not evidence-linked.
+4. Review the **Report readiness** status and exact evidence IDs.
+5. Use **Preview**, **Copy Markdown**, or **Print / PDF**. Print/PDF invokes the browser's print-ready output.
 
 ---
 

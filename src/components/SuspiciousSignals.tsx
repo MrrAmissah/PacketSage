@@ -12,7 +12,6 @@ import {
   X, 
   Check, 
   AlertCircle, 
-  Clipboard, 
   Info,
   ExternalLink,
   Ban,
@@ -33,7 +32,8 @@ import {
   TlsRecord,
 } from '../types';
 import InfoPopover from './InfoPopover';
-import InvestigationAssessmentPanel from './InvestigationAssessment';
+import CompactInvestigationResult from './CompactInvestigationResult';
+import EvidenceGroundedAssessment from './EvidenceGroundedAssessment';
 import {
   buildInvestigationEvidencePacket,
   evidenceIds,
@@ -48,8 +48,8 @@ import { selectPresentedSignals } from '../lib/signalPresentation';
 import { resolveRelatedFlows } from '../lib/relatedFlows';
 import {
   completedInvestigationRecord,
-  currentInvestigationRecord,
 } from '../lib/investigationRecords';
+import { assessmentCitationIds, retainedAssessmentForContext } from '../lib/assessmentWorkspace';
 import type { GuidedSignalAction } from '../lib/judgePath';
 
 interface SuspiciousSignalsProps {
@@ -62,6 +62,7 @@ interface SuspiciousSignalsProps {
   signalStatusOverrides?: Record<string, SignalReviewStatus>;
   selectedEvidenceId: string;
   investigationRecords: InvestigationRecord[];
+  selectedSignalId?: string | null;
   recommendedSignalId?: string | null;
   guidedSignalAction?: GuidedSignalAction | null;
   onGuidedSignalActionHandled?: (requestId: number) => void;
@@ -74,6 +75,7 @@ interface SuspiciousSignalsProps {
     includedInReport: boolean,
   ) => void;
   onSignalSelected?: (signalId: string) => void;
+  onNavigateToEvent: (eventId: string) => void;
   onOpenReport: () => void;
 }
 
@@ -598,6 +600,7 @@ export default function SuspiciousSignals({
   signalStatusOverrides = EMPTY_SIGNAL_STATUS_OVERRIDES,
   selectedEvidenceId,
   investigationRecords,
+  selectedSignalId = null,
   recommendedSignalId = null,
   guidedSignalAction = null,
   onGuidedSignalActionHandled,
@@ -607,11 +610,14 @@ export default function SuspiciousSignals({
   onInvestigationInvalidated,
   onInvestigationInclusionChange,
   onSignalSelected,
+  onNavigateToEvent,
   onOpenReport,
 }: SuspiciousSignalsProps) {
   // Rich local state derived only from parser/rule-engine signals.
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
+  const [fullAssessmentOpen, setFullAssessmentOpen] = useState(false);
+  const fullAssessmentTriggerRef = useRef<HTMLButtonElement>(null);
   const [investigationState, setInvestigationState] = useState<{
     signalId: string;
     packetIdentity: string;
@@ -640,7 +646,7 @@ export default function SuspiciousSignals({
   const currentInvestigationContextRef = useRef(currentInvestigationContext);
   currentInvestigationContextRef.current = currentInvestigationContext;
   const completedRecord = currentInvestigationContext
-    ? currentInvestigationRecord(investigationRecords, { selectedEvidenceId, ...currentInvestigationContext })
+    ? retainedAssessmentForContext(investigationRecords, { selectedEvidenceId, ...currentInvestigationContext })
     : null;
   const activeInvestigation = investigationState
     && investigationState.signalId === currentInvestigationContext?.signalId
@@ -659,8 +665,13 @@ export default function SuspiciousSignals({
   useEffect(() => {
     requestCoordinator.current.invalidate();
     setInvestigationState(null);
+    setFullAssessmentOpen(false);
     return () => requestCoordinator.current.invalidate();
   }, [selectedEvidenceId, currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity]);
+
+  useEffect(() => {
+    if (fullAssessmentOpen && !completedRecord) setFullAssessmentOpen(false);
+  }, [fullAssessmentOpen, completedRecord]);
 
   // Filters State
   const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'>('ALL');
@@ -702,8 +713,10 @@ export default function SuspiciousSignals({
       };
     }).sort((left, right) => (right.relatedFlowIds?.length || 0) - (left.relatedFlowIds?.length || 0));
     setEnrichedSignals(mapped);
-    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id) || null);
-  }, [signals, flows, signalStatusOverrides]);
+    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id)
+      || mapped.find(signal => signal.id === selectedSignalId)
+      || null);
+  }, [signals, flows, signalStatusOverrides, selectedSignalId]);
 
   useEffect(() => {
     if (!guidedSignalAction) return;
@@ -730,6 +743,7 @@ export default function SuspiciousSignals({
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {
+    setFullAssessmentOpen(false);
     setSelectedSignal(sig);
     onSignalSelected?.(sig.id);
   };
@@ -814,6 +828,28 @@ export default function SuspiciousSignals({
     }
   };
 
+  const handleOpenFullAssessment = () => {
+    if (completedRecord) setFullAssessmentOpen(true);
+  };
+
+  const handleCloseFullAssessment = () => {
+    setFullAssessmentOpen(false);
+    window.requestAnimationFrame(() => fullAssessmentTriggerRef.current?.focus());
+  };
+
+  const handleAssessmentInclusion = (includedInReport: boolean) => {
+    if (!completedRecord) return;
+    onInvestigationInclusionChange(
+      { selectedEvidenceId, signalId: completedRecord.signalId, packetIdentity: completedRecord.packetIdentity },
+      includedInReport,
+    );
+  };
+
+  const handleRerunFromFullAssessment = () => {
+    setFullAssessmentOpen(false);
+    void handleInvestigate();
+  };
+
   // Filter computation
   const filteredSignals = enrichedSignals.filter(sig => {
     // Tab category filter
@@ -888,6 +924,22 @@ export default function SuspiciousSignals({
         return 'bg-text-muted';
     }
   };
+
+  if (fullAssessmentOpen && completedRecord) {
+    return (
+      <EvidenceGroundedAssessment
+        record={completedRecord}
+        flows={flows}
+        events={events}
+        onBack={handleCloseFullAssessment}
+        onInclusionChange={handleAssessmentInclusion}
+        onInspectFlow={onNavigateToFlows}
+        onInspectEvent={onNavigateToEvent}
+        onOpenReport={onOpenReport}
+        onRerun={handleRerunFromFullAssessment}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5 font-sans">
@@ -1494,6 +1546,7 @@ export default function SuspiciousSignals({
                 {!activeInvestigation || activeInvestigation.status === 'failure' ? (
                   <button
                     type="button"
+                    data-tour-target="investigation-trigger"
                     onClick={handleInvestigate}
                     disabled={!investigationPacket}
                     className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-accent-primary px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-accent-primary-hover cursor-pointer disabled:bg-surface-muted disabled:text-text-muted disabled:cursor-not-allowed"
@@ -1524,51 +1577,17 @@ export default function SuspiciousSignals({
                 </div>
               )}
               {activeInvestigation?.status === 'success' && activeInvestigation.assessment && (
-                <>
-                  <InvestigationAssessmentPanel
-                    assessment={activeInvestigation.assessment}
-                    packet={activeInvestigation.packet}
-                    flows={flows}
-                    onNavigateToFlows={onNavigateToFlows}
+                completedRecord ? (
+                  <CompactInvestigationResult
+                    record={completedRecord}
+                    citationCount={assessmentCitationIds(completedRecord.assessment).length}
+                    openButtonRef={fullAssessmentTriggerRef}
+                    onOpen={handleOpenFullAssessment}
+                    onRerun={handleInvestigate}
                   />
-                  <button
-                    type="button"
-                    disabled={!completedRecord}
-                    onClick={() => {
-                      if (!completedRecord) return;
-                      onInvestigationInclusionChange(
-                        { selectedEvidenceId, signalId: completedRecord.signalId, packetIdentity: completedRecord.packetIdentity },
-                        !completedRecord.includedInReport,
-                      );
-                    }}
-                    className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${completedRecord?.includedInReport ? 'border-status-success/30 bg-status-success/10 text-status-success' : 'border-accent-primary bg-accent-primary text-white hover:bg-accent-primary-hover'}`}
-                  >
-                    {completedRecord?.includedInReport ? <><Check size={11} /> Included in report draft — Remove from report</> : <><Clipboard size={11} /> Add AI-assisted assessment to report</>}
-                  </button>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => document.getElementById('investigation-assessment')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                      className="rounded-lg border border-border-subtle px-3 py-2 text-[10px] font-semibold text-text-primary"
-                    >
-                      Inspect citations
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onOpenReport}
-                      className="rounded-lg bg-accent-primary px-3 py-2 text-[10px] font-bold text-white"
-                    >
-                      Open Report Builder
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleInvestigate}
-                    className="inline-flex items-center gap-1 text-[9px] font-semibold text-accent-primary hover:text-accent-primary-hover cursor-pointer"
-                  >
-                    <RotateCcw size={9} /> Run again with current referenced evidence
-                  </button>
-                </>
+                ) : (
+                  <div className="rounded-lg border border-border-subtle bg-surface-muted/40 p-2 text-[10px] text-text-muted">The completed assessment could not be retained for this evidence identity.</div>
+                )
               )}
             </div>
 

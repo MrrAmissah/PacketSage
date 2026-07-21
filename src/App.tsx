@@ -73,6 +73,7 @@ export default function App() {
   const [captureOverview, setCaptureOverview] = useState<CaptureOverviewRecord | null>(null);
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
   const [relatedFlowScopeIds, setRelatedFlowScopeIds] = useState<string[] | null>(null);
+  const [timelineFocusEventId, setTimelineFocusEventId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   const [guideSession, setGuideSession] = useState<JudgePathSession | null>(null);
@@ -167,6 +168,7 @@ export default function App() {
     setSignalStatusOverrides({});
     setSelectedFlow(null);
     setRelatedFlowScopeIds(null);
+    setTimelineFocusEventId(null);
     setGuideSession(createJudgePathSession(data.evidence.id));
     setGuidedSignalAction(null);
     setActiveTab('overview'); // Take them to command center automatically
@@ -180,6 +182,7 @@ export default function App() {
       setSignalStatusOverrides({});
       setSelectedFlow(null);
       setRelatedFlowScopeIds(null);
+      setTimelineFocusEventId(null);
       setGuideSession(null);
       setGuidedSignalAction(null);
       setActiveTab('import');
@@ -234,6 +237,10 @@ export default function App() {
 
   const handleGuidedSignalActionHandled = React.useCallback((requestId: number) => {
     setGuidedSignalAction(previous => previous?.requestId === requestId ? null : previous);
+  }, []);
+
+  const handleTimelineFocusHandled = React.useCallback(() => {
+    setTimelineFocusEventId(null);
   }, []);
 
   const handleInvestigationStatusAction = (action: JudgePathAction) => {
@@ -297,6 +304,7 @@ export default function App() {
             signalStatusOverrides={signalStatusOverrides}
             selectedEvidenceId={parsedData?.evidence.id || ''}
             investigationRecords={investigations}
+            selectedSignalId={guideSession?.selectedSignalId || null}
             recommendedSignalId={recommendedGuidedSignal?.id || null}
             guidedSignalAction={guidedSignalAction}
             onGuidedSignalActionHandled={handleGuidedSignalActionHandled}
@@ -304,6 +312,10 @@ export default function App() {
             onInvestigationInvalidated={handleInvestigationInvalidated}
             onInvestigationInclusionChange={handleInvestigationInclusion}
             onSignalSelected={handleSignalSelected}
+            onNavigateToEvent={(eventId) => {
+              setTimelineFocusEventId(eventId);
+              setActiveTab('timeline');
+            }}
             onOpenReport={() => setActiveTab('report')}
             onNavigateToFlows={(relatedFlows) => {
               setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
@@ -330,6 +342,8 @@ export default function App() {
             events={parsedData?.events || []}
             flows={parsedData?.flows || []}
             signals={parsedData?.signals || []}
+            focusedEventId={timelineFocusEventId}
+            onFocusedEventHandled={handleTimelineFocusHandled}
             onNavigateToFlows={(relatedFlows) => {
               setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
               setSelectedFlow(relatedFlows[0] || null);

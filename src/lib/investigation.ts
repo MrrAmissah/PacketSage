@@ -493,3 +493,8 @@ export function resolveCitedFlow(evidenceId: string, packet: InvestigationEviden
   if (!packet.flows.some(flow => flow.id === evidenceId)) return undefined;
   return flows.find(flow => flow.id === evidenceId);
 }
+
+export function resolveCitedEvent(evidenceId: string, packet: InvestigationEvidencePacket, events: readonly PacketEvent[]): PacketEvent | undefined {
+  if (!packet.events.some(event => event.id === evidenceId)) return undefined;
+  return events.find(event => event.id === evidenceId);
+}

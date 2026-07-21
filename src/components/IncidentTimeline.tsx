@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowDown, ArrowRight, ArrowUp, FileText, Globe, Network, RotateCcw, Search, ShieldCheck, X } from 'lucide-react';
 import type { FlowSummary, PacketEvent, SuspiciousSignal } from '../types';
 import { flowsForEvent, signalsForEvent } from '../lib/evidenceRelationships';
@@ -7,6 +7,8 @@ interface IncidentTimelineProps {
   events: PacketEvent[];
   flows?: FlowSummary[];
   signals?: SuspiciousSignal[];
+  focusedEventId?: string | null;
+  onFocusedEventHandled?: () => void;
   onNavigateToFlows?: (flows: FlowSummary[]) => void;
 }
 
@@ -56,7 +58,7 @@ function observedEventDescription(event: PacketEvent): string {
   return `At ${timestamp(event.timestamp)}, PacketSage recorded ${event.protocol} network traffic${service}. It travelled from source ${endpoint(event.sourceIp, event.sourcePort)} to destination ${endpoint(event.destinationIp, event.destinationPort)}, and the normalized record reports ${event.length} bytes.${detail}`;
 }
 
-export default function IncidentTimeline({ events, flows = [], signals = [], onNavigateToFlows }: IncidentTimelineProps) {
+export default function IncidentTimeline({ events, flows = [], signals = [], focusedEventId = null, onFocusedEventHandled, onNavigateToFlows }: IncidentTimelineProps) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [protocolFilter, setProtocolFilter] = useState('ALL');
@@ -64,6 +66,29 @@ export default function IncidentTimeline({ events, flows = [], signals = [], onN
   const [sourceFilter, setSourceFilter] = useState('ALL');
   const [timeFilter, setTimeFilter] = useState('ALL');
   const [ascending, setAscending] = useState(true);
+
+  useEffect(() => {
+    if (!focusedEventId) return;
+    const exactEvent = events.find(event => event.id === focusedEventId);
+    if (!exactEvent) {
+      onFocusedEventHandled?.();
+      return;
+    }
+    setSearch('');
+    setProtocolFilter('ALL');
+    setServiceFilter('ALL');
+    setSourceFilter('ALL');
+    setTimeFilter('ALL');
+    setAscending(true);
+    setSelectedEventId(exactEvent.id);
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`timeline-event-${exactEvent.id}`);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+      onFocusedEventHandled?.();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [events, focusedEventId, onFocusedEventHandled]);
   const sortedEvents = useMemo(() => [...events].sort((left, right) => left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id)), [events]);
   const protocols = useMemo(() => Array.from(new Set(events.map(event => event.protocol))).sort(), [events]);
   const services = useMemo(() => Array.from(new Set(events.map(event => event.service).filter((service): service is string => Boolean(service)))).sort(), [events]);
@@ -161,7 +186,7 @@ export default function IncidentTimeline({ events, flows = [], signals = [], onN
                     <MarkerIcon size={14} className="stroke-[2.5]" />
                   </span>
                 </div>
-                <button type="button" onClick={() => setSelectedEventId(event.id)} aria-pressed={isSelected} className={`min-w-0 w-full rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary ${isSelected ? 'border-accent-primary bg-accent-soft' : 'border-border-subtle bg-surface hover:bg-surface-muted/40'}`}>
+                <button id={`timeline-event-${event.id}`} type="button" onClick={() => setSelectedEventId(event.id)} aria-pressed={isSelected} className={`min-w-0 w-full rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary ${isSelected ? 'border-accent-primary bg-accent-soft' : 'border-border-subtle bg-surface hover:bg-surface-muted/40'}`}>
                   <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Activity aria-hidden="true" size={13} className="text-accent-primary" /><code className="text-[10px] text-text-muted">{event.id}</code><span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-secondary">{event.protocol}</span>{event.service && <span className="text-[10px] text-text-muted">{event.service}</span>}</div><p className="mt-2 text-xs font-semibold text-text-primary">{observedEventLabel(event)}</p><p className="mt-1 text-[11px] text-text-secondary">{event.info || 'No decoded description was recorded.'}</p><p className="mt-2 font-mono text-[10px] text-text-muted">{endpoint(event.sourceIp, event.sourcePort)} → {endpoint(event.destinationIp, event.destinationPort)}</p></div><time className="shrink-0 font-mono text-[10px] text-text-muted" dateTime={event.timestamp}>{timestamp(event.timestamp)}</time></div>
                   <p className="mt-3 text-[9px] text-text-muted">Exact relationships: {exactFlowCount} flow{exactFlowCount === 1 ? '' : 's'} · {exactSignalCount} signal{exactSignalCount === 1 ? '' : 's'}</p>
                 </button>

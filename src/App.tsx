@@ -341,6 +341,9 @@ export default function App() {
   const handleTourReviewSignal = React.useCallback(() => {
     if (!recommendedGuidedSignal) return;
     setActiveTab('signals');
+    setGuideSession(previous => previous
+      ? { ...previous, selectedSignalId: recommendedGuidedSignal.id }
+      : previous);
     setGuidedSignalAction(previous => ({
       signalId: recommendedGuidedSignal.id,
       focusTarget: 'investigation',

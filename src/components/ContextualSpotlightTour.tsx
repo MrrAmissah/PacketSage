@@ -99,8 +99,12 @@ export default function ContextualSpotlightTour({
   }, [requestId]);
 
   useEffect(() => {
-    if (!reviewingEarlierStep) setDisplayStepIndex(reachableStepIndex);
-  }, [reachableStepIndex, reviewingEarlierStep]);
+    if (replay || reviewingEarlierStep) return;
+    // A completed assessment unlocks Step 2's explicit Next action. Do not
+    // move the callout while the operator is reading the returned result.
+    if (displayStepIndex === 1 && reachableStepIndex === 2) return;
+    if (displayStepIndex !== reachableStepIndex) setDisplayStepIndex(reachableStepIndex);
+  }, [displayStepIndex, reachableStepIndex, replay, reviewingEarlierStep]);
 
   const refreshPosition = useCallback(() => {
     const target = visibleTarget(`[data-tour-target="${step.target}"]`);
@@ -210,7 +214,7 @@ export default function ContextualSpotlightTour({
     }
     if (displayStepIndex === 2) {
       onOpenAssessment();
-      if (workflowIndex >= 3) moveToStep(3);
+      moveToStep(3);
       return;
     }
     onComplete();

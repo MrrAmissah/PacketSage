@@ -52,6 +52,7 @@ test('Step 1 provides Review signal and continue', () => {
 test('Step 1 invokes only safe recommended-signal selection and then advances', () => {
   const app = source('src/App.tsx');
   const tour = source('src/components/ContextualSpotlightTour.tsx');
+  assert.match(app, /handleTourReviewSignal[\s\S]*setGuideSession[\s\S]*selectedSignalId: recommendedGuidedSignal\.id/);
   assert.match(app, /handleTourReviewSignal[\s\S]*signalId: recommendedGuidedSignal\.id,[\s\S]*focusTarget: 'investigation'/);
   assert.match(tour, /onReviewSignal\(\);[\s\S]*moveToStep\(1\)/);
   assert.doesNotMatch(tour.slice(tour.indexOf('if (displayStepIndex === 0)'), tour.indexOf('if (displayStepIndex === 1)')), /workflowIndex >= 1/);
@@ -69,6 +70,18 @@ test('Step 2 Next stays disabled before a valid retained assessment', () => {
   assert.equal(control.enabled, false);
   assert.match(control.requirement || '', /Complete the highlighted investigation/);
   assert.match(source('src/components/ContextualSpotlightTour.tsx'), /disabled=\{!progressControl\.enabled\}/);
+});
+
+test('a valid retained assessment unlocks Next without automatically leaving Step 2', () => {
+  assert.equal(guidedTourProgressControl(1, 2).enabled, true);
+  const tour = source('src/components/ContextualSpotlightTour.tsx');
+  assert.match(tour, /displayStepIndex === 1 && reachableStepIndex === 2[\s\S]*return/);
+  assert.match(tour, /displayStepIndex === 1[\s\S]*moveToStep\(2\)/);
+});
+
+test('Step 2 remains visible while the investigation request is loading', () => {
+  const signals = source('src/components/SuspiciousSignals.tsx');
+  assert.match(signals, /activeInvestigation\?\.status === 'analysing'[\s\S]*data-tour-target="investigation-trigger"[\s\S]*disabled[\s\S]*Analysing…/);
 });
 
 test('failed or malformed output cannot enable Step 2 Next', () => {
@@ -92,6 +105,7 @@ test('Step 3 opens the matching workspace without including the assessment', () 
   assert.match(handler, /focusTarget: 'open-assessment'/);
   assert.doesNotMatch(handler, /handleInvestigationInclusion|onInvestigationInclusionChange|includedInReport/);
   assert.match(signals, /shouldOpenAssessment[\s\S]*setFullAssessmentOpen\(shouldOpenAssessment\)/);
+  assert.match(source('src/components/ContextualSpotlightTour.tsx'), /displayStepIndex === 2[\s\S]*onOpenAssessment\(\);[\s\S]*moveToStep\(3\)/);
 });
 
 test('Step 4 Finish remains unavailable before explicit inclusion', () => {

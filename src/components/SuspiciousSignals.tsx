@@ -1589,7 +1589,17 @@ export default function SuspiciousSignals({
                     </div>
                   </details>
                 </div>
-                {!activeInvestigation || activeInvestigation.status === 'failure' ? (
+                {activeInvestigation?.status === 'analysing' ? (
+                  <button
+                    type="button"
+                    data-tour-target="investigation-trigger"
+                    disabled
+                    className="inline-flex shrink-0 cursor-wait items-center gap-1 rounded-lg bg-surface-muted px-2.5 py-1.5 text-[10px] font-bold text-text-muted"
+                  >
+                    <LoaderCircle size={11} className="animate-spin" />
+                    Analysing…
+                  </button>
+                ) : !activeInvestigation || activeInvestigation.status === 'failure' ? (
                   <button
                     type="button"
                     data-tour-target="investigation-trigger"

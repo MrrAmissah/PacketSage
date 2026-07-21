@@ -166,15 +166,43 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
         </dl>
       </header>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-surface p-3 shadow-sm xl:flex-row xl:items-center" data-testid="timeline-filter-bar">
-        <label className="relative min-w-0 flex-1 xl:max-w-sm"><span className="sr-only">Search timeline events</span><Search aria-hidden="true" size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" /><input value={search} onChange={event => setSearch(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas py-2 pl-9 pr-3 text-xs" placeholder="Search details, endpoints, IDs…" /></label>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Time<select aria-label="Filter timeline by capture time" value={timeFilter} onChange={event => setTimeFilter(event.target.value)} className="ml-1.5 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option value="ALL">All times</option><option value="FIRST_5_SECONDS">First 5s</option><option value="FIRST_MINUTE">First 1m</option><option value="AFTER_FIRST_MINUTE">After 1m</option></select></label>
-          <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Protocol<select aria-label="Filter timeline by protocol" value={protocolFilter} onChange={event => setProtocolFilter(event.target.value)} className="ml-1.5 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option>ALL</option>{protocols.map(protocol => <option key={protocol}>{protocol}</option>)}</select></label>
-          {services.length > 0 && <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Service<select aria-label="Filter timeline by recorded service" value={serviceFilter} onChange={event => setServiceFilter(event.target.value)} className="ml-1.5 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option>ALL</option>{services.map(service => <option key={service}>{service}</option>)}</select></label>}
-          {sources.length > 1 && <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Source<select aria-label="Filter timeline by source endpoint" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)} className="ml-1.5 max-w-40 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option>ALL</option>{sources.map(source => <option key={source}>{source}</option>)}</select></label>}
+      <div className="grid gap-3 rounded-xl border border-border-subtle bg-surface p-3 shadow-sm md:grid-cols-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(13rem,0.8fr)_minmax(28rem,1.7fr)_auto] xl:items-end" data-testid="timeline-filter-bar">
+        <label className="relative min-w-0 md:col-start-1 md:row-start-1 xl:col-start-1 xl:row-start-1">
+          <span className="sr-only">Search timeline events</span>
+          <Search aria-hidden="true" size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input value={search} onChange={event => setSearch(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas py-2 pl-9 pr-3 text-xs" placeholder="Search details, endpoints, IDs…" />
+        </label>
+        <div className="grid min-w-0 grid-cols-2 gap-2 md:col-span-2 md:row-start-2 sm:grid-cols-4 xl:col-span-1 xl:col-start-2 xl:row-start-1" data-testid="timeline-filter-grid">
+          <label className="min-w-0 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+            <span className="block">Time</span>
+            <select aria-label="Filter timeline by capture time" value={timeFilter} onChange={event => setTimeFilter(event.target.value)} className="mt-1 w-full min-w-0 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary">
+              <option value="ALL">All times</option><option value="FIRST_5_SECONDS">First 5s</option><option value="FIRST_MINUTE">First 1m</option><option value="AFTER_FIRST_MINUTE">After 1m</option>
+            </select>
+          </label>
+          <label className="min-w-0 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+            <span className="block">Protocol</span>
+            <select aria-label="Filter timeline by protocol" value={protocolFilter} onChange={event => setProtocolFilter(event.target.value)} className="mt-1 w-full min-w-0 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary">
+              <option>ALL</option>{protocols.map(protocol => <option key={protocol}>{protocol}</option>)}
+            </select>
+          </label>
+          {services.length > 0 && (
+            <label className="min-w-0 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+              <span className="block">Service</span>
+              <select aria-label="Filter timeline by recorded service" value={serviceFilter} onChange={event => setServiceFilter(event.target.value)} className="mt-1 w-full min-w-0 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary">
+                <option>ALL</option>{services.map(service => <option key={service}>{service}</option>)}
+              </select>
+            </label>
+          )}
+          {sources.length > 1 && (
+            <label className="min-w-0 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+              <span className="block">Source</span>
+              <select aria-label="Filter timeline by source endpoint" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)} className="mt-1 w-full min-w-0 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary">
+                <option>ALL</option>{sources.map(source => <option key={source}>{source}</option>)}
+              </select>
+            </label>
+          )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 md:col-start-2 md:row-start-1 md:justify-self-end xl:col-start-3 xl:row-start-1">
           <button type="button" onClick={() => setAscending(value => !value)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-canvas px-2.5 py-2 text-[10px] font-semibold text-text-secondary"><span aria-hidden="true">{ascending ? <ArrowDown size={12} /> : <ArrowUp size={12} />}</span>{ascending ? 'Earliest first' : 'Latest first'}</button>
           {filtersActive && <button type="button" onClick={resetFilters} className="inline-flex items-center gap-1.5 rounded-lg border border-accent-primary/20 bg-accent-soft px-2.5 py-2 text-[10px] font-bold text-accent-primary"><RotateCcw aria-hidden="true" size={12} />Reset</button>}
         </div>

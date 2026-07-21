@@ -141,3 +141,23 @@ test('compact timeline layout can stack at 390px without imposing global overflo
   assert.match(code, /grid-cols-\[3\.4rem_2\.5rem_minmax\(0,1fr\)\]/);
   assert.doesNotMatch(code, /timeline-event-card[^\n]+min-w-\[[^\]]+\]/);
 });
+
+test('timeline controls use an intentional responsive grid instead of accidental wrapping', () => {
+  const code = source('src/components/IncidentTimeline.tsx');
+  const filterBar = code.slice(code.indexOf('data-testid="timeline-filter-bar"'), code.indexOf('data-testid="timeline-filter-grid"') + 40);
+  assert.match(code, /data-testid="timeline-filter-grid"/);
+  assert.match(code, /grid-cols-2 gap-2[^"\n]*sm:grid-cols-4/);
+  assert.match(code, /md:row-start-2[^"\n]*xl:row-start-1/);
+  assert.doesNotMatch(filterBar, /flex-wrap/);
+});
+
+test('timeline filter labels remain paired with their accessible controls', () => {
+  const markup = renderTimeline([
+    packetEvent('evt-one'),
+    packetEvent('evt-two', { sourceIp: '10.0.0.6', protocol: 'UDP', service: 'DNS' }),
+  ]);
+  assert.match(markup, />Time<\/span><select aria-label="Filter timeline by capture time"/);
+  assert.match(markup, />Protocol<\/span><select aria-label="Filter timeline by protocol"/);
+  assert.match(markup, />Service<\/span><select aria-label="Filter timeline by recorded service"/);
+  assert.match(markup, />Source<\/span><select aria-label="Filter timeline by source endpoint"/);
+});

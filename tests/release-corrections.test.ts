@@ -297,11 +297,12 @@ test('Theme and mobile navigation controls have accessible names', () => {
   assert.match(code, /aria-current={isActive \? 'page'/);
 });
 
-test('Loaded header bounds evidence status before fixed theme and report actions', () => {
+test('Workspace header separates a wrapping state zone from protected global controls', () => {
   const code = source('src/App.tsx');
-  assert.match(code, /data-testid="evidence-status-strip"[^>]+sm:w-0 sm:flex-1 sm:overflow-hidden/);
-  assert.match(code, /data-testid="header-actions"[^>]+relative z-10[^>]+shrink-0/);
-  assert.match(code, /min-h-12 overflow-hidden/);
+  assert.match(code, /data-testid="workspace-status-header"[^>]+grid-cols-1 sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(code, /data-testid="evidence-status-strip"[^>]+flex flex-wrap[^>]+min-w-0/);
+  assert.match(code, /data-testid="header-actions"[^>]+min-w-0 shrink-0 flex-nowrap/);
+  assert.doesNotMatch(code, /data-testid="evidence-status-strip"[^>]+overflow-hidden/);
 });
 
 test('Narrow navigation uses an explicit labelled menu instead of horizontal swipe discovery', () => {

@@ -71,7 +71,8 @@ test('information popovers escape clipped headers through a viewport-clamped por
   assert.match(popover, /maxHeight: 'calc\(100vh - 24px\)'/);
   assert.match(popover, /aria-expanded=\{isOpen\}/);
   assert.match(popover, /const popoverId = useId\(\)/);
-  assert.match(app, /min-h-12 overflow-hidden/);
+  assert.match(app, /data-testid="workspace-status-header"[^>]+min-h-12/);
+  assert.doesNotMatch(app, /data-testid="workspace-status-header"[^>]+overflow-hidden/);
 });
 
 test('only the first Packet Academy lesson receives the Recommended badge', () => {

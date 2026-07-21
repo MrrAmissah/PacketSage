@@ -577,8 +577,8 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 min-h-0">
         
         {/* Top Evidence Bar */}
-        <header className="min-h-12 overflow-hidden bg-shell/80 backdrop-blur-md border-b border-border-subtle px-3 sm:px-6 py-2 sm:py-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 select-none transition-colors duration-150 z-20">
-          <div data-testid="evidence-status-strip" className="flex items-center gap-1.5 sm:gap-2 xl:gap-3 text-xs text-text-muted font-normal min-w-0 w-full overflow-x-auto mobile-scroll-snap sm:w-0 sm:flex-1 sm:overflow-hidden">
+        <header data-testid="workspace-status-header" className="min-h-12 bg-shell/80 backdrop-blur-md border-b border-border-subtle px-3 sm:px-6 py-2 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 xl:gap-x-6 gap-y-2 shrink-0 select-none transition-colors duration-150 z-20">
+          <div data-testid="evidence-status-strip" className="flex flex-wrap items-center gap-x-2 sm:gap-x-2.5 xl:gap-x-3 gap-y-1.5 text-xs text-text-muted font-normal min-w-0 w-full">
             {!parsedData ? (
               <>
                 {/* 1. No Evidence Loaded */}
@@ -591,7 +591,7 @@ export default function App() {
                   </span>
                 </div>
 
-                <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
+                <span aria-hidden="true" className="hidden 2xl:block h-3 w-px bg-border-subtle/60 shrink-0" />
 
                 {/* 2. Parser / Decoder Idle */}
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -604,7 +604,7 @@ export default function App() {
                   <InfoPopover content="Raw PCAP/PCAPNG files are decoded locally in a bounded browser parser. Supported text exports are sent to the parsing endpoint." align="left" />
                 </div>
 
-                <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
+                <span aria-hidden="true" className="hidden 2xl:block h-3 w-px bg-border-subtle/60 shrink-0" />
 
                 {/* 3. AI assessment N/A */}
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -615,10 +615,10 @@ export default function App() {
                   </span>
                 </div>
 
-                <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0 hidden sm:inline" />
+                <span aria-hidden="true" className="hidden 2xl:block h-3 w-px bg-border-subtle/60 shrink-0" />
 
                 {/* 4. Retention */}
-                <div className="flex items-center gap-1.5 shrink-0 hidden sm:flex">
+                <div data-testid="header-retention" className="flex items-center gap-1.5 shrink-0">
                   <Clock size={12} className="text-text-muted shrink-0" />
                   <span className="text-text-muted font-normal hidden lg:inline">Retention:</span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-muted border border-border-subtle/50 text-text-muted text-[10.5px] font-semibold tracking-wide uppercase select-none">
@@ -633,12 +633,18 @@ export default function App() {
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
                   <Database size={12} className="text-accent-primary shrink-0" />
                   <span className="text-text-muted font-normal hidden xs:inline">Evidence:</span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-accent-soft text-accent-primary border border-accent-primary/20 text-[10.5px] font-mono font-bold truncate max-w-[80px] xs:max-w-[110px] sm:max-w-[130px] md:max-w-[150px] lg:max-w-[180px] xl:max-w-[230px]" title={parsedData.evidence.name}>
-                    {parsedData.evidence.name}
+                  <span
+                    data-testid="evidence-filename"
+                    role="status"
+                    aria-label={`Loaded evidence: ${parsedData.evidence.name}`}
+                    className="inline-flex min-w-0 max-w-[clamp(10rem,24vw,20rem)] items-center gap-1.5 overflow-hidden rounded-md border border-accent-primary/20 bg-accent-soft px-2.5 py-0.5 text-[10.5px] font-mono font-bold text-accent-primary"
+                    title={parsedData.evidence.name}
+                  >
+                    <span aria-hidden="true" className="truncate">{parsedData.evidence.name}</span>
                   </span>
                 </div>
 
-                <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
+                <span aria-hidden="true" className="hidden 2xl:block h-3 w-px bg-border-subtle/60 shrink-0" />
 
                 {/* 2. Parser / Decoder */}
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -650,7 +656,7 @@ export default function App() {
                   <InfoPopover content="Raw PCAP/PCAPNG files are decoded locally in a bounded browser parser. Supported text exports are sent to the parsing endpoint." align="left" />
                 </div>
 
-                <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
+                <span aria-hidden="true" className="hidden 2xl:block h-3 w-px bg-border-subtle/60 shrink-0" />
 
                 {/* 3. Included AI-assisted assessments */}
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -662,10 +668,10 @@ export default function App() {
                   <InfoPopover content="Only successful evidence-scoped assessments that you explicitly include are added to the report draft. Inclusion does not confirm an inference." align="left" />
                 </div>
 
-                <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0 hidden sm:inline" />
+                <span aria-hidden="true" className="hidden 2xl:block h-3 w-px bg-border-subtle/60 shrink-0" />
 
                 {/* 4. Retention */}
-                <div className="flex items-center gap-1.5 shrink-0 hidden sm:flex">
+                <div data-testid="header-retention" className="flex items-center gap-1.5 shrink-0">
                   <Clock size={12} className="text-text-muted shrink-0" />
                   <span className="text-text-muted font-normal hidden 2xl:inline">Retention:</span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10.5px] font-bold uppercase tracking-wide">
@@ -678,9 +684,9 @@ export default function App() {
           </div>
 
           {/* Right actions sequence: Theme toggle → Build report → local capture decode */}
-          <div data-testid="header-actions" className="relative z-10 flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto bg-shell/80">
+          <div data-testid="header-actions" className="relative z-10 flex w-full min-w-0 shrink-0 flex-nowrap items-center justify-between gap-1.5 bg-shell/80 sm:w-auto sm:min-w-max sm:justify-end sm:gap-2 sm:border-l sm:border-border-subtle/60 sm:pl-4 xl:pl-6">
             {/* Theme toggle */}
-            <div className="flex items-center bg-surface-muted border border-border-subtle rounded-lg p-0.5 h-8">
+            <div data-testid="theme-selector" className="flex h-8 shrink-0 items-center rounded-lg border border-border-subtle bg-surface-muted p-0.5">
               {[
                 { id: 'light', icon: Sun, label: 'Light' },
                 { id: 'dark', icon: Moon, label: 'Dark' },
@@ -710,6 +716,7 @@ export default function App() {
             {/* Build report CTA */}
             {activeTab !== 'report' && (
               <button
+                data-testid="build-report-action"
                 disabled={!parsedData}
                 onClick={() => parsedData && setActiveTab('report')}
                 className={`h-8 px-2.5 text-[11px] font-semibold rounded-lg transition-all flex items-center gap-1 shadow-sm ${
@@ -726,7 +733,7 @@ export default function App() {
             )}
 
             {/* Capture processing boundary */}
-            <div className="h-8 px-2 bg-status-success-bg border border-status-success/25 rounded-lg text-[10px] text-status-success font-semibold hidden sm:flex items-center gap-1 select-none">
+            <div data-testid="local-capture-status" role="status" aria-label="Local capture decoding is active" title="Raw capture decoding remains local to this browser" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-status-success/25 bg-status-success-bg px-2 text-[10px] font-semibold text-status-success select-none">
               <Lock size={10} className="text-status-success" />
               <span className="hidden 2xl:inline">Local Capture Decode</span>
             </div>

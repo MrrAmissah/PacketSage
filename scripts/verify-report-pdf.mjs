@@ -72,7 +72,8 @@ try {
   const pdf = readFileSync(pdfPath);
   assert(pdf.subarray(0, 4).toString() === '%PDF', 'Generated file is not a valid PDF.');
   const text = execFileSync('pdftotext', [pdfPath, '-'], { encoding: 'utf8' });
-  assert(text.includes('NETWORK EVIDENCE REPORT'), 'Early report marker is missing.');
+  const compactText = text.replace(/\s/g, '');
+  assert(compactText.includes('NETWORKEVIDENCEREPORT'), 'Early report marker is missing.');
   assert(text.includes('CASE-2026-071'), 'Saved case identity is missing.');
   assert(text.includes('Avery Mensah'), 'Saved investigator identity is missing.');
   assert(text.includes('Timezone:'), 'Explicit report timezone is missing.');

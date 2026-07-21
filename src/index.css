@@ -204,6 +204,8 @@ body {
     box-shadow: none !important;
     color: #0f172a !important;
     background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
   .report-document tr {
@@ -228,6 +230,16 @@ body {
 
   .report-document thead {
     display: table-header-group;
+  }
+
+  .report-document .report-timeline-table th {
+    border-bottom: 1px solid #cbd5e1;
+    color: #334155 !important;
+    background: #f8fafc !important;
+  }
+
+  .report-document .report-timeline-table td {
+    overflow-wrap: anywhere;
   }
 
   .report-document .overflow-x-auto {

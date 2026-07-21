@@ -62,6 +62,7 @@ import {
   type JudgePathDestination,
   type JudgePathSession,
 } from './lib/judgePath';
+import { createReportDetailsSession, type ReportDetailsRecord } from './lib/reportDetails';
 
 type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy';
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -74,6 +75,7 @@ export default function App() {
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
   const [relatedFlowScopeIds, setRelatedFlowScopeIds] = useState<string[] | null>(null);
   const [timelineFocusEventId, setTimelineFocusEventId] = useState<string | null>(null);
+  const [reportDetails, setReportDetails] = useState<ReportDetailsRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   const [guideSession, setGuideSession] = useState<JudgePathSession | null>(null);
@@ -163,6 +165,7 @@ export default function App() {
 
   const handleDataParsed = (data: ParsedResult) => {
     setParsedData(data);
+    setReportDetails(createReportDetailsSession(data.evidence.id));
     setInvestigations(clearInvestigationRecords());
     setCaptureOverview(null);
     setSignalStatusOverrides({});
@@ -177,6 +180,7 @@ export default function App() {
   const handleResetData = () => {
     if (confirm("Are you sure you want to clear current forensic evidence? All volatile packet and log tables will be deleted.")) {
       setParsedData(null);
+      setReportDetails(null);
       setInvestigations(clearInvestigationRecords());
       setCaptureOverview(null);
       setSignalStatusOverrides({});
@@ -352,7 +356,7 @@ export default function App() {
           />
         );
       case 'report':
-        return <ReportBuilder data={parsedData} investigations={investigations} captureOverview={captureOverview} signalStatusOverrides={signalStatusOverrides} />;
+        return <ReportBuilder data={parsedData} investigations={investigations} captureOverview={captureOverview} reportDetails={reportDetails} onReportDetailsChange={setReportDetails} signalStatusOverrides={signalStatusOverrides} />;
       case 'academy':
         return <LearningMode hasEvidence={!!parsedData} parsedData={parsedData} />;
       default:

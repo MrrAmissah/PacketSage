@@ -7,8 +7,14 @@ import type {
 } from '../types.js';
 import { includedInvestigationRecords } from './investigationRecords.js';
 import { includedCaptureOverview } from './captureOverview.js';
+import {
+  reportDetailsForEvidence,
+  type ReportDetails,
+  type ReportDetailsRecord,
+} from './reportDetails.js';
 
 export const MAX_REPORT_TIMELINE_EVENTS = 100;
+export const PACKETSAGE_REPORT_VERSION = 'v1.1.0';
 
 export interface ReportFinding {
   title: string;
@@ -35,11 +41,21 @@ export interface ReportRecommendation {
 }
 
 export interface ReportModel {
+  details: ReportDetails;
+  generation: {
+    generatedAt: string;
+    timeZone: string;
+    status: 'Draft';
+    packetSageVersion: string;
+  };
   evidence: {
     name: string;
+    identity: string;
     type: string;
     parseMode: string;
     checksum: string;
+    earliestRecordedEvent: string | null;
+    latestRecordedEvent: string | null;
   };
   executiveSummary: string;
   counts: {
@@ -55,6 +71,12 @@ export interface ReportModel {
   assessments: InvestigationRecord[];
   contextualOverview: CaptureOverviewRecord | null;
   recommendations: ReportRecommendation[];
+}
+
+export interface ReportBuildOptions {
+  reportDetails?: ReportDetailsRecord | null;
+  generatedAt?: string;
+  timeZone?: string;
 }
 
 function orderedUnique(values: readonly string[]): string[] {
@@ -78,6 +100,26 @@ export function evidenceChecksumLabel(data: ParsedResult): string {
   return 'Not calculated';
 }
 
+function safeGenerationTime(value: string | undefined): string {
+  if (!value) return new Date().toISOString();
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();
+}
+
+function explicitTimeZone(generatedAt: string, requestedTimeZone: string | undefined): string {
+  const timeZone = requestedTimeZone || 'UTC';
+  try {
+    const zonePart = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    }).formatToParts(new Date(generatedAt)).find(part => part.type === 'timeZoneName')?.value || 'GMT';
+    const offset = zonePart === 'GMT' ? 'UTC+00:00' : zonePart.replace('GMT', 'UTC');
+    return `${timeZone} (${offset})`;
+  } catch {
+    return 'UTC (UTC+00:00)';
+  }
+}
+
 function exactRelatedEventIds(
   signal: SuspiciousSignal,
   flowMap: ReadonlyMap<string, ParsedResult['flows'][number]>,
@@ -92,6 +134,7 @@ export function buildReportModel(
   records: readonly InvestigationRecord[],
   signalStatusOverrides: Readonly<Record<string, SignalReviewStatus>> = {},
   captureOverview: CaptureOverviewRecord | null = null,
+  options: ReportBuildOptions = {},
 ): ReportModel {
   const assessments = includedInvestigationRecords(records, data.evidence.id);
   const contextualOverview = includedCaptureOverview(captureOverview, data.evidence.id);
@@ -147,13 +190,25 @@ export function buildReportModel(
     reviewedFindings: findings.length,
     includedAssessments: assessments.length,
   };
+  const generatedAt = safeGenerationTime(options.generatedAt);
+  const detailsRecord = reportDetailsForEvidence(options.reportDetails, data.evidence.id);
 
   return {
+    details: detailsRecord.details,
+    generation: {
+      generatedAt,
+      timeZone: explicitTimeZone(generatedAt, options.timeZone),
+      status: 'Draft',
+      packetSageVersion: PACKETSAGE_REPORT_VERSION,
+    },
     evidence: {
       name: data.evidence.name,
+      identity: data.evidence.id,
       type: data.evidence.type,
       parseMode: data.evidence.parseMode,
       checksum: evidenceChecksumLabel(data),
+      earliestRecordedEvent: sortedEvents[0]?.timestamp || null,
+      latestRecordedEvent: sortedEvents.at(-1)?.timestamp || null,
     },
     executiveSummary: `${data.evidence.name} (${data.evidence.type}) contains ${counts.events} parsed events, ${counts.flows} flows, and ${counts.signals} signals. This report draft includes ${counts.reviewedFindings} reviewed findings and ${counts.includedAssessments} explicitly included AI-assisted assessments. Inferences remain unconfirmed until independently validated.`,
     counts,
@@ -170,9 +225,15 @@ function ids(values: readonly string[]): string {
   return values.length ? values.map(value => `\`${value}\``).join(', ') : 'None referenced';
 }
 
+function markdownValue(value: string): string {
+  return value ? value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>') : 'Not provided';
+}
+
 export function reportToMarkdown(report: ReportModel): string {
-  let markdown = `# PacketSage evidence report draft\n\n`;
-  markdown += `## Evidence\n\n- Name: ${report.evidence.name}\n- Type: ${report.evidence.type}\n- Parse mode: ${report.evidence.parseMode}\n- SHA-256: ${report.evidence.checksum}\n\n`;
+  let markdown = `# PacketSage\n\n**NETWORK EVIDENCE REPORT — DRAFT**\n\n`;
+  markdown += `## Report identity\n\n- Investigator / Prepared by: ${markdownValue(report.details.investigator)}\n- Role or unit: ${markdownValue(report.details.roleOrUnit)}\n- Organization: ${markdownValue(report.details.organization)}\n- Case or reference ID: ${markdownValue(report.details.caseReferenceId)}\n- Report scope / notes: ${markdownValue(report.details.scopeNotes)}\n\n`;
+  markdown += `## Report metadata\n\n- Generated: ${report.generation.generatedAt}\n- Timezone: ${report.generation.timeZone}\n- Status: ${report.generation.status}\n- PacketSage version: ${report.generation.packetSageVersion}\n\n`;
+  markdown += `## Evidence identity\n\n- Filename: ${report.evidence.name}\n- Evidence identity: \`${report.evidence.identity}\`\n- Type: ${report.evidence.type}\n- Parse mode: ${report.evidence.parseMode}\n- SHA-256: ${report.evidence.checksum}\n- Earliest recorded event: ${report.evidence.earliestRecordedEvent || 'No recorded events'}\n- Latest recorded event: ${report.evidence.latestRecordedEvent || 'No recorded events'}\n- Event count: ${report.counts.events}\n- Flow count: ${report.counts.flows}\n- Signal count: ${report.counts.signals}\n- Reviewed-finding count: ${report.counts.reviewedFindings}\n- Included-assessment count: ${report.counts.includedAssessments}\n- Contextual-overview inclusion: ${report.contextualOverview ? 'Included' : 'Not included'}\n\n`;
   markdown += `## Executive summary\n\n${report.executiveSummary}\n\n`;
   markdown += `## Findings\n\n`;
   if (!report.findings.length) markdown += `No reviewed findings have been added to this report draft.\n\n`;
@@ -181,9 +242,13 @@ export function reportToMarkdown(report: ReportModel): string {
   });
   markdown += `## Timeline\n\n`;
   if (!report.timeline.length) markdown += `No timeline events were available in the selected evidence.\n\n`;
-  report.timeline.forEach(event => {
-    markdown += `- ${event.timestamp} — \`${event.id}\` — ${event.source} → ${event.destination} — ${event.protocol} — ${event.length} bytes — Signals: ${ids(event.signalIds)}\n`;
-  });
+  if (report.timeline.length) {
+    markdown += `| Recorded time / Evidence ID | Source → Destination | Protocol / Size | Linked observations |\n`;
+    markdown += `| --- | --- | --- | --- |\n`;
+    report.timeline.forEach(event => {
+      markdown += `| ${event.timestamp}<br>\`${event.id}\` | ${event.source} → ${event.destination} | ${event.protocol}<br>${event.length} bytes | ${ids(event.signalIds)} |\n`;
+    });
+  }
   if (report.timelineTruncated) markdown += `\nTimeline truncated to ${MAX_REPORT_TIMELINE_EVENTS} of ${report.counts.events} events.\n`;
   markdown += `\n## Contextual overview\n\n`;
   if (!report.contextualOverview) {

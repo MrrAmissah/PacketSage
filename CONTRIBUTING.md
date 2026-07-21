@@ -55,9 +55,12 @@ Before opening a pull request:
 1. Keep the change small and focused.
 2. Run:
    ```bash
-   npm install
+   npm ci
+   npm test
    npm run lint
    npm run build
+   npm audit
+   npm audit --omit=dev
    ```
 3. Do not expose secrets or create `VITE_OPENAI_API_KEY` or `VITE_GEMINI_API_KEY`.
 4. Preserve the defensive, evidence-bound product boundary.

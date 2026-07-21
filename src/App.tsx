@@ -27,7 +27,6 @@ import {
   Sparkles,
   Compass,
   Menu,
-  RotateCcw,
 } from 'lucide-react';
 
 import { CaptureOverviewRecord, FlowSummary, InvestigationRecord, SignalReviewStatus } from './types';
@@ -324,6 +323,13 @@ export default function App() {
     setTimelineFocusEventId(null);
   }, []);
 
+  const guidedJourneyVisible = parsedData
+    ? shouldShowGuidedJourney(parsedData.evidence.parseMode, guideSession)
+    : false;
+  const commandCenterReplay = parsedData?.evidence.parseMode === 'demo' && !guidedJourneyVisible
+    ? handleReplayGuidedTour
+    : undefined;
+
   const handleInvestigationStatusAction = (action: JudgePathAction) => {
     setActiveTab(action.destination as TabType);
     if (action.destination !== 'signals' || action.id === 'review-observed-signals') return;
@@ -369,7 +375,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'overview':
-        return <CommandCenter data={parsedData} investigationStatus={investigationStatus} onPrimaryAction={handleInvestigationStatusAction} onNavigate={(tab) => {
+        return <CommandCenter data={parsedData} investigationStatus={investigationStatus} onPrimaryAction={handleInvestigationStatusAction} onReplayTour={commandCenterReplay} onNavigate={(tab) => {
           if (tab === 'flows') setRelatedFlowScopeIds(null);
           setActiveTab(tab as TabType);
         }} />;
@@ -463,7 +469,7 @@ export default function App() {
       case 'architecture':
         return <ArchitectureRoadmap />;
       default:
-        return <CommandCenter data={parsedData} investigationStatus={investigationStatus} onPrimaryAction={handleInvestigationStatusAction} onNavigate={(tab) => {
+        return <CommandCenter data={parsedData} investigationStatus={investigationStatus} onPrimaryAction={handleInvestigationStatusAction} onReplayTour={commandCenterReplay} onNavigate={(tab) => {
           if (tab === 'flows') setRelatedFlowScopeIds(null);
           setActiveTab(tab as TabType);
         }} />;
@@ -636,11 +642,15 @@ export default function App() {
                   <span
                     data-testid="evidence-filename"
                     role="status"
+                    tabIndex={0}
                     aria-label={`Loaded evidence: ${parsedData.evidence.name}`}
-                    className="inline-flex min-w-0 max-w-[clamp(10rem,24vw,20rem)] items-center gap-1.5 overflow-hidden rounded-md border border-accent-primary/20 bg-accent-soft px-2.5 py-0.5 text-[10.5px] font-mono font-bold text-accent-primary"
-                    title={parsedData.evidence.name}
+                    aria-describedby="workspace-evidence-filename-tooltip"
+                    className="group relative inline-flex min-w-0 max-w-[clamp(7rem,10vw,12rem)] items-center gap-1.5 rounded-md border border-accent-primary/20 bg-accent-soft px-2.5 py-0.5 text-[10.5px] font-mono font-bold text-accent-primary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-1"
                   >
-                    <span aria-hidden="true" className="truncate">{parsedData.evidence.name}</span>
+                    <span aria-hidden="true" className="min-w-0 truncate">{parsedData.evidence.name}</span>
+                    <span id="workspace-evidence-filename-tooltip" role="tooltip" data-testid="evidence-filename-tooltip" className="pointer-events-none invisible absolute left-0 top-full z-50 mt-2 max-w-[min(22rem,calc(100vw-2rem))] break-all rounded-md border border-border-subtle bg-surface px-2.5 py-2 text-left font-sans text-[10px] font-medium leading-relaxed text-text-primary opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100">
+                      Full filename: {parsedData.evidence.name}
+                    </span>
                   </span>
                 </div>
 
@@ -707,7 +717,7 @@ export default function App() {
                     }`}
                   >
                     <Icon size={11} />
-                    <span className="hidden xl:inline">{t.label}</span>
+                    <span className="hidden 2xl:inline">{t.label}</span>
                   </button>
                 );
               })}
@@ -743,7 +753,7 @@ export default function App() {
         {/* Tab workspace window with standard responsive layout */}
         <div ref={workspaceScrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 bg-canvas transition-colors duration-150">
           <div className="max-w-[1440px] mx-auto w-full">
-            {parsedData && shouldShowGuidedJourney(parsedData.evidence.parseMode, guideSession) && (
+            {parsedData && guidedJourneyVisible && (
               <GuidedSampleJourney
                 progress={guidedProgress}
                 onDismiss={() => {
@@ -754,13 +764,6 @@ export default function App() {
                 onPrimaryAction={handleInvestigationStatusAction}
                 onReplayTour={handleReplayGuidedTour}
               />
-            )}
-            {parsedData?.evidence.parseMode === 'demo' && !shouldShowGuidedJourney(parsedData.evidence.parseMode, guideSession) && (
-              <div className="mb-3 flex justify-end print:hidden">
-                <button type="button" data-testid="guided-tour-replay" onClick={handleReplayGuidedTour} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-2.5 py-2 text-[10px] font-semibold text-text-muted shadow-sm hover:bg-surface-muted hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary">
-                  <RotateCcw aria-hidden="true" size={11} /> Replay guided tour
-                </button>
-              </div>
             )}
             {renderActiveContent()}
           </div>

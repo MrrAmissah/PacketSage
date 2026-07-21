@@ -4,14 +4,17 @@ import test from 'node:test';
 
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 
-test('loaded evidence filename uses a responsive bounded width and visual ellipsis', () => {
-  assert.match(app, /data-testid="evidence-filename"[\s\S]*?max-w-\[clamp\(10rem,24vw,20rem\)\][\s\S]*?overflow-hidden/);
-  assert.match(app, /aria-hidden="true" className="truncate">\{parsedData\.evidence\.name\}/);
+test('loaded evidence filename uses a compact responsive width and visual ellipsis', () => {
+  assert.match(app, /data-testid="evidence-filename"[\s\S]*?max-w-\[clamp\(7rem,10vw,12rem\)\]/);
+  assert.match(app, /aria-hidden="true" className="min-w-0 truncate">\{parsedData\.evidence\.name\}/);
 });
 
-test('loaded evidence filename exposes the unmodified full value accessibly', () => {
+test('loaded evidence filename exposes the unmodified full value on hover and focus', () => {
   assert.match(app, /aria-label={`Loaded evidence: \$\{parsedData\.evidence\.name\}`}/);
-  assert.match(app, /title=\{parsedData\.evidence\.name\}/);
+  assert.match(app, /tabIndex=\{0\}/);
+  assert.match(app, /aria-describedby="workspace-evidence-filename-tooltip"/);
+  assert.match(app, /role="tooltip"[^>]+group-hover:visible[^>]+group-focus-visible:visible/);
+  assert.match(app, /Full filename: \{parsedData\.evidence\.name\}/);
 });
 
 test('global utility cluster is the non-shrinking grid column', () => {
@@ -49,6 +52,7 @@ test('mobile header deliberately stacks state above controls', () => {
 test('theme selector preserves light dark and system controls in one readable group', () => {
   assert.match(app, /data-testid="theme-selector"[^>]+shrink-0/);
   for (const label of ['Light', 'Dark', 'System']) assert.match(app, new RegExp(`label: '${label}'`));
+  assert.match(app, /<span className="hidden 2xl:inline">\{t\.label\}<\/span>/);
 });
 
 test('header actions remain native keyboard controls with accessible theme names', () => {
@@ -65,5 +69,5 @@ test('local capture status remains visible in narrow and loaded layouts', () => 
 test('workspace header correction leaves the contextual spotlight tour mounted', () => {
   assert.match(app, /<GuidedSampleJourney/);
   assert.match(app, /onReplayTour=\{handleReplayGuidedTour\}/);
-  assert.match(app, /data-testid="guided-tour-replay"/);
+  assert.match(app, /onReplayTour=\{commandCenterReplay\}/);
 });

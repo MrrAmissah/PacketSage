@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Calendar,
-  HardDrive
+  HardDrive,
+  RotateCcw,
 } from 'lucide-react';
 import { ParsedResult } from '../lib/parser';
 import { commandCenterLimitation, observedEventDescription } from '../lib/commandCenterPresentation';
@@ -25,6 +26,7 @@ interface CommandCenterProps {
   onNavigate: (tab: string) => void;
   investigationStatus: InvestigationStatus;
   onPrimaryAction(action: JudgePathAction): void;
+  onReplayTour?: () => void;
 }
 
 const STATUS_ICON_CLASS = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-sm';
@@ -62,7 +64,7 @@ const formatSize = (bytes: number) => {
 
 const endpoint = (ip: string, port: number) => `${ip.includes(':') ? `[${ip}]` : ip}:${port > 0 ? port : 'unknown'}`;
 
-export default function CommandCenter({ data, onNavigate, investigationStatus, onPrimaryAction }: CommandCenterProps) {
+export default function CommandCenter({ data, onNavigate, investigationStatus, onPrimaryAction, onReplayTour }: CommandCenterProps) {
   if (!data) {
     return (
       <div id="cmd-empty" className="flex flex-col items-center justify-center py-24 text-center font-sans">
@@ -338,7 +340,7 @@ export default function CommandCenter({ data, onNavigate, investigationStatus, o
   };
 
   return (
-    <div id="command-center-workspace" className="font-sans w-full max-w-[1440px] mx-auto px-6 md:px-8 py-6 space-y-6">
+    <div id="command-center-workspace" className="font-sans w-full max-w-[1440px] mx-auto px-6 pb-6 md:px-8 space-y-6">
 
       {/* Top Context Area: Full Width */}
       <div className="space-y-6">
@@ -382,9 +384,16 @@ export default function CommandCenter({ data, onNavigate, investigationStatus, o
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-status-success-bg border border-status-success/10 px-3 py-1 rounded-full h-fit shadow-sm select-none flex-nowrap shrink-0 self-start sm:self-center">
-            <CheckCircle2 size={13} className="text-status-success shrink-0" />
-            <span className="text-xs text-status-success font-semibold whitespace-nowrap">Evidence decoded</span>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-center sm:justify-end">
+            <div className="flex h-fit flex-nowrap items-center gap-1.5 rounded-full border border-status-success/10 bg-status-success-bg px-3 py-1 shadow-sm select-none">
+              <CheckCircle2 size={13} className="text-status-success shrink-0" />
+              <span className="text-xs text-status-success font-semibold whitespace-nowrap">Evidence decoded</span>
+            </div>
+            {isDemo && onReplayTour && (
+              <button type="button" data-testid="guided-tour-replay" onClick={onReplayTour} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-[10px] font-semibold text-text-muted shadow-sm hover:bg-surface-muted hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2">
+                <RotateCcw aria-hidden="true" size={11} /> Replay tour
+              </button>
+            )}
           </div>
         </div>
 

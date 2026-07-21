@@ -124,9 +124,22 @@ test('Escape closes the tour through the same dismissal boundary', () => {
 test('Replay restarts a dismissed tour without mutating retained content', () => {
   assert.deepEqual(replayGuidedTourSession('evidence-a', 7), { evidenceIdentity: 'evidence-a', active: true, replay: true, requestId: 7 });
   const app = source('src/App.tsx');
-  assert.match(app, /Replay guided tour/);
+  const commandCenter = source('src/components/CommandCenter.tsx');
+  assert.match(commandCenter, /data-testid="guided-tour-replay"/);
+  assert.match(commandCenter, />\s*Replay tour\s*</);
+  assert.match(app, /onReplayTour=\{commandCenterReplay\}/);
   const preferenceWrite = app.slice(app.indexOf('const finishGuidedTour'), app.indexOf('const handleDataParsed'));
   assert.doesNotMatch(preferenceWrite, /assessment|citation|reportContent|signalContent|JSON\.stringify/);
+});
+
+test('dismissed journey replay is integrated into Command Center without a detached spacer row', () => {
+  const app = source('src/App.tsx');
+  const commandCenter = source('src/components/CommandCenter.tsx');
+  assert.doesNotMatch(app, /className="mb-3 flex justify-end print:hidden"/);
+  assert.match(commandCenter, /Evidence decoded[\s\S]*data-testid="guided-tour-replay"/);
+  assert.match(commandCenter, /isDemo && onReplayTour/);
+  assert.match(commandCenter, /id="command-center-workspace"[^>]+pb-6/);
+  assert.doesNotMatch(commandCenter, /id="command-center-workspace"[^>]+py-6/);
 });
 
 test('evidence replacement closes an active tour immediately', () => {

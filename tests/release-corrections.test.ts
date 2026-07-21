@@ -196,6 +196,8 @@ test('Timeline restores the connected event spine without heuristic event claims
   assert.match(code, /markerForEvent\(event: PacketEvent\)/);
   assert.match(code, /observedEventDescription\(selectedEvent\)/);
   assert.match(code, /data-testid="timeline-evidence-preview"/);
+  assert.match(code, /data-testid="timeline-related-observations"/);
+  assert.match(code, /Only observations that explicitly reference this event ID are shown/);
   assert.match(code, /Packet payload content and fields the parser did not provide are not shown/);
   assert.doesNotMatch(code, /Raw packet segment unavailable|Source Workstation|Destination Host|Heuristic Description|HTTP Header Integrity|DNS Query Name|TLS Header Cryptography/);
   assert.doesNotMatch(code, /credential submission|exfiltration|beacon|malicious|severity.*marker/i);

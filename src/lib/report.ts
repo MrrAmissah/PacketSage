@@ -190,7 +190,7 @@ export function reportToMarkdown(report: ReportModel): string {
     markdown += `No capture overview has been explicitly included.\n\n`;
   } else {
     const overview = report.contextualOverview;
-    markdown += `### Gemini capture overview\n\n`;
+    markdown += `### Capture overview — contextual note\n\n`;
     markdown += `**Contextual orientation — not evidence-linked.** This section contains no evidence citations.\n\n`;
     markdown += `Provider: ${overview.provider}; Model: ${overview.model}; Schema: ${overview.schemaVersion}; Generated: ${overview.createdAt}; Capture identity: ${overview.captureIdentity}.\n\n`;
     markdown += `${overview.result.executiveSummary}\n\n`;

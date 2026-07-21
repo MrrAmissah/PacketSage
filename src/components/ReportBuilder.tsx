@@ -92,7 +92,7 @@ function ReportDocument({ report }: ReportDocumentProps) {
         </div>
         {!report.contextualOverview ? <p className="rounded-lg bg-surface-muted p-3 text-text-muted">No capture overview has been explicitly included.</p> : (
           <article className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-4" data-testid="included-capture-overview">
-            <h4 className="font-bold text-text-primary">Gemini capture overview</h4>
+            <h4 className="font-bold text-text-primary">Capture overview — contextual note</h4>
             <p className="font-semibold text-status-warning">Contextual orientation — not evidence-linked.</p>
             <p>{report.contextualOverview.result.executiveSummary}</p>
             <div><h5 className="font-bold text-text-primary">Traffic-pattern explanation</h5><p>{report.contextualOverview.result.whatHappened}</p></div>

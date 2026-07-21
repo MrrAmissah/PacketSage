@@ -93,11 +93,11 @@ app.post("/api/investigate", async (req, res) => {
   res.once('close', abortOnDisconnect);
   try {
     const evidence = parseInvestigationRequest(req.body);
-    const assessment = await requestOpenAiInvestigation(evidence, {
+    const result = await requestOpenAiInvestigation(evidence, {
       apiKey: process.env.OPENAI_API_KEY,
       signal: clientAbort.signal,
     });
-    return res.json(assessment);
+    return res.json(result);
   } catch (error) {
     if (clientAbort.signal.aborted || res.destroyed) return;
     const safe = clientSafeInvestigationError(error);

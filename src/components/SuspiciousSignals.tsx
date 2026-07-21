@@ -38,7 +38,7 @@ import {
   buildInvestigationEvidencePacket,
   evidenceIds,
   investigationPacketIdentity,
-  validateInvestigationAssessment,
+  validateInvestigationApiResult,
 } from '../lib/investigation';
 import {
   InvestigationRequestCoordinator,
@@ -775,18 +775,18 @@ export default function SuspiciousSignals({
             : 'AI-assisted investigation could not be completed. Try again.';
           throw new Error(safeMessage);
         }
-        return validateInvestigationAssessment(body, evidenceIds(investigationPacket));
+        return validateInvestigationApiResult(body, evidenceIds(investigationPacket));
       },
     );
     if (outcome.status === 'ignored') return;
     if (outcome.status === 'success') {
-      setInvestigationState({ signalId, packetIdentity, status: 'success', packet: investigationPacket, assessment: outcome.value });
+      setInvestigationState({ signalId, packetIdentity, status: 'success', packet: investigationPacket, assessment: outcome.value.assessment });
       onInvestigationCompleted(completedInvestigationRecord({
         selectedEvidenceId,
         signalId,
         packetIdentity,
         packet: investigationPacket,
-        assessment: outcome.value,
+        apiResult: outcome.value,
       }));
     } else {
       const message = outcome.error instanceof Error && outcome.error.message
@@ -1472,10 +1472,18 @@ export default function SuspiciousSignals({
             <div className="space-y-2 border-b border-border-subtle pb-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">AI-assisted investigation</h4>
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Evidence-grounded investigation</h4>
                   <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
                     Uses only this signal and its exact referenced evidence IDs. Inference is not observed fact.
                   </p>
+                  <details className="mt-1 text-[9px] text-text-muted">
+                    <summary className="cursor-pointer font-semibold">Technical details</summary>
+                    <div className="mt-1">
+                      <div><strong>Provider:</strong> {completedRecord?.provider || 'Recorded after generation'}</div>
+                      <div><strong>Model:</strong> {completedRecord?.model || 'Recorded after generation'}</div>
+                      <div><strong>Schema:</strong> {completedRecord?.schemaVersion || 'Recorded after generation'}</div>
+                    </div>
+                  </details>
                 </div>
                 {!activeInvestigation || activeInvestigation.status === 'failure' ? (
                   <button

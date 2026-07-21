@@ -11,6 +11,7 @@ import {
   investigationPacketIdentity,
   InvestigationValidationError,
   resolveCitedFlow,
+  validateInvestigationApiResult,
   validateInvestigationRequest,
 } from '../src/lib/investigation';
 import {
@@ -115,8 +116,9 @@ function assessment(overrides: Partial<InvestigationAssessment> = {}): Investiga
   };
 }
 
-function openAiResponse(value: unknown): Response {
+function openAiResponse(value: unknown, model = 'gpt-5.6-sol-2026-07-01'): Response {
   return new Response(JSON.stringify({
+    model,
     output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
   }), { status: 200, headers: { 'content-type': 'application/json' } });
 }
@@ -196,7 +198,7 @@ test('evidence packet record and byte limits are enforced', () => {
   );
 });
 
-test('browser source does not reference the OpenAI credential name', () => {
+test('browser source does not reference either server credential name', () => {
   const roots = ['src/App.tsx', 'src/components', 'src/lib'];
   const files: string[] = [];
   const visit = (entry: string) => {
@@ -205,7 +207,15 @@ test('browser source does not reference the OpenAI credential name', () => {
     else if (/\.(ts|tsx)$/.test(entry)) files.push(entry);
   };
   roots.forEach(visit);
-  files.forEach(file => assert.doesNotMatch(readFileSync(file, 'utf8'), /OPENAI_API_KEY/));
+  files.forEach(file => assert.doesNotMatch(readFileSync(file, 'utf8'), /OPENAI_API_KEY|GEMINI_API_KEY/));
+});
+
+test('investigation request cannot supply provider or model selection', () => {
+  const { packet } = packetFixture();
+  assert.throws(
+    () => validateInvestigationRequest({ evidence: packet, provider: 'client-provider', model: 'client-model' }),
+    /unsupported fields/,
+  );
 });
 
 test('malformed and oversized investigation requests produce safe client errors', () => {
@@ -315,6 +325,21 @@ test('malformed model JSON is rejected safely', async () => {
   );
 });
 
+test('missing or malformed investigation provenance is rejected', async () => {
+  const { packet } = packetFixture();
+  const withoutModel: typeof fetch = async () => new Response(JSON.stringify({
+    output: [{ content: [{ type: 'output_text', text: JSON.stringify(assessment()) }] }],
+  }), { status: 200 });
+  await assert.rejects(
+    () => requestOpenAiInvestigation(packet, { apiKey: 'test-key', fetchImpl: withoutModel }),
+    (error: unknown) => error instanceof InvestigationServiceError && error.status === 503,
+  );
+  assert.throws(
+    () => validateInvestigationApiResult({ schemaVersion: '1', provider: '', model: 'model', assessment: assessment() }, evidenceIds(packet)),
+    /provider provenance/,
+  );
+});
+
 test('unsupported model citations are removed without substituting evidence', async () => {
   const { packet } = packetFixture();
   const modelAssessment = assessment({
@@ -328,9 +353,12 @@ test('unsupported model citations are removed without substituting evidence', as
     apiKey: 'test-key',
     fetchImpl: async () => openAiResponse(modelAssessment),
   });
-  assert.deepEqual(result.observedEvidence, [{ statement: 'Supported.', evidenceIds: ['flow-related'] }]);
-  assert.deepEqual(result.inferences[0].evidenceIds, ['evt-related']);
-  assert.ok(evidenceIds(packet).has(result.inferences[0].evidenceIds[0]));
+  assert.equal(result.schemaVersion, '1');
+  assert.equal(result.provider, 'OpenAI');
+  assert.equal(result.model, 'gpt-5.6-sol-2026-07-01');
+  assert.deepEqual(result.assessment.observedEvidence, [{ statement: 'Supported.', evidenceIds: ['flow-related'] }]);
+  assert.deepEqual(result.assessment.inferences[0].evidenceIds, ['evt-related']);
+  assert.ok(evidenceIds(packet).has(result.assessment.inferences[0].evidenceIds[0]));
 });
 
 test('OpenAI request uses the Responses API model contract without embedding credentials', () => {

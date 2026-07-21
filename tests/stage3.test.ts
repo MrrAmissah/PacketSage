@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import ReportBuilder from '../src/components/ReportBuilder';
 import { boundedCaptureSummary, clientSafeCaptureOverviewError } from '../src/server/captureOverviewApi';
 import {
   completedCaptureOverview,
@@ -134,12 +138,15 @@ function record(signalId = 'sig-1', packetIdentity = 'packet-1'): InvestigationR
     signalId,
     packetIdentity,
     packet: packet(signalId),
-    assessment: {
-      summary: `Assessment summary for ${signalId}.`,
-      observedEvidence: [{ statement: `Observed statement for ${signalId}.`, evidenceIds: ['flow-1'] }],
-      inferences: [{ statement: `Inference for ${signalId}.`, confidence: 'low', evidenceIds: ['flow-1'] }],
-      uncertainties: [`Uncertainty for ${signalId}.`],
-      nextSteps: [{ action: `Next step for ${signalId}.`, reason: 'Independent validation is required.' }],
+    apiResult: {
+      schemaVersion: '1', provider: 'OpenAI', model: 'server-returned-model',
+      assessment: {
+        summary: `Assessment summary for ${signalId}.`,
+        observedEvidence: [{ statement: `Observed statement for ${signalId}.`, evidenceIds: ['flow-1'] }],
+        inferences: [{ statement: `Inference for ${signalId}.`, confidence: 'low', evidenceIds: ['flow-1'] }],
+        uncertainties: [`Uncertainty for ${signalId}.`],
+        nextSteps: [{ action: `Next step for ${signalId}.`, reason: 'Independent validation is required.' }],
+      },
     },
   });
 }
@@ -175,12 +182,13 @@ test('capture overview inclusion is explicit and limited to the current capture'
   assert.equal(includedCaptureOverview(included, 'different-evidence'), null);
 });
 
-test('Gemini overview appears only as a non-evidence-linked contextual report section', () => {
+test('capture overview appears only under a provider-neutral contextual report heading', () => {
   const included = setCaptureOverviewInclusion(overview(), 'evidence-1', true);
   const report = buildReportModel(dataFixture(), [], {}, included);
   const markdown = reportToMarkdown(report);
   assert.equal(report.contextualOverview, included);
-  assert.match(markdown, /Gemini capture overview/);
+  assert.match(markdown, /Capture overview — contextual note/);
+  assert.doesNotMatch(markdown, /### Gemini capture overview/);
   assert.match(markdown, /not evidence-linked/);
   assert.doesNotMatch(markdown.split('## AI-assisted investigation assessments')[0], /Evidence IDs:/);
 });
@@ -206,9 +214,57 @@ test('capture overview request is bounded and errors remain client-safe', () => 
 
 test('a successful current assessment can be explicitly included', () => {
   const current = record();
-  assert.deepEqual({ schema: current.schemaVersion, provider: current.provider, model: current.model, state: current.generationState, evidence: current.selectedEvidenceId }, { schema: '1', provider: 'OpenAI', model: 'gpt-5.6-sol', state: 'completed', evidence: 'evidence-1' });
+  assert.deepEqual({ schema: current.schemaVersion, provider: current.provider, model: current.model, state: current.generationState, evidence: current.selectedEvidenceId }, { schema: '1', provider: 'OpenAI', model: 'server-returned-model', state: 'completed', evidence: 'evidence-1' });
   const updated = setInvestigationReportInclusion([current], current, true);
   assert.equal(updated[0].includedInReport, true);
+});
+
+test('changing server-returned investigation provenance changes the retained record without client constants', () => {
+  const first = record();
+  const changed = completedInvestigationRecord({
+    selectedEvidenceId: first.selectedEvidenceId,
+    signalId: first.signalId,
+    packetIdentity: first.packetIdentity,
+    packet: first.packet,
+    apiResult: { schemaVersion: '1', provider: 'Configured provider', model: 'new-server-model', assessment: first.assessment },
+  });
+  assert.deepEqual({ schema: changed.schemaVersion, provider: changed.provider, model: changed.model }, { schema: '1', provider: 'Configured provider', model: 'new-server-model' });
+});
+
+test('invalid investigation provenance cannot produce a retained completed record', () => {
+  const valid = record();
+  assert.throws(() => completedInvestigationRecord({
+    selectedEvidenceId: valid.selectedEvidenceId,
+    signalId: valid.signalId,
+    packetIdentity: valid.packetIdentity,
+    packet: valid.packet,
+    apiResult: { schemaVersion: '1', provider: '', model: 'server-model', assessment: valid.assessment },
+  }), /provider provenance/);
+});
+
+test('primary capability labels are provider-neutral while provenance remains optional', () => {
+  const overviewSource = readFileSync('src/components/CaptureOverview.tsx', 'utf8');
+  const investigationSource = readFileSync('src/components/SuspiciousSignals.tsx', 'utf8');
+  assert.match(overviewSource, /> Capture Overview</);
+  assert.doesNotMatch(overviewSource, /Capture Overview[^\n]*Google|Capture Overview[^\n]*Gemini/);
+  assert.match(investigationSource, />Evidence-grounded investigation</);
+  assert.doesNotMatch(investigationSource, /Evidence-grounded investigation[^\n]*(OpenAI|GPT)/);
+  assert.match(overviewSource, /current\?\.provider/);
+  assert.match(investigationSource, /completedRecord\?\.provider/);
+});
+
+test('screen, print, and Markdown report output retain neutral heading and optional provenance', () => {
+  const included = setCaptureOverviewInclusion(overview(), 'evidence-1', true);
+  const markup = renderToStaticMarkup(React.createElement(ReportBuilder, {
+    data: dataFixture(), investigations: [include(record())], captureOverview: included,
+  }));
+  const markdown = reportToMarkdown(buildReportModel(dataFixture(), [include(record())], {}, included));
+  for (const output of [markup, markdown]) {
+    assert.match(output, /Capture overview — contextual note/);
+    assert.match(output, /Google/);
+    assert.match(output, /gemini-test/);
+    assert.doesNotMatch(output, /Gemini capture overview/);
+  }
 });
 
 test('failure state cannot be included because no validated record exists', () => {

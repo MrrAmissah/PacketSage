@@ -3,6 +3,7 @@ import type {
   FlowSummary,
   HttpRecord,
   InvestigationAssessment,
+  InvestigationApiResult,
   InvestigationDnsEvidence,
   InvestigationEvidencePacket,
   InvestigationEventEvidence,
@@ -265,6 +266,9 @@ export function validateInvestigationRequest(body: unknown): InvestigationEviden
   if (bytes > MAX_INVESTIGATION_REQUEST_BYTES) throw new InvestigationValidationError('Investigation request is too large.', 413);
 
   const root = objectValue(body, 'Investigation request must be a JSON object.');
+  if (Object.keys(root).some(key => key !== 'evidence')) {
+    throw new InvestigationValidationError('Investigation request contains unsupported fields.');
+  }
   const evidence = objectValue(root.evidence, 'Investigation evidence is required.');
   if (evidence.version !== '1') throw new InvestigationValidationError('Unsupported investigation evidence version.');
   const signalValue = objectValue(evidence.signal, 'A selected signal is required.');
@@ -469,6 +473,20 @@ export function validateInvestigationAssessment(value: unknown, allowedEvidenceI
     reason: outputText(item.reason, 'AI next-step reason is malformed.'),
   }));
   return { summary, observedEvidence: observed, inferences, uncertainties, nextSteps };
+}
+
+export function validateInvestigationApiResult(value: unknown, allowedEvidenceIds: ReadonlySet<string>): InvestigationApiResult {
+  const root = objectValue(value, 'AI investigation response is malformed.');
+  const schemaVersion = stringValue(root.schemaVersion, 'AI investigation schema provenance is malformed.', 32);
+  if (schemaVersion !== '1') throw new InvestigationValidationError('AI investigation schema provenance is malformed.');
+  const provider = stringValue(root.provider, 'AI investigation provider provenance is malformed.', 100);
+  const model = stringValue(root.model, 'AI investigation model provenance is malformed.', 160);
+  return {
+    schemaVersion,
+    provider,
+    model,
+    assessment: validateInvestigationAssessment(root.assessment, allowedEvidenceIds),
+  };
 }
 
 export function resolveCitedFlow(evidenceId: string, packet: InvestigationEvidencePacket, flows: readonly FlowSummary[]): FlowSummary | undefined {

@@ -1,19 +1,25 @@
-import type { InvestigationAssessment, InvestigationEvidencePacket, InvestigationRecord } from '../types.js';
+import type { InvestigationApiResult, InvestigationEvidencePacket, InvestigationRecord } from '../types.js';
+import { evidenceIds, validateInvestigationApiResult } from './investigation.js';
 
 export function completedInvestigationRecord(input: {
   selectedEvidenceId: string;
   signalId: string;
   packetIdentity: string;
   packet: InvestigationEvidencePacket;
-  assessment: InvestigationAssessment;
+  apiResult: InvestigationApiResult;
 }): InvestigationRecord {
+  const apiResult = validateInvestigationApiResult(input.apiResult, evidenceIds(input.packet));
   return {
-    schemaVersion: '1',
-    provider: 'OpenAI',
-    model: 'gpt-5.6-sol',
+    schemaVersion: apiResult.schemaVersion,
+    provider: apiResult.provider,
+    model: apiResult.model,
     generationState: 'completed',
     createdAt: new Date().toISOString(),
-    ...input,
+    selectedEvidenceId: input.selectedEvidenceId,
+    signalId: input.signalId,
+    packetIdentity: input.packetIdentity,
+    packet: input.packet,
+    assessment: apiResult.assessment,
     includedInReport: false,
   };
 }

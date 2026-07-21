@@ -238,10 +238,17 @@ export interface InvestigationAssessment {
   }>;
 }
 
+export interface InvestigationApiResult {
+  schemaVersion: string;
+  provider: string;
+  model: string;
+  assessment: InvestigationAssessment;
+}
+
 export interface InvestigationRecord {
-  schemaVersion: '1';
-  provider: 'OpenAI';
-  model: 'gpt-5.6-sol';
+  schemaVersion: string;
+  provider: string;
+  model: string;
   generationState: 'completed';
   createdAt: string;
   selectedEvidenceId: string;

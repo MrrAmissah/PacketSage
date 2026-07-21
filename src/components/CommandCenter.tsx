@@ -28,6 +28,7 @@ import InfoPopover from './InfoPopover';
 interface CommandCenterProps {
   data: ParsedResult | null;
   onNavigate: (tab: string) => void;
+  signalStatusOverrides?: Record<string, string>;
 }
 
 // Format/clean signal titles to be highly forensic and quiet
@@ -64,7 +65,7 @@ const formatSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
 
-export default function CommandCenter({ data, onNavigate }: CommandCenterProps) {
+export default function CommandCenter({ data, onNavigate, signalStatusOverrides = {} }: CommandCenterProps) {
   if (!data) {
     return (
       <div id="cmd-empty" className="flex flex-col items-center justify-center py-24 text-center font-sans">
@@ -126,6 +127,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
   const uniqueEndpoints = Array.from(new Set([...uniqueSrcIps, ...uniqueDstIps]));
   const highRiskSignals = signals.filter(s => s.severity === 'high').length;
   const cleartextCount = http.filter(h => h.cleartext).length;
+  const reviewedSignalCount = signals.filter(signal => (signalStatusOverrides[signal.id] || signal.status) === 'Added to report').length;
 
   const dominantProto = React.useMemo(() => {
     if (!donutSegments || donutSegments.length === 0) return 'None';
@@ -145,7 +147,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
     return { ip: sorted[0][0], pct: topPct };
   }, [events]);
 
-  const isDemo = evidence.name.toLowerCase().includes('recon') || evidence.name.toLowerCase().includes('demo') || evidence.name.toLowerCase().includes('sample') || evidence.name.toLowerCase().includes('compromised');
+  const isDemo = evidence.parseMode === 'demo';
 
   // Observed Traffic Activity timeline data computations
   const chartData = React.useMemo(() => {
@@ -391,7 +393,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Forensic workspace</span>
                 {isDemo && (
                   <span className="px-2 py-0.5 bg-status-warning-bg text-status-warning border border-status-warning/15 text-[9px] font-semibold rounded-full uppercase tracking-wider select-none">
-                    Sample incident dataset
+                    Generated defensive sample
                   </span>
                 )}
               </div>
@@ -1037,7 +1039,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
               <FileText size={15} className="text-accent-primary" />
               Investigation Brief
             </h3>
-            <span className="text-[10px] text-text-muted font-bold font-mono uppercase tracking-wider">SOC MEMO</span>
+            <span className="text-[10px] text-text-muted font-bold font-mono uppercase tracking-wider">NEXT STEPS</span>
           </div>
 
           {/* Section 1: Current assessment */}
@@ -1046,7 +1048,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
               <Shield size={16} />
             </div>
             <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Current assessment</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Deterministic summary</span>
               <p className="text-text-secondary leading-relaxed font-normal">
                 Traffic contains several review-worthy observations. The deterministic analysis engine has mapped key telemetry and suspicious indicators.
               </p>
@@ -1059,8 +1061,8 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
               <Cpu size={16} />
             </div>
             <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Recommended next action</span>
-              <p className="text-text-primary font-semibold">Inspect packet flows</p>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Primary next action</span>
+              <p className="text-text-primary font-semibold">Review a signal and its exact evidence</p>
             </div>
           </div>
 
@@ -1070,9 +1072,9 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
               <ShieldCheck size={16} />
             </div>
             <div className="space-y-1.5 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Confidence</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Review state</span>
               <span className="inline-block px-2.5 py-0.5 bg-status-warning-bg text-status-warning border border-status-warning/15 font-semibold rounded text-[10px] uppercase tracking-wider select-none">
-                Moderate
+                Analyst validation required
               </span>
             </div>
           </div>
@@ -1085,7 +1087,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
             <div className="space-y-1.5 text-xs">
               <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Report readiness</span>
               <span className="inline-block px-2.5 py-0.5 bg-status-success-bg text-status-success border border-status-success/15 font-semibold rounded text-[10px] select-none">
-                Draft can be generated
+                {reviewedSignalCount > 0 ? `${reviewedSignalCount} reviewed finding${reviewedSignalCount === 1 ? '' : 's'} included` : 'No reviewed findings included yet'}
               </span>
             </div>
           </div>
@@ -1098,7 +1100,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
             <div className="space-y-1 text-xs">
               <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Limitations</span>
               <p className="text-text-muted leading-relaxed font-normal">
-                Demo decoder, full binary decoding pending production parser service.
+                Generated sample metadata; raw PCAP/PCAPNG files use the bounded browser decoder.
               </p>
             </div>
           </div>
@@ -1108,22 +1110,24 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
             <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Next analyst actions</span>
             
             <div className="space-y-2">
-              <div 
+              <button
+                type="button"
                 onClick={() => onNavigate('flows')}
-                className="flex items-start gap-3 p-2 hover:bg-surface-muted/20 rounded-lg cursor-pointer transition-colors group"
+                className="flex w-full items-start gap-3 rounded-lg p-2 text-left hover:bg-surface-muted/20 cursor-pointer transition-colors group"
               >
                 <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
                   <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
                 </div>
                 <div className="space-y-0.5">
                   <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Inspect packet flows</p>
-                  <p className="text-[10px] text-text-muted font-normal">Review conversations and payloads.</p>
+                  <p className="text-[10px] text-text-muted font-normal">Review conversations and decoded metadata.</p>
                 </div>
-              </div>
+              </button>
 
-              <div 
+              <button
+                type="button"
                 onClick={() => onNavigate('signals')}
-                className="flex items-start gap-3 p-2 hover:bg-surface-muted/20 rounded-lg cursor-pointer transition-colors group"
+                className="flex w-full items-start gap-3 rounded-lg p-2 text-left hover:bg-surface-muted/20 cursor-pointer transition-colors group"
               >
                 <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
                   <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
@@ -1132,11 +1136,12 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                   <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Review signals & observations</p>
                   <p className="text-[10px] text-text-muted font-normal">Investigate and triage all flagged signals.</p>
                 </div>
-              </div>
+              </button>
 
-              <div 
+              <button
+                type="button"
                 onClick={() => onNavigate('signals')}
-                className="flex items-start gap-3 p-2 hover:bg-surface-muted/20 rounded-lg cursor-pointer transition-colors group"
+                className="flex w-full items-start gap-3 rounded-lg p-2 text-left hover:bg-surface-muted/20 cursor-pointer transition-colors group"
               >
                 <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
                   <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
@@ -1145,7 +1150,7 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
                   <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Investigate referenced evidence</p>
                   <p className="text-[10px] text-text-muted font-normal">Run a bounded assessment from one signal’s exact evidence.</p>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
 

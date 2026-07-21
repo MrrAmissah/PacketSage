@@ -190,7 +190,7 @@ export function parseDemoData(): ParsedResult {
       length: 82,
       info: `Standard query 0x${(1000 + index).toString(16)} A suspicious-lab.test`
     })),
-    // Beaconing C2 Connections on uncommon port 4444
+    // Repeated outbound connections on a review-worthy destination port
     ...Array.from({ length: 10 }).map((_, index) => ({
       id: `evt-beacon-conn-${index}`,
       timestamp: new Date(baseTime.getTime() + 12000 + index * 15000).toISOString(),
@@ -241,7 +241,7 @@ export function parseDemoData(): ParsedResult {
       length: 74,
       info: '[TCP Retransmission] Client Hello'
     },
-    // Suricata Alert Mock Event (if we parsed EVE)
+    // Generated alert-like metadata for a repeated timing pattern
     {
       id: 'evt-alert-1',
       timestamp: new Date(baseTime.getTime() + 12000).toISOString(),
@@ -252,9 +252,11 @@ export function parseDemoData(): ParsedResult {
       protocol: 'TCP',
       service: 'Suricata Alert',
       length: 0,
-      info: 'Suricata Alert: [1:200134:2] ET OUTBOUND-TIMING Reverse Shell Beaconing Activity (C2-like indicator requiring validation)'
+      info: 'Generated alert metadata: repeated outbound timing pattern requiring validation'
     }
   ];
+
+  events.sort((left, right) => left.timestamp.localeCompare(right.timestamp));
 
   const dns: DnsRecord[] = [
     {
@@ -277,7 +279,7 @@ export function parseDemoData(): ParsedResult {
       response: '203.0.113.80',
       rcode: 'NOERROR',
       riskLevel: 'high' as const,
-      notes: 'Highly frequent queries, potential command and control DNS tunneling / signaling.'
+      notes: 'Repeated query volume requiring validation against expected resolver and application activity.'
     }))
   ];
 
@@ -330,12 +332,12 @@ export function parseDemoData(): ParsedResult {
 
   const evidence: UploadedEvidence = {
     id: 'ev-demo-1',
-    name: 'compromised_internal_host_threat_hunt.pcap',
-    type: 'pcap',
+    name: 'guided_defensive_analysis_sample.json',
+    type: 'generated sample',
     size: 45670,
     uploadedAt: new Date().toISOString(),
     parseMode: 'demo',
-    sourceFormat: 'PCAP Export',
+    sourceFormat: 'Generated defensive-analysis dataset',
     retentionMode: 'Ephemeral Memory',
     status: 'completed',
     checksumStatus: 'demo-not-applicable',
@@ -1038,6 +1040,9 @@ export function runRuleEngine(
   Object.entries(dnsQueriesMap).forEach(([clientIp, domains]) => {
     Object.entries(domains).forEach(([domain, count]) => {
       if (count > 12) {
+        const relatedEventIds = dns
+          .filter(record => record.clientIp === clientIp && record.query === domain)
+          .flatMap(record => record.relatedEventIds || []);
         signals.push({
           id: `sig-dnsbeacon-${clientIp}-${domain.replace(/[^a-zA-Z0-9]/g, '_')}`,
           title: 'Repeated DNS query volume observed',
@@ -1047,7 +1052,8 @@ export function runRuleEngine(
           observedEvidence: `Client ${clientIp} made ${count} DNS queries for domain "${domain}".`,
           interpretation: 'Repeated queries can reflect automated software, retry behavior, resolver issues, or scheduled communication. This count does not establish timing regularity.',
           whatItDoesNotProve: 'It does not prove data is being exfiltrated; this can occasionally be caused by standard software update mechanisms or malformed DNS resolution software.',
-          recommendedDefensiveCheck: 'Review the DNS response contents. Block the resolution of domain name on internal DNS servers and isolate the client workstation.'
+          recommendedDefensiveCheck: 'Review the DNS response contents and correlate the query timestamps with expected application activity.',
+          relatedEventIds,
         });
       }
     });
@@ -1065,7 +1071,8 @@ export function runRuleEngine(
         observedEvidence: `Host ${rec.clientIp} requested "${rec.uri}" over cleartext HTTP (Host: ${rec.host}).`,
         interpretation: 'A binary-like path requested over HTTP may expose content to observation or modification in transit.',
         whatItDoesNotProve: 'It does not prove a file was returned, saved, executed, or malicious.',
-        recommendedDefensiveCheck: 'Inspect the downloaded file hashes against VirusTotal or similar threat intelligence platforms. Mandate TLS policy (HTTPS) across the enterprise.'
+        recommendedDefensiveCheck: 'Validate the requested resource through authorized file and endpoint telemetry, and prefer TLS-protected distribution.',
+        relatedEventIds: rec.relatedEventIds || [],
       });
     }
   });
@@ -1083,7 +1090,9 @@ export function runRuleEngine(
         observedEvidence: `Internal IP ${flow.sourceIp} initiated direct socket session with external ${flow.destinationIp} on port ${flow.destinationPort}.`,
         interpretation: 'Sustained outbound connections to ports such as 4444 or 1337 require validation as they can be associated with custom network services, debugging, or reverse shell activity.',
         whatItDoesNotProve: 'It does not guarantee the connection is malicious; standard development environments occasionally use ports like 8000 or 1337.',
-        recommendedDefensiveCheck: 'Query running processes on host machine matching local port. Check for unauthorized scripts, and terminate the connection immediately.'
+        recommendedDefensiveCheck: 'Identify the owning process and validate the destination service against approved application activity.',
+        relatedFlowIds: [flow.id],
+        relatedEventIds: flow.relatedEvents || [],
       });
     }
   });
@@ -1102,6 +1111,7 @@ export function runRuleEngine(
 
     const [firstFlow] = group;
     const relatedFlowIds = group.map(flow => flow.id);
+    const relatedEventIds = group.flatMap(flow => flow.relatedEvents || []);
     signals.push({
       id: `sig-repeated-connections-${firstFlow.sourceIp}-${firstFlow.destinationIp}-${firstFlow.destinationPort}`.replace(/[^a-zA-Z0-9-_]/g, '_'),
       title: 'Repeated outbound connections',
@@ -1112,7 +1122,8 @@ export function runRuleEngine(
       interpretation: 'Multiple outbound sessions to the same external service may indicate application heartbeats, staged communication, polling, or repeated connection retries that require validation alongside endpoint context.',
       whatItDoesNotProve: 'It does not prove command-and-control, tunneling, or data theft. Normal client software, update services, and developer tools can produce repeated outbound connections.',
       recommendedDefensiveCheck: 'Review the destination reputation, destination service owner, process lineage on the source host, and whether these repeated sessions match expected application behavior.',
-      relatedFlowIds
+      relatedFlowIds,
+      relatedEventIds,
     });
   });
 
@@ -1128,7 +1139,9 @@ export function runRuleEngine(
         observedEvidence: `Flow summary shows ${flow.sourceIp} pushed ${(flow.byteCount / (1024 * 1024)).toFixed(2)} MB of raw TCP data to external endpoint ${flow.destinationIp}.`,
         interpretation: 'Large outbound byte counts can reflect backups, synchronization, uploads, exports, or other transfers that require business-context validation.',
         whatItDoesNotProve: 'It does not prove theft occurred; the user could be updating extensive legitimate code projects, downloading standard databases, or executing an approved backup.',
-        recommendedDefensiveCheck: 'Cross-reference with NetFlow and firewall policies. Investigate local files accessed by user account within the same hour.'
+        recommendedDefensiveCheck: 'Cross-reference the transfer with approved backups, synchronization jobs, and endpoint file-access telemetry.',
+        relatedFlowIds: [flow.id],
+        relatedEventIds: flow.relatedEvents || [],
       });
     }
   });

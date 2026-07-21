@@ -47,11 +47,12 @@ import SuspiciousSignals from './components/SuspiciousSignals';
 import IncidentTimeline from './components/IncidentTimeline';
 import ReportBuilder from './components/ReportBuilder';
 import LearningMode from './components/LearningMode';
-import ArchitectureRoadmap from './components/ArchitectureRoadmap';
 import CaptureOverview from './components/CaptureOverview';
+import GuidedSampleJourney from './components/GuidedSampleJourney';
 import { setCaptureOverviewInclusion } from './lib/captureOverview';
+import { createJudgePathSession, deriveJudgePathProgress, shouldShowGuidedJourney, type JudgePathDestination, type JudgePathSession } from './lib/judgePath';
 
-type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy' | 'architecture';
+type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy';
 type ThemeMode = 'light' | 'dark' | 'system';
 
 export default function App() {
@@ -63,6 +64,7 @@ export default function App() {
   const [relatedFlowScopeIds, setRelatedFlowScopeIds] = useState<string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
+  const [guideSession, setGuideSession] = useState<JudgePathSession | null>(null);
   const workspaceScrollRef = React.useRef<HTMLDivElement>(null);
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -107,6 +109,7 @@ export default function App() {
 
   React.useEffect(() => {
     workspaceScrollRef.current?.scrollTo({ top: 0, left: 0 });
+    if (activeTab === 'report') setGuideSession(previous => previous ? { ...previous, reportVisited: true } : previous);
   }, [activeTab, parsedData?.evidence.id]);
 
   const handleDataParsed = (data: ParsedResult) => {
@@ -116,6 +119,7 @@ export default function App() {
     setSignalStatusOverrides({});
     setSelectedFlow(null);
     setRelatedFlowScopeIds(null);
+    setGuideSession(createJudgePathSession(data.evidence.id));
     setActiveTab('overview'); // Take them to command center automatically
   };
 
@@ -127,6 +131,7 @@ export default function App() {
       setSignalStatusOverrides({});
       setSelectedFlow(null);
       setRelatedFlowScopeIds(null);
+      setGuideSession(null);
       setActiveTab('import');
     }
   };
@@ -178,7 +183,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'overview':
-        return <CommandCenter data={parsedData} onNavigate={(tab) => {
+        return <CommandCenter data={parsedData} signalStatusOverrides={signalStatusOverrides} onNavigate={(tab) => {
           if (tab === 'flows') setRelatedFlowScopeIds(null);
           setActiveTab(tab as TabType);
         }} />;
@@ -219,6 +224,8 @@ export default function App() {
             onInvestigationCompleted={handleInvestigationCompleted}
             onInvestigationInvalidated={handleInvestigationInvalidated}
             onInvestigationInclusionChange={handleInvestigationInclusion}
+            onSignalSelected={() => setGuideSession(previous => previous ? { ...previous, signalSelected: true } : previous)}
+            onOpenReport={() => setActiveTab('report')}
             onNavigateToFlows={(relatedFlows) => {
               setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
               setSelectedFlow(relatedFlows[0] || null);
@@ -235,6 +242,7 @@ export default function App() {
             onCompleted={setCaptureOverview}
             onInvalidated={() => setCaptureOverview(null)}
             onInclusionChange={(included) => setCaptureOverview(previous => setCaptureOverviewInclusion(previous, parsedData.evidence.id, included))}
+            onNavigate={(destination) => setActiveTab(destination)}
           />
         ) : null;
       case 'timeline':
@@ -254,10 +262,8 @@ export default function App() {
         return <ReportBuilder data={parsedData} investigations={investigations} captureOverview={captureOverview} signalStatusOverrides={signalStatusOverrides} />;
       case 'academy':
         return <LearningMode hasEvidence={!!parsedData} parsedData={parsedData} />;
-      case 'architecture':
-        return <ArchitectureRoadmap />;
       default:
-        return <CommandCenter data={parsedData} onNavigate={(tab) => {
+        return <CommandCenter data={parsedData} signalStatusOverrides={signalStatusOverrides} onNavigate={(tab) => {
           if (tab === 'flows') setRelatedFlowScopeIds(null);
           setActiveTab(tab as TabType);
         }} />;
@@ -287,7 +293,6 @@ export default function App() {
               { id: 'timeline', label: 'Incident timeline', icon: Activity, enabled: !!parsedData },
               { id: 'report', label: 'Report builder', icon: FileText, enabled: !!parsedData },
               { id: 'academy', label: 'Packet Academy', icon: BookOpen, enabled: true },
-              { id: 'architecture', label: 'Architecture spec', icon: Terminal, enabled: true },
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -525,6 +530,18 @@ export default function App() {
         {/* Tab workspace window with standard responsive layout */}
         <div ref={workspaceScrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 bg-canvas transition-colors duration-150">
           <div className="max-w-[1440px] mx-auto w-full">
+            {parsedData && shouldShowGuidedJourney(parsedData.evidence.parseMode, guideSession) && (
+              <GuidedSampleJourney
+                progress={deriveJudgePathProgress({
+                  evidenceLoaded: true,
+                  signalSelected: guideSession?.signalSelected || false,
+                  investigationIncluded: investigations.some(record => record.selectedEvidenceId === parsedData.evidence.id && record.includedInReport),
+                  reportVisited: guideSession?.reportVisited || false,
+                })}
+                onDismiss={() => setGuideSession(previous => previous ? { ...previous, dismissed: true } : previous)}
+                onNavigate={(destination: JudgePathDestination) => setActiveTab(destination)}
+              />
+            )}
             {renderActiveContent()}
           </div>
         </div>

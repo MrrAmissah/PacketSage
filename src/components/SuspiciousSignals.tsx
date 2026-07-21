@@ -69,6 +69,8 @@ interface SuspiciousSignalsProps {
     context: { selectedEvidenceId: string; signalId: string; packetIdentity: string },
     includedInReport: boolean,
   ) => void;
+  onSignalSelected?: (signalId: string) => void;
+  onOpenReport: () => void;
 }
 
 // Rich high-fidelity signals matching the reference image layout and metadata
@@ -613,6 +615,8 @@ export default function SuspiciousSignals({
   onInvestigationCompleted,
   onInvestigationInvalidated,
   onInvestigationInclusionChange,
+  onSignalSelected,
+  onOpenReport,
 }: SuspiciousSignalsProps) {
   // Rich local state derived only from parser/rule-engine signals.
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
@@ -706,14 +710,15 @@ export default function SuspiciousSignals({
         firstSeenTime: firstSeen ? firstSeen.replace('T', ' ').slice(0, 19) : 'Not provided',
         status: signalStatusOverrides[sig.id] || sig.status || 'Needs review'
       };
-    });
+    }).sort((left, right) => (right.relatedFlowIds?.length || 0) - (left.relatedFlowIds?.length || 0));
     setEnrichedSignals(mapped);
-    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id) || mapped[0]);
+    setSelectedSignal(prev => mapped.find(signal => signal.id === prev?.id) || null);
   }, [signals, flows, signalStatusOverrides]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {
     setSelectedSignal(sig);
+    onSignalSelected?.(sig.id);
   };
 
   // Status modifier functions (Simulating real integration/workflow status persistence)
@@ -878,7 +883,7 @@ export default function SuspiciousSignals({
       <div className="pb-3 border-b border-border-subtle">
         <h1 className="text-xl font-bold tracking-tight text-text-primary">Signals & observations</h1>
         <p className="text-xs text-text-muted mt-0.5">
-          Review detections from deterministic analysis and custom rules. Validate findings and add important items to your report.
+          Review deterministic signals, inspect exact relationships, and explicitly add independently reviewed findings to the report.
         </p>
       </div>
 
@@ -1539,6 +1544,22 @@ export default function SuspiciousSignals({
                   >
                     {completedRecord?.includedInReport ? <><Check size={11} /> Included in report draft — Remove from report</> : <><Clipboard size={11} /> Add AI-assisted assessment to report</>}
                   </button>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById('investigation-assessment')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      className="rounded-lg border border-border-subtle px-3 py-2 text-[10px] font-semibold text-text-primary"
+                    >
+                      Inspect citations
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onOpenReport}
+                      className="rounded-lg bg-accent-primary px-3 py-2 text-[10px] font-bold text-white"
+                    >
+                      Open Report Builder
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={handleInvestigate}
@@ -1560,7 +1581,7 @@ export default function SuspiciousSignals({
                   'Confirm whether the destination/domain is expected.',
                   'Review DNS query logs for surrounding activity.',
                   'Compare with endpoint process or scheduled task telemetry.',
-                  'Add validated findings to the report.'
+                  'Add independently reviewed findings to the report.'
                 ]).map((check, idx) => (
                   <li key={idx} className="marker:text-text-muted">{check}</li>
                 ))}

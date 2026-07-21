@@ -163,6 +163,7 @@ export default function ReportBuilder({ data, investigations, captureOverview, s
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };
+  const reportReady = report.counts.reviewedFindings > 0 || report.counts.includedAssessments > 0;
 
   return (
     <div id="report-builder-workspace" className="space-y-5">
@@ -175,10 +176,19 @@ export default function ReportBuilder({ data, investigations, captureOverview, s
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 print:hidden">
+      <div className="rounded-lg border border-border-subtle bg-surface p-3 text-xs print:hidden" role="status">
+        <span className="font-semibold text-text-primary">Report readiness: </span>
+        <span className={reportReady ? 'text-status-success' : 'text-status-warning'}>
+          {reportReady ? 'Ready to preview or export with explicitly included content.' : 'Review a deterministic finding or explicitly include an assessment before export.'}
+        </span>
+        <p className="mt-1 text-[10px] text-text-muted">Capture Overview is optional context and never makes a report evidence-ready by itself.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 print:hidden">
         {[
           ['Events', report.counts.events], ['Flows', report.counts.flows], ['Signals', report.counts.signals],
           ['Reviewed findings', report.counts.reviewedFindings], ['Included assessments', report.counts.includedAssessments],
+          ['Contextual overview', report.contextualOverview ? 'Included' : 'Not included'],
         ].map(([label, value]) => <div key={label} className="rounded-lg border border-border-subtle bg-surface p-3"><div className="text-[9px] uppercase text-text-muted">{label}</div><div className="mt-1 font-mono text-lg font-bold text-text-primary">{value}</div></div>)}
       </div>
 

@@ -145,7 +145,7 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fileName: 'pcap_recon_incident_2024.log',
+          fileName: 'guided_defensive_analysis_sample.json',
           parseMode: 'demo'
         })
       });
@@ -188,7 +188,7 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
 
       {/* Error message boundary */}
       {errorMessage && (
-        <div className="p-3 bg-status-danger-bg border border-status-danger/20 text-status-danger rounded-xl flex gap-2 items-center text-xs animate-fade-in">
+        <div role="alert" className="p-3 bg-status-danger-bg border border-status-danger/20 text-status-danger rounded-xl flex gap-2 items-center text-xs animate-fade-in">
           <AlertCircle size={14} className="shrink-0" />
           <span>{errorMessage}</span>
         </div>
@@ -219,6 +219,10 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
 
           {/* Drag and Drop Zone */}
           <div
+            role="button"
+            tabIndex={isLoading || !authorizedChecked ? -1 : 0}
+            aria-disabled={isLoading || !authorizedChecked}
+            aria-label="Browse authorized evidence files"
             onClick={() => {
               if (isLoading) return;
               if (!authorizedChecked) {
@@ -226,6 +230,12 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
                 return;
               }
               fileInputRef.current?.click();
+            }}
+            onKeyDown={(event) => {
+              if ((event.key === 'Enter' || event.key === ' ') && !isLoading && authorizedChecked) {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
             }}
             className={`p-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center transition-all group ${
               isLoading 
@@ -356,15 +366,15 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
                 
                 <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5 mt-1.5">
                   <Terminal size={14} className="text-accent-primary shrink-0" />
-                  Load sample network incident dataset
+                  Guided defensive-analysis sample
                 </h4>
                 <p className="text-xs text-text-muted leading-relaxed">
-                  Explore PacketSage instantly before importing your own logs. This is the fastest way to experience all available analysis modules.
+                  A generated dataset containing routine and review-worthy activity for a complete, evidence-grounded walkthrough.
                 </p>
                 
                 <div className="text-[11px] text-text-muted flex items-center gap-1.5 mt-1">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-primary/50" />
-                  <span>No authorization needed — uses PacketSage sample evidence.</span>
+                  <span>No authorization needed — generated sample evidence.</span>
                   <InfoPopover content="The sample dataset is built into PacketSage for demonstration and training. It does not require authorization because it is not user-provided evidence." align="left" />
                 </div>
               </div>
@@ -378,12 +388,12 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
               {isLoading ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                  Staging sample data...
+                  Loading guided sample…
                 </>
               ) : (
                 <>
                   <Database size={13} />
-                  Load sample dataset
+                  Load guided investigation sample
                 </>
               )}
             </button>

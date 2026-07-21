@@ -281,3 +281,35 @@ test('Narrow navigation uses an explicit labelled menu instead of horizontal swi
   assert.match(code, /mobileNavOpen \? 'grid' : 'hidden'/);
   assert.doesNotMatch(code, /<nav[^>]+overflow-x-auto/);
 });
+
+test('Command Center restores the original evidence-dashboard visual structure', () => {
+  const code = source('src/components/CommandCenter.tsx');
+  assert.match(code, /Observed traffic activity/);
+  assert.match(code, /Protocol composition/);
+  assert.match(code, /Top observed endpoint transmitters/);
+  assert.match(code, /Signals requiring review/);
+  assert.match(code, /Timeline preview/);
+  assert.match(code, /Investigation Brief/);
+});
+
+test('restored Command Center visuals remain bounded and evidence-derived', () => {
+  const code = source('src/components/CommandCenter.tsx');
+  assert.match(code, /protocolStats\.filter\(stat => stat\.count > 0\)/);
+  assert.match(code, /const maxBuckets = 64/);
+  assert.match(code, /durationMs <= 0[\s\S]*\? 1/);
+  assert.match(code, /observedEventDescription\(evt\)/);
+  assert.match(code, /commandCenterNextActions\(data\)/);
+  assert.match(code, /commandCenterLimitation\(evidence\.parseMode\)/);
+  assert.doesNotMatch(code, /DESKTOP-25KH|api\.github\.com|Draft can be generated|Analysis complete/);
+});
+
+test('Protocol Intelligence restores historical visual forms from current inventories only', () => {
+  const code = source('src/components/ProtocolIntelligence.tsx');
+  assert.match(code, /buildProtocolInventory\(stats, dns, http, tls\)/);
+  assert.match(code, /buildProtocolFlags\(dns, http, tls\)/);
+  assert.match(code, /stats\.filter\(stat => stat\.count > 0\)/);
+  assert.match(code, /Protocol distribution/);
+  assert.match(code, /Observed records by protocol/);
+  assert.match(code, /Protocol details/);
+  assert.doesNotMatch(code, /203\.0\.113\.|10\.0\.0\.15|8080|TLSv1\.3/);
+});

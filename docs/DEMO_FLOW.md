@@ -19,3 +19,6 @@ This is the shortest truthful path through the production workflow. The bundled 
 - Capture Overview sends a bounded summary for orientation and has no PacketSage evidence citations.
 - Neither model output is automatically included in a report, and neither changes deterministic findings.
 - Active case state is volatile and clears on refresh or reset; PacketSage performs no active scanning or live capture.
+- Flow Explorer and Incident Timeline navigate only through exact parser-established IDs; missing relationships disable navigation and never create temporary flows.
+- At narrow width, every active route is available from the labelled primary-navigation menu. Report Preview traps keyboard focus, closes with Escape, and returns focus to its trigger.
+- Print/PDF contains only the complete bounded report document, including late timeline and provenance/limitations content; it excludes the application shell and guided journey.

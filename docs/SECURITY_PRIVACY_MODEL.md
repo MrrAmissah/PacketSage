@@ -26,7 +26,7 @@ To minimize the security footprint of packet analyses, PacketSage uses an in-mem
 
 * **Processing Boundary**: Raw PCAP/PCAPNG captures are decoded in browser memory. Supported text exports are sent to the serverless parsing endpoint.
 * **Active Evidence State**: Parsed network records are held in the active application session; PacketSage does not claim zero retention by every infrastructure or model provider involved.
-* **Clear Case / Session Reset**: Clicking "Clear Data" or reloading clears active evidence and generated analysis from React state. Some review-status preferences may persist in browser storage.
+* **Clear Case / Session Reset**: Clicking **Clear current evidence** or reloading clears active evidence, generated analysis, exact-navigation scope, and report inclusion state from React state. Theme preference may persist in browser storage; Flow Explorer and Incident Timeline create no report-link storage.
 
 ---
 
@@ -51,7 +51,10 @@ The optional Capture Overview is a separate capability. It sends a fixed-limit s
 
 Both runtime paths retain schema version, provider, model identifier, generation time/state, current evidence or capture identity, and report-inclusion state. Client request identity and cancellation prevent older overview or investigation responses from overwriting the current case.
 
-### 3.2 Redaction Controls
+### 3.2 Relationship and Presentation Boundary
+Protocol Intelligence shows only current protocol statistics and decoded DNS/HTTP/TLS records. Flow Explorer resolves `flow.relatedEvents` and exact `signal.relatedFlowIds`; Incident Timeline resolves exact event IDs in flow/signal relationship arrays. Missing IDs produce unavailable states, never IP/prose/protocol heuristics or temporary flows. Only reviewed deterministic signals, explicitly included Evidence-grounded Investigation records, and explicitly included Capture Overview contextual notes enter Report Builder.
+
+### 3.3 Redaction Controls
 Before sending distilled metadata to the server-side AI proxy, PacketSage applies browser-side redaction algorithms:
 * **Authorization Headers**: Suspected credentials, API tokens, and JWT strings found in HTTP user agent headers or request lines are redacted and replaced with a default placeholder string (`[REDACTED_BY_CLIENT]`).
 * **Payload Truncation**: Only structural headers are parsed; raw base64 or hexadecimal payload strings are truncated and omitted from AI query prompts.

@@ -61,20 +61,20 @@ For container-ready environments:
   * Build: `npm run build`
   * Start: `npm run start` (launches compiled `dist/server.cjs`)
 
-## Phase 4B: Vercel Preview Deployment
+## Vercel Preview Deployment
 
 For Vercel-hosted previews:
 
 ### 4B.1 Project Settings
 * [ ] **Framework Preset**: Use Vite.
-* [ ] **Install Command**: `npm install`
+* [ ] **Install Command**: `npm ci`
 * [ ] **Build Command**: `npm run build`
 * [ ] **Output Directory**: `dist`
 * [ ] **Production Branch**: `main`
-* [ ] **Preview Branch**: `release/packetsage-v1.1.0-public-demo`
+* [ ] **Preview Source**: Deploy the current pull-request head; do not depend on a retired fixed Preview branch name.
 
 ### 4B.2 Serverless API Compatibility
-* [ ] **API Runtime**: Vercel preview deployments use serverless functions for `/api/health`, `/api/parse`, and `/api/investigate`.
+* [ ] **API Runtime**: Vercel preview deployments use serverless functions for `/api/health`, `/api/parse`, `/api/investigate`, and `/api/analyze`.
 * [ ] **Server-Side Secret Boundary**: `OPENAI_API_KEY` and `GEMINI_API_KEY` must be configured only as server-side Vercel environment variables for Preview and Production.
 * [ ] **Client Environment Label**: `VITE_APP_ENV` may be set to `preview` for Preview deployments and `production` for Production deployments.
 * [ ] **No Browser AI Key**: Do not create `VITE_OPENAI_API_KEY` or `VITE_GEMINI_API_KEY`.
@@ -95,7 +95,7 @@ Once deployed, run these sequential verifications on the live instance:
 
 ### 5.2 Heuristic & Signal Check
 1. Go to the **Signals & Observations** tab.
-2. Select an active signal and click **Add to report**.
+2. Select an active signal and click **Add finding to report**.
 3. Select another active signal and click **Dismiss noise**.
 4. Navigate away and back, then verify the table row, detail rail, and Report Builder status column preserve the selected statuses.
 
@@ -112,6 +112,13 @@ Once deployed, run these sequential verifications on the live instance:
 4. Click **Print / PDF**.
 5. Confirm the print view displays only the structured report, hiding application navigation headers and action controls.
 6. Confirm browser/headless PDF output is not blank and contains the report title, evidence summary, separate findings and assessment sections, exact citations, provenance, and limitations.
+7. Run `npm run verify:pdf -- <preview-url>` where the environment permits headless browser execution.
+
+### 5.5 Accessibility and Narrow Navigation
+1. At approximately 390 px, open the labelled primary-navigation menu and reach every active route without horizontal swiping.
+2. Confirm the active route remains visible in the menu control.
+3. Operate signal rows, flow rows, timeline cards, protocol cards, and Packet Academy modules with the keyboard.
+4. Open Report Preview, confirm focus enters and remains in the named dialog, close with Escape, and confirm focus returns to Preview.
 
 ---
 

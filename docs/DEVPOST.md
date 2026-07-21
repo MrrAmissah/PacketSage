@@ -17,3 +17,5 @@ OpenAI Codex supported repository analysis, implementation, code review, regress
 ## Provenance and trust
 
 Every retained runtime AI result stores its schema version, provider, model identifier, generation time and state, current evidence or capture identity, and report-inclusion state. Normal product labels describe capabilities; provider/model details are disclosed in optional technical details and report provenance. Failures produce an honest Retry state with no canned or local fallback output, and stale or cancelled responses cannot replace results for newer evidence.
+
+PacketSage's non-model evidence layer is deterministic: capture/text adapters normalize bounded records, deterministic IDs preserve identity, and cross-view navigation uses exact relationship IDs. GPT-5.6 is the only AI path allowed to return validated evidence citations. Gemini remains citation-free contextual orientation. Codex assisted engineering and verification only.

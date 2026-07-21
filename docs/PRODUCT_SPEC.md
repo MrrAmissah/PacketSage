@@ -38,7 +38,7 @@ To ensure professional integrity and avoid overclaiming, PacketSage is defined b
 
 1. **Import**: The user loads authorized network evidence via drag-and-drop or pasting logs. For exploration or education, the built-in, pre-loaded sample dataset is available immediately.
 2. **Decode**: The bounded browser decoder handles supported PCAP/PCAPNG metadata; deterministic adapters normalize CSV, Suricata JSON, Zeek TSV, TShark JSON, and text evidence.
-3. **Inspect**: The analyst uses interactive views (Command Center, Flow Explorer, Protocol Intelligence, Suspicious Signals, and Incident Timeline) to examine anomalous connections, search specific host strings, and validate heuristic triggers.
+3. **Inspect**: The analyst uses Command Center, Flow Explorer, Protocol Intelligence, Signals & Observations, and Incident Timeline. Displayed facts come from normalized records; cross-view navigation requires exact parser-established IDs.
 4. **Investigate**: The analyst runs a bounded GPT-5.6 assessment for one signal and reviews observations, inference, uncertainty, next steps, and exact citations.
 5. **Report**: The analyst explicitly includes selected validated assessments and reviewed findings, then previews or exports the evidence-grounded draft.
 
@@ -47,19 +47,19 @@ To ensure professional integrity and avoid overclaiming, PacketSage is defined b
 ## 4. Main Product Modules
 
 ### 4.1 Command Center
-The home dashboard and operations console of PacketSage. It gives an executive summary of the imported capture session, listing packet totals, active timeline ranges, protocol distributions (TCP, UDP, ICMP), cleartext exposure rates, and quick access to top-severity signals.
+The home operations console lists only loaded evidence totals, present protocol statistics, deterministic signals, observed timeline records, evidence-backed hostnames, and next actions supported by the current dataset. Empty custom evidence does not inherit generated-sample claims.
 
 ### 4.2 Import Evidence
-A versatile ingestion panel allowing analysts to either load pre-packaged educational scenarios or import their own authorized logs. Supports drag-and-drop file ingestion, file-dialog selection, or direct copy-paste text buffers.
+A versatile ingestion panel allowing analysts to load the generated educational scenario or import authorized evidence. Pasted events use the strict grammar `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`; ambiguous or malformed lines fail without partial evidence.
 
 ### 4.3 Flow Explorer
-An interactive grid reconstructing TCP and UDP sessions. Analysts can inspect endpoint conversations, calculate exact bytes transferred, query specific IPs, filter by port numbers, and drill down on localized packet sequences.
+An interactive grid of normalized flow summaries. Analysts can filter observed endpoint, port, protocol, direction, risk, time, packet, and byte fields. Events resolve only through `flow.relatedEvents`; signals resolve only through exact `relatedFlowIds`. No host alias, connection state, or encryption result is inferred.
 
 ### 4.4 Protocol Intelligence
 A dedicated deep-dive inspector separating key web and network services:
-* **DNS Log**: Captures records, lookup types (A, AAAA, TXT, MX), query domains, and responses.
-* **HTTP Traffic**: Inspects plaintext requests, URIs, user agents, response codes, and payload references.
-* **TLS Metadata**: Extracts Server Name Indications (SNI), TLS versions, and handshake details to study encrypted sessions without active decryption.
+* **DNS Log**: Displays fields present in decoded DNS records and an honest empty state otherwise.
+* **HTTP Traffic**: Displays fields present in decoded HTTP records and an honest empty state otherwise.
+* **TLS Metadata**: Displays fields present in decoded TLS records and an honest empty state otherwise.
 
 ### 4.5 Signals & Observations
 A deterministic rule engine surfaces review-worthy activity from observed metadata. Analysts explicitly add reviewed findings to the report or dismiss them as noise; running a model assessment does not change review state.
@@ -71,14 +71,10 @@ Invokes GPT-5.6 for one selected signal using only its bounded evidence packet. 
 Optionally invokes Google Gemini with a bounded whole-capture summary for orientation, traffic-pattern explanation, learning perspectives, and triage questions. This capability is separate from Evidence-grounded Investigation: it cannot create findings, is never observed evidence, has no PacketSage evidence citations, and enters the report only through explicit contextual-note inclusion.
 
 ### 4.7 Incident Timeline
-A clean, chronological timeline of reconstructed network events based on decoded packet timestamps. Features intuitive severity filtering, quick detail modals, and helps isolate the initial vector from subsequent lateral movements.
+A chronological list of normalized events based on recorded timestamps. Event-to-flow and event-to-signal navigation uses only explicit IDs; shared IPs, partial tuples, prose, protocol labels, and temporary records cannot create a relationship.
 
 ### 4.8 Report Builder
-A structured document compiler that exposes report readiness from reviewed deterministic findings and explicitly included investigation assessments. The optional contextual overview never makes a report evidence-ready on its own.
-4. Scope/Target validation.
-5. Analyst Validation Notes completion.
-6. Optional section toggles (Limitations, Recommendations).
-Features a print-optimized CSS layout for high-quality PDF exports.
+A structured document compiler that exposes report readiness from reviewed deterministic findings and explicitly included investigation assessments. The optional contextual overview never makes a report evidence-ready on its own. Flows and events have no orphan inclusion controls. Preview is an accessible modal, Markdown is copyable, and print/PDF renders the full bounded document without the application shell.
 
 ### 4.9 Packet Academy
 An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles. It is designed to evaluate and sharpen defensive packet-analysis, reasoning, and evidence verification skills.
@@ -93,6 +89,7 @@ An instructional training suite containing guided multiple-choice challenges bas
 * **Deterministic Rules**: Local rule matching for scan detection, cleartext warnings, and beaconing.
 * **Security Redaction**: Local filters to replace raw authorization tokens and cleartext keys with redacted placeholders in the UI.
 * **Interactive Education**: Built-in Academy with dynamic scoring and reasoning.
+* **Accessible Release Navigation**: Keyboard-operable primary rows/cards, a focus-managed Report Preview dialog, and a labelled compact menu that exposes every active route at approximately 390 px.
 
 ### Explicit Limitations
 * **No Active Scanner**: PacketSage is a passive review workspace. It does **not** scan, probe, or run active network checks.

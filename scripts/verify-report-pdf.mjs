@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 const includedAssessment = process.argv.includes('--included-assessment');
+const unknownSourcePort = process.argv.includes('--unknown-source-port');
 const positional = process.argv.slice(2).filter(argument => !argument.startsWith('--'));
 const baseUrl = positional[0] || 'http://127.0.0.1:3000';
 const pdfPath = resolve(positional[1] || (includedAssessment
@@ -40,10 +41,18 @@ function waitForText(text, timeoutMs = 75_000) {
 try {
   browser('open', baseUrl);
   browser('wait', '--load', 'networkidle');
-  browser('find', 'role', 'button', 'click', '--name', 'Load guided investigation sample');
-  browser('wait', '--text', 'Command center');
-  browser('wait', '[data-testid="contextual-spotlight-tour"]');
-  browser('find', 'role', 'button', 'click', '--name', 'Close guided tour', '--exact');
+  if (unknownSourcePort) {
+    browser('check', 'input[type="checkbox"]:not([disabled])');
+    browser('wait', '250');
+    browser('fill', 'textarea', '2026-07-21T12:00:00Z 10.0.0.15 -> 203.0.113.80 dst_port=4444 protocol=TCP length=128');
+    browser('eval', 'Array.from(document.querySelectorAll("button")).find(button => button.textContent?.trim() === "Submit pasted logs" && !button.disabled)?.click(); "clicked"');
+    browser('wait', '--text', 'Evidence decoded');
+  } else {
+    browser('find', 'role', 'button', 'click', '--name', 'Load guided investigation sample');
+    browser('wait', '--text', 'Command center');
+    browser('wait', '[data-testid="contextual-spotlight-tour"]');
+    browser('find', 'role', 'button', 'click', '--name', 'Close guided tour', '--exact');
+  }
   browser('find', 'role', 'button', 'click', '--name', 'Report builder', '--exact');
   browser('wait', '--text', 'NETWORK EVIDENCE REPORT');
   browser('find', 'role', 'button', 'click', '--name', 'Edit report details');
@@ -97,10 +106,17 @@ try {
     assert(followingContent >= 30, `${heading} was orphaned from meaningful following content.`);
   }
   const eventIds = new Set(text.match(/evt-[a-z0-9-]+/g) || []);
-  assert(eventIds.size > 8, `Expected more than 8 printed timeline events, found ${eventIds.size}.`);
-  assert(eventIds.size === 40, `Expected all 40 bounded timeline events, found ${eventIds.size}.`);
   const repeatedTimelineHeaders = (text.match(/Recorded time \/ Evidence ID/g) || []).length;
-  assert(repeatedTimelineHeaders >= 2, `Expected repeated Timeline headers, found ${repeatedTimelineHeaders}.`);
+  if (unknownSourcePort) {
+    assert(eventIds.size === 1, `Expected the one strict-text timeline event, found ${eventIds.size}.`);
+    assert(!text.includes('10.0.0.15:0'), 'Unknown source-port sentinel leaked into PDF output.');
+    assert(compactText.includes('10.0.0.15:unknown'), 'Unknown source port is not labelled honestly in PDF output.');
+  } else {
+    assert(eventIds.size > 8, `Expected more than 8 printed timeline events, found ${eventIds.size}.`);
+    assert(eventIds.size === 40, `Expected all 40 bounded timeline events, found ${eventIds.size}.`);
+    assert(repeatedTimelineHeaders >= 2, `Expected repeated Timeline headers, found ${repeatedTimelineHeaders}.`);
+    assert(compactText.includes('10.0.0.15:51234'), 'Known source port changed in PDF output.');
+  }
   assert(!text.includes('Replay guided tour'), 'Guided-tour content leaked into print output.');
   assert(!/Step [1-4] of 4/.test(text), 'Contextual-tour content leaked into print output.');
   if (includedAssessment) {
@@ -113,7 +129,7 @@ try {
     assert(text.includes('Model:'), 'Included assessment model provenance is missing.');
     assert(/(?:flow|evt|dns|http|tls)-[a-z0-9-]+/.test(text), 'Included assessment evidence citations are missing.');
   }
-  process.stdout.write(`Verified report-only PDF: ${pdfPath} (${pages.length} pages, ${eventIds.size} timeline events, ${repeatedTimelineHeaders} repeated Timeline headers, assessment ${includedAssessment ? 'included' : 'excluded'})\n`);
+  process.stdout.write(`Verified report-only PDF: ${pdfPath} (${pages.length} pages, ${eventIds.size} timeline events, ${repeatedTimelineHeaders} repeated Timeline headers, assessment ${includedAssessment ? 'included' : 'excluded'}, unknown source port ${unknownSourcePort ? 'included' : 'excluded'})\n`);
 } finally {
   try { browser('close'); } catch { /* best-effort browser cleanup */ }
   if (process.env.KEEP_VERIFICATION_PDF !== '1') rmSync(pdfPath, { force: true });

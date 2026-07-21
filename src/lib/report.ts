@@ -83,6 +83,10 @@ function orderedUnique(values: readonly string[]): string[] {
   return Array.from(new Set(values));
 }
 
+export function formatReportEndpoint(ip: string, port: number): string {
+  return port === 0 ? `${ip}:unknown` : `${ip}:${port}`;
+}
+
 function statusFor(
   signal: SuspiciousSignal,
   overrides: Readonly<Record<string, SignalReviewStatus>>,
@@ -159,8 +163,8 @@ export function buildReportModel(
   const timeline = sortedEvents.slice(0, MAX_REPORT_TIMELINE_EVENTS).map(event => ({
     id: event.id,
     timestamp: event.timestamp,
-    source: `${event.sourceIp}:${event.sourcePort}`,
-    destination: `${event.destinationIp}:${event.destinationPort}`,
+    source: formatReportEndpoint(event.sourceIp, event.sourcePort),
+    destination: formatReportEndpoint(event.destinationIp, event.destinationPort),
     protocol: event.service || event.protocol,
     length: event.length,
     signalIds: eventSignalIds.get(event.id) || [],

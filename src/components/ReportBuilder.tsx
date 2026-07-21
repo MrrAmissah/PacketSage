@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Check, Clipboard, Eye, FileText, Printer, X } from 'lucide-react';
 import type { ParsedResult } from '../lib/parser';
-import type { InvestigationRecord, SignalReviewStatus } from '../types';
+import type { CaptureOverviewRecord, InvestigationRecord, SignalReviewStatus } from '../types';
 import { buildReportModel, reportToMarkdown, type ReportModel } from '../lib/report';
 
 interface ReportBuilderProps {
   data: ParsedResult | null;
   investigations: InvestigationRecord[];
+  captureOverview: CaptureOverviewRecord | null;
   signalStatusOverrides?: Record<string, SignalReviewStatus>;
 }
 
@@ -84,6 +85,25 @@ function ReportDocument({ report }: ReportDocumentProps) {
         {report.timelineTruncated && <p className="text-[10px] text-text-muted">Timeline truncated to {report.timeline.length} of {report.counts.events} events.</p>}
       </section>
 
+      <section aria-labelledby="report-contextual-overview" className="space-y-4" data-testid="report-contextual-overview">
+        <div>
+          <h3 id="report-contextual-overview" className="text-sm font-bold text-text-primary">Contextual overview</h3>
+          <p className="mt-1 text-[10px] text-text-muted">Optional orientation only. This content is not evidence-linked and contains no evidence citations.</p>
+        </div>
+        {!report.contextualOverview ? <p className="rounded-lg bg-surface-muted p-3 text-text-muted">No capture overview has been explicitly included.</p> : (
+          <article className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-4" data-testid="included-capture-overview">
+            <h4 className="font-bold text-text-primary">Gemini capture overview</h4>
+            <p className="font-semibold text-status-warning">Contextual orientation — not evidence-linked.</p>
+            <p>{report.contextualOverview.result.executiveSummary}</p>
+            <div><h5 className="font-bold text-text-primary">Traffic-pattern explanation</h5><p>{report.contextualOverview.result.whatHappened}</p></div>
+            <div><h5 className="font-bold text-text-primary">Beginner perspective</h5><p>{report.contextualOverview.result.beginnerExplanation}</p></div>
+            <div><h5 className="font-bold text-text-primary">Technical perspective</h5><p>{report.contextualOverview.result.technicalExplanation}</p></div>
+            <div><h5 className="font-bold text-text-primary">Analyst triage questions</h5><p>{report.contextualOverview.result.analystQuestions}</p></div>
+            <details className="text-[10px] text-text-muted"><summary className="cursor-pointer font-semibold">AI provenance</summary><p className="mt-1">Provider: {report.contextualOverview.provider} · Model: {report.contextualOverview.model} · Schema: {report.contextualOverview.schemaVersion} · Generated: {report.contextualOverview.createdAt} · Capture: {report.contextualOverview.captureIdentity}</p></details>
+          </article>
+        )}
+      </section>
+
       <section aria-labelledby="report-assessments" className="space-y-4" data-testid="report-assessments">
         <div>
           <h3 id="report-assessments" className="text-sm font-bold text-text-primary">AI-assisted investigation assessments</h3>
@@ -98,6 +118,7 @@ function ReportDocument({ report }: ReportDocumentProps) {
               <div className="mt-1 flex flex-wrap gap-3 font-mono text-[9px] text-text-muted">
                 <span>Signal: {record.signalId}</span><span>Packet: {record.packetIdentity}</span>
               </div>
+              <details className="mt-2 text-[9px] text-text-muted"><summary className="cursor-pointer font-semibold">AI provenance</summary><p>Provider: {record.provider} · Model: {record.model} · Schema: {record.schemaVersion} · Generated: {record.createdAt} · Evidence: {record.selectedEvidenceId}</p></details>
               <p className="mt-2 leading-relaxed">{record.assessment.summary}</p>
             </header>
             <section><h5 className="mb-2 font-bold text-text-primary">Observed evidence</h5>{record.assessment.observedEvidence.map((item, index) => <div key={`${item.statement}-${index}`} className="mb-2"><p>{item.statement}</p><IdList values={item.evidenceIds} /></div>)}</section>
@@ -127,12 +148,12 @@ function ReportDocument({ report }: ReportDocumentProps) {
   );
 }
 
-export default function ReportBuilder({ data, investigations, signalStatusOverrides = {} }: ReportBuilderProps) {
+export default function ReportBuilder({ data, investigations, captureOverview, signalStatusOverrides = {} }: ReportBuilderProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const report = useMemo(
-    () => data ? buildReportModel(data, investigations, signalStatusOverrides) : null,
-    [data, investigations, signalStatusOverrides],
+    () => data ? buildReportModel(data, investigations, signalStatusOverrides, captureOverview) : null,
+    [data, investigations, signalStatusOverrides, captureOverview],
   );
 
   if (!report) return <div className="rounded-xl border border-border-subtle bg-surface p-6 text-sm text-text-muted">Import evidence before building a report.</div>;

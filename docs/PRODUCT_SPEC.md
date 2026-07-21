@@ -67,6 +67,9 @@ A deterministic rule engine that surfaces suspicious activity based on observed 
 ### 4.6 AI-Assisted Investigation
 Invokes GPT-5.6 for one selected signal using only its bounded evidence packet. Structured observations, inference, uncertainty, next steps, and citations are validated before display.
 
+### 4.7 Capture Overview
+Optionally invokes Google Gemini with a bounded whole-capture summary for orientation, traffic-pattern explanation, learning perspectives, and triage questions. This capability is separate from Evidence-grounded Investigation: it cannot create findings, is never observed evidence, has no PacketSage evidence citations, and enters the report only through explicit contextual-note inclusion.
+
 ### 4.7 Incident Timeline
 A clean, chronological timeline of reconstructed network events based on decoded packet timestamps. Features intuitive severity filtering, quick detail modals, and helps isolate the initial vector from subsequent lateral movements.
 

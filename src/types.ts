@@ -239,12 +239,41 @@ export interface InvestigationAssessment {
 }
 
 export interface InvestigationRecord {
+  schemaVersion: '1';
+  provider: 'OpenAI';
+  model: 'gpt-5.6-sol';
+  generationState: 'completed';
+  createdAt: string;
   selectedEvidenceId: string;
   signalId: string;
   packetIdentity: string;
   packet: InvestigationEvidencePacket;
   assessment: InvestigationAssessment;
   includedInReport: boolean;
+}
+
+export interface AiAnalysisResult {
+  executiveSummary: string;
+  whatHappened: string;
+  normalActivity: string;
+  suspiciousActivity: string;
+  analystQuestions: string;
+  recommendedChecks: string;
+  beginnerExplanation: string;
+  technicalExplanation: string;
+  confidence: 'low' | 'medium' | 'high';
+  limitations: string;
+}
+
+export interface CaptureOverviewRecord {
+  schemaVersion: '1';
+  provider: 'Google';
+  model: string;
+  captureIdentity: string;
+  generationState: 'completed';
+  createdAt: string;
+  includedInReport: boolean;
+  result: AiAnalysisResult;
 }
 
 export interface AnalysisReport {

@@ -90,6 +90,10 @@ The deterministic rules engine flags potential threats automatically:
 
 ## 5. Compiling and Exporting the Final Report
 
+### Optional Capture Overview
+
+Open **Capture Overview** to generate broad orientation from a bounded summary of the current capture. The overview is not observed evidence, has no evidence citations, and remains separate from the Evidence-grounded Investigation. Open **Technical details** to inspect provider, model, schema, and generation provenance. Use **Include overview as contextual note** only when that non-evidence-linked context belongs in the draft; changing or clearing evidence removes the prior overview.
+
 Assemble your investigation findings for stakeholders:
 1. Navigate to the **Report Builder** tab.
 2. Fill in the **Investigator Name** and confirm the **Incident Scope/Target**.

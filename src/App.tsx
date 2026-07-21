@@ -24,10 +24,11 @@ import {
   Sun,
   Moon,
   Monitor,
-  Sparkles
+  Sparkles,
+  Compass
 } from 'lucide-react';
 
-import { FlowSummary, InvestigationRecord, SignalReviewStatus } from './types';
+import { CaptureOverviewRecord, FlowSummary, InvestigationRecord, SignalReviewStatus } from './types';
 import { ParsedResult } from './lib/parser';
 import { resolveRelatedFlows } from './lib/relatedFlows';
 import {
@@ -47,14 +48,17 @@ import IncidentTimeline from './components/IncidentTimeline';
 import ReportBuilder from './components/ReportBuilder';
 import LearningMode from './components/LearningMode';
 import ArchitectureRoadmap from './components/ArchitectureRoadmap';
+import CaptureOverview from './components/CaptureOverview';
+import { setCaptureOverviewInclusion } from './lib/captureOverview';
 
-type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'timeline' | 'report' | 'academy' | 'architecture';
+type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy' | 'architecture';
 type ThemeMode = 'light' | 'dark' | 'system';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('import');
   const [parsedData, setParsedData] = useState<ParsedResult | null>(null);
   const [investigations, setInvestigations] = useState<InvestigationRecord[]>([]);
+  const [captureOverview, setCaptureOverview] = useState<CaptureOverviewRecord | null>(null);
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
   const [relatedFlowScopeIds, setRelatedFlowScopeIds] = useState<string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -108,6 +112,7 @@ export default function App() {
   const handleDataParsed = (data: ParsedResult) => {
     setParsedData(data);
     setInvestigations(clearInvestigationRecords());
+    setCaptureOverview(null);
     setSignalStatusOverrides({});
     setSelectedFlow(null);
     setRelatedFlowScopeIds(null);
@@ -118,6 +123,7 @@ export default function App() {
     if (confirm("Are you sure you want to clear current forensic evidence? All volatile packet and log tables will be deleted.")) {
       setParsedData(null);
       setInvestigations(clearInvestigationRecords());
+      setCaptureOverview(null);
       setSignalStatusOverrides({});
       setSelectedFlow(null);
       setRelatedFlowScopeIds(null);
@@ -221,6 +227,16 @@ export default function App() {
             onUpdateSignalStatus={handleUpdateSignalStatus}
           />
         );
+      case 'capture-overview':
+        return parsedData ? (
+          <CaptureOverview
+            data={parsedData}
+            record={captureOverview}
+            onCompleted={setCaptureOverview}
+            onInvalidated={() => setCaptureOverview(null)}
+            onInclusionChange={(included) => setCaptureOverview(previous => setCaptureOverviewInclusion(previous, parsedData.evidence.id, included))}
+          />
+        ) : null;
       case 'timeline':
         return (
           <IncidentTimeline
@@ -235,7 +251,7 @@ export default function App() {
           />
         );
       case 'report':
-        return <ReportBuilder data={parsedData} investigations={investigations} signalStatusOverrides={signalStatusOverrides} />;
+        return <ReportBuilder data={parsedData} investigations={investigations} captureOverview={captureOverview} signalStatusOverrides={signalStatusOverrides} />;
       case 'academy':
         return <LearningMode hasEvidence={!!parsedData} parsedData={parsedData} />;
       case 'architecture':
@@ -267,6 +283,7 @@ export default function App() {
               { id: 'flows', label: 'Flow explorer', icon: Layers, enabled: !!parsedData },
               { id: 'protocols', label: 'Protocol intelligence', icon: Globe, enabled: !!parsedData },
               { id: 'signals', label: 'Signals & observations', icon: ShieldCheck, enabled: !!parsedData },
+              { id: 'capture-overview', label: 'Capture overview', icon: Compass, enabled: !!parsedData },
               { id: 'timeline', label: 'Incident timeline', icon: Activity, enabled: !!parsedData },
               { id: 'report', label: 'Report builder', icon: FileText, enabled: !!parsedData },
               { id: 'academy', label: 'Packet Academy', icon: BookOpen, enabled: true },

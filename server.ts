@@ -21,6 +21,7 @@ import {
   parseInvestigationRequest,
   requestOpenAiInvestigation,
 } from "./src/server/investigationApi.js";
+import { clientSafeCaptureOverviewError, requestGeminiCaptureOverview } from "./src/server/captureOverviewApi.js";
 
 // Load environment variables
 dotenv.config();
@@ -104,6 +105,21 @@ app.post("/api/investigate", async (req, res) => {
   } finally {
     req.removeListener('aborted', abortUpstream);
     res.removeListener('close', abortOnDisconnect);
+  }
+});
+
+app.post('/api/analyze', async (req, res) => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  req.once('aborted', abort);
+  try {
+    return res.json(await requestGeminiCaptureOverview(req.body, { apiKey: process.env.GEMINI_API_KEY, signal: controller.signal }));
+  } catch (error) {
+    if (controller.signal.aborted || res.destroyed) return;
+    const safe = clientSafeCaptureOverviewError(error);
+    return res.status(safe.status).json({ error: safe.message });
+  } finally {
+    req.removeListener('aborted', abort);
   }
 });
 

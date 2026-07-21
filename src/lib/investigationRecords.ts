@@ -7,7 +7,15 @@ export function completedInvestigationRecord(input: {
   packet: InvestigationEvidencePacket;
   assessment: InvestigationAssessment;
 }): InvestigationRecord {
-  return { ...input, includedInReport: false };
+  return {
+    schemaVersion: '1',
+    provider: 'OpenAI',
+    model: 'gpt-5.6-sol',
+    generationState: 'completed',
+    createdAt: new Date().toISOString(),
+    ...input,
+    includedInReport: false,
+  };
 }
 
 export function upsertInvestigationRecord(

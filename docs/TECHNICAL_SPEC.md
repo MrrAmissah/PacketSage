@@ -19,7 +19,7 @@ PacketSage is built on a modern, robust, full-stack JavaScript/TypeScript archit
 * **Server Framework**: Node.js with Express.
 * **Language**: TypeScript with type-stripping support.
 * **Server Dev / Build**: `tsx` for direct TypeScript execution in development; `esbuild` for bundling the production server into a single CJS bundle (`dist/server.cjs`).
-* **Model Integration**: The server-side `/api/investigate` endpoint calls GPT-5.6 with `process.env.OPENAI_API_KEY`, strict structured output, and bounded evidence packets.
+* **Model Integration**: The server-side `/api/investigate` endpoint calls GPT-5.6 with `process.env.OPENAI_API_KEY`, strict structured output, and bounded evidence packets. The separate `/api/analyze` endpoint calls Google Gemini with `process.env.GEMINI_API_KEY` for a bounded, citation-free whole-capture overview.
 
 ---
 

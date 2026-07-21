@@ -1,10 +1,12 @@
 import type { ParsedResult } from './parser.js';
 import type {
   InvestigationRecord,
+  CaptureOverviewRecord,
   SignalReviewStatus,
   SuspiciousSignal,
 } from '../types.js';
 import { includedInvestigationRecords } from './investigationRecords.js';
+import { includedCaptureOverview } from './captureOverview.js';
 
 export const MAX_REPORT_TIMELINE_EVENTS = 100;
 
@@ -51,6 +53,7 @@ export interface ReportModel {
   timeline: ReportTimelineEvent[];
   timelineTruncated: boolean;
   assessments: InvestigationRecord[];
+  contextualOverview: CaptureOverviewRecord | null;
   recommendations: ReportRecommendation[];
 }
 
@@ -88,8 +91,10 @@ export function buildReportModel(
   data: ParsedResult,
   records: readonly InvestigationRecord[],
   signalStatusOverrides: Readonly<Record<string, SignalReviewStatus>> = {},
+  captureOverview: CaptureOverviewRecord | null = null,
 ): ReportModel {
   const assessments = includedInvestigationRecords(records, data.evidence.id);
+  const contextualOverview = includedCaptureOverview(captureOverview, data.evidence.id);
   const flowMap = new Map(data.flows.map(flow => [flow.id, flow]));
   const signalEventIds = new Map(data.signals.map(signal => [signal.id, exactRelatedEventIds(signal, flowMap)]));
   const eventSignalIds = new Map<string, string[]>();
@@ -156,6 +161,7 @@ export function buildReportModel(
     timeline,
     timelineTruncated: sortedEvents.length > MAX_REPORT_TIMELINE_EVENTS,
     assessments,
+    contextualOverview,
     recommendations,
   };
 }
@@ -179,10 +185,25 @@ export function reportToMarkdown(report: ReportModel): string {
     markdown += `- ${event.timestamp} — \`${event.id}\` — ${event.source} → ${event.destination} — ${event.protocol} — ${event.length} bytes — Signals: ${ids(event.signalIds)}\n`;
   });
   if (report.timelineTruncated) markdown += `\nTimeline truncated to ${MAX_REPORT_TIMELINE_EVENTS} of ${report.counts.events} events.\n`;
-  markdown += `\n## AI-assisted investigation assessments\n\n`;
+  markdown += `\n## Contextual overview\n\n`;
+  if (!report.contextualOverview) {
+    markdown += `No capture overview has been explicitly included.\n\n`;
+  } else {
+    const overview = report.contextualOverview;
+    markdown += `### Gemini capture overview\n\n`;
+    markdown += `**Contextual orientation — not evidence-linked.** This section contains no evidence citations.\n\n`;
+    markdown += `Provider: ${overview.provider}; Model: ${overview.model}; Schema: ${overview.schemaVersion}; Generated: ${overview.createdAt}; Capture identity: ${overview.captureIdentity}.\n\n`;
+    markdown += `${overview.result.executiveSummary}\n\n`;
+    markdown += `#### Traffic-pattern explanation\n\n${overview.result.whatHappened}\n\n`;
+    markdown += `#### Beginner perspective\n\n${overview.result.beginnerExplanation}\n\n`;
+    markdown += `#### Technical perspective\n\n${overview.result.technicalExplanation}\n\n`;
+    markdown += `#### Analyst triage questions\n\n${overview.result.analystQuestions}\n\n`;
+    markdown += `#### Limitations\n\n${overview.result.limitations}\n\n`;
+  }
+  markdown += `## AI-assisted investigation assessments\n\n`;
   if (!report.assessments.length) markdown += `No AI-assisted assessments have been explicitly included in this report draft.\n\n`;
   report.assessments.forEach(record => {
-    markdown += `### ${record.packet.signal.title}\n\n- Signal ID: \`${record.signalId}\`\n- Packet identity: \`${record.packetIdentity}\`\n\n${record.assessment.summary}\n\n`;
+    markdown += `### ${record.packet.signal.title}\n\n- Signal ID: \`${record.signalId}\`\n- Packet identity: \`${record.packetIdentity}\`\n- Provider: ${record.provider}\n- Model: ${record.model}\n- Schema: ${record.schemaVersion}\n- Generated: ${record.createdAt}\n- Evidence identity: ${record.selectedEvidenceId}\n\n${record.assessment.summary}\n\n`;
     markdown += `#### Observed evidence\n\n`;
     record.assessment.observedEvidence.forEach(item => {
       markdown += `- ${item.statement} Evidence IDs: ${ids(item.evidenceIds)}\n`;

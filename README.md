@@ -27,7 +27,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 
 * **Defensive Analyst Workspace**: PacketSage is designed for defensive posture review and instructional forensics. It is **not** an active malware detector or breach containment system.
 * **Bounded Forensic Workspace**: Raw captures are decoded in browser memory; supported text exports use the parsing endpoint. It is **not** a court-ready forensic evidence vault.
-* **Evidence-Bound Assistant**: The AI-assisted memo generator is strictly constrained to the ingested dataset. It acts as a drafting helper and **does not** replace human validation, final judgment, or active incident scoping.
+* **Separated AI Roles**: Evidence-grounded investigation operates on one selected signal and exact citations. The optional Capture Overview operates on a bounded whole-capture summary for orientation only; it is never labelled as observed evidence.
 * **Bounded Native Capture Decoder**: Browser-side `.pcap`/`.pcapng` decoding covers Ethernet and practical IPv4/IPv6 TCP, UDP, ICMP, and basic DNS metadata without stream reassembly, decryption, or payload reconstruction.
 
 ---
@@ -43,10 +43,11 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
    * *TLS Metadata*: Extracts Server Name Indications (SNI) and certificate versions to compare encrypted session behaviors without decryption.
 5. **Signals & Observations**: A deterministic rule engine that surfaces potential threat markers (e.g., scan patterns, unencrypted transfers, beaconing). Analysts can manually *Validate* or *Dismiss* these findings.
 6. **AI-Assisted Investigation**: Assesses one selected signal with GPT-5.6 using only its bounded, validated evidence packet. Assessments require explicit inclusion in a report draft.
-7. **Incident Timeline**: A clean, chronological timeline of reconstructed network events based on packet timestamps, with severity filters and detail modals.
-8. **Report Builder**: A document compiler with a "Report Readiness Score" that tracks investigation completeness and compiles a print-optimized PDF/paper report.
-9. **Packet Academy**: An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles to evaluate defensive reasoning skills.
-10. **Architecture Spec**: A transparent roadmap comparison of the current browser-side sandbox versus the planned production microservice architecture.
+7. **Capture Overview**: Optionally asks Google Gemini for broad orientation, traffic-pattern explanation, learning perspectives, and triage questions from a bounded summary. It remains separate from evidence-linked investigation and is excluded from reports by default.
+8. **Incident Timeline**: A clean, chronological timeline of reconstructed network events based on packet timestamps, with severity filters and detail modals.
+9. **Report Builder**: Compiles deterministic findings and explicitly included assessments. A capture overview can only appear as a labelled, non-evidence-linked contextual note through explicit user action.
+10. **Packet Academy**: An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles to evaluate defensive reasoning skills.
+11. **Architecture Spec**: A transparent roadmap comparison of the current browser-side sandbox versus the planned production microservice architecture.
 
 ---
 
@@ -57,6 +58,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 * **DnsRecord / HttpRecord / TlsRecord**: Normalized protocol-specific structures containing queried domains, requested paths, response codes, and certificate SNIs.
 * **SuspiciousSignal**: Deterministic indicators computed on-the-fly (e.g., cleartext credentials, unusual inbound ports, data transfer spikes, scan patterns).
 * **InvestigationRecord**: Stores a validated, evidence-scoped assessment and its explicit report-inclusion state.
+* **CaptureOverviewRecord**: Stores provider/model provenance, schema version, capture identity, generation time/state, and explicit contextual-note inclusion state.
 
 ---
 
@@ -67,6 +69,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 * **Server-Side AI Proxy**: One selected signal and only its exact related normalized evidence are submitted to the server-side GPT-5.6 investigation endpoint.
   * Raw packet payloads and capture bytes are not transmitted to the proxy.
   * Returned citations are validated against the supplied evidence-ID set before display or report inclusion.
+* **Capture Overview Boundary**: A separate server endpoint submits a bounded whole-capture summary to Google Gemini. Its output has no PacketSage evidence citations, cannot modify findings, and never enters the report automatically.
 * **Passive Forensics**: PacketSage is purely passive. It does not perform active network port scans, host pings, or live interface sniffing.
 
 ---
@@ -82,9 +85,17 @@ npm install
 Create a `.env` file in the project root based on `.env.example`:
 ```env
 OPENAI_API_KEY="your-openai-api-key"
+GEMINI_API_KEY="your-gemini-api-key"
 APP_URL="http://localhost:3000"
 ```
-*(Do not prefix `OPENAI_API_KEY` with `VITE_`; it must remain server-only.)*
+*(Do not prefix either credential with `VITE_`; both must remain server-only.)*
+
+## AI use and provenance
+
+* **GPT-5.6** generates the selected-signal Evidence-grounded Investigation from a bounded evidence packet. PacketSage validates its structured schema and removes unsupported citations without substitution.
+* **Google Gemini** powers the optional Capture Overview from a bounded summary of the loaded capture. It provides orientation and learning perspectives, is not observed evidence, and is excluded from reports unless explicitly included as a contextual note.
+* **OpenAI Codex** was used during implementation and review to inspect the repository, implement bounded parsing and trust controls, add regression tests, and run verification. Codex is not a runtime analyst, does not generate PacketSage findings, and is not part of the deployed evidence pipeline.
+* Every retained runtime AI result records schema version, provider, model identifier, generation time/state, evidence or capture identity, and report-inclusion state. Provider details remain available through technical details and report provenance rather than serving as the primary feature label.
 
 ### 3. Run the Development Server
 ```bash

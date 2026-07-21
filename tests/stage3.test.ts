@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
+import { boundedCaptureSummary, clientSafeCaptureOverviewError } from '../src/server/captureOverviewApi';
+import {
+  completedCaptureOverview,
+  includedCaptureOverview,
+  setCaptureOverviewInclusion,
+  validateCaptureOverviewResponse,
+} from '../src/lib/captureOverview';
 import { sha256Hex } from '../src/lib/checksum';
 import {
   clearInvestigationRecords,
@@ -15,6 +20,7 @@ import type {
   FlowSummary,
   InvestigationEvidencePacket,
   InvestigationRecord,
+  AiAnalysisResult,
   PacketEvent,
   SuspiciousSignal,
 } from '../src/types';
@@ -142,27 +148,65 @@ function include(input: InvestigationRecord): InvestigationRecord {
   return setInvestigationReportInclusion([input], input, true)[0];
 }
 
-function sourceFiles(root: string): string[] {
-  return readdirSync(root).flatMap(name => {
-    const file = path.join(root, name);
-    if (name === 'node_modules' || name === 'dist' || name === '.git') return [];
-    return statSync(file).isDirectory() ? sourceFiles(file) : [file];
-  });
+const overviewResult: AiAnalysisResult = {
+  executiveSummary: 'Orientation only.', whatHappened: 'A broad traffic pattern.', normalActivity: 'Routine traffic may be present.', suspiciousActivity: 'Review-worthy patterns need validation.', analystQuestions: 'Which hosts are expected?', recommendedChecks: 'Validate with endpoint records.', beginnerExplanation: 'Flows describe conversations.', technicalExplanation: 'Metadata was summarized within fixed record limits.', confidence: 'low', limitations: 'This is not evidence-linked.',
+};
+
+function overview() {
+  return completedCaptureOverview('evidence-1', { provider: 'Google', model: 'gemini-test', result: overviewResult });
 }
 
-test('legacy analyze route and Gemini implementation references are removed', () => {
-  assert.equal(existsSync(path.resolve('api/analyze.ts')), false);
-  const files = [
-    path.resolve('server.ts'), path.resolve('package.json'), path.resolve('.env.example'),
-    path.resolve('README.md'), path.resolve('metadata.json'), path.resolve('CONTRIBUTING.md'),
-    ...sourceFiles(path.resolve('src')), ...sourceFiles(path.resolve('api')), ...sourceFiles(path.resolve('docs')),
-  ];
-  const combined = files.map(file => readFileSync(file, 'utf8')).join('\n');
-  assert.doesNotMatch(combined, /gemini|@google\/genai|\/api\/analyze|AiAnalysisResult/i);
+test('retained capture overview records complete model provenance and default exclusion', () => {
+  const retained = overview();
+  assert.equal(retained.schemaVersion, '1');
+  assert.equal(retained.provider, 'Google');
+  assert.equal(retained.model, 'gemini-test');
+  assert.equal(retained.captureIdentity, 'evidence-1');
+  assert.equal(retained.generationState, 'completed');
+  assert.match(retained.createdAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(retained.includedInReport, false);
+});
+
+test('capture overview inclusion is explicit and limited to the current capture', () => {
+  const retained = overview();
+  assert.equal(setCaptureOverviewInclusion(retained, 'stale-evidence', true)?.includedInReport, false);
+  const included = setCaptureOverviewInclusion(retained, 'evidence-1', true);
+  assert.equal(includedCaptureOverview(included, 'evidence-1'), included);
+  assert.equal(includedCaptureOverview(included, 'different-evidence'), null);
+});
+
+test('Gemini overview appears only as a non-evidence-linked contextual report section', () => {
+  const included = setCaptureOverviewInclusion(overview(), 'evidence-1', true);
+  const report = buildReportModel(dataFixture(), [], {}, included);
+  const markdown = reportToMarkdown(report);
+  assert.equal(report.contextualOverview, included);
+  assert.match(markdown, /Gemini capture overview/);
+  assert.match(markdown, /not evidence-linked/);
+  assert.doesNotMatch(markdown.split('## AI-assisted investigation assessments')[0], /Evidence IDs:/);
+});
+
+test('excluded capture overview never enters report output', () => {
+  const markdown = reportToMarkdown(buildReportModel(dataFixture(), [], {}, overview()));
+  assert.doesNotMatch(markdown, /Orientation only\./);
+});
+
+test('capture overview response schema and provenance are enforced', () => {
+  assert.deepEqual(validateCaptureOverviewResponse({ provider: 'Google', model: 'gemini-test', result: overviewResult }).result, overviewResult);
+  assert.throws(() => validateCaptureOverviewResponse({ provider: 'Google', model: '', result: overviewResult }), /provenance/);
+  assert.throws(() => validateCaptureOverviewResponse({ provider: 'Google', model: 'gemini-test', result: {} }), /invalid response/);
+});
+
+test('capture overview request is bounded and errors remain client-safe', () => {
+  const bounded = boundedCaptureSummary({ captureIdentity: 'evidence-1', flowSummary: Array.from({ length: 100 }, (_, index) => ({ sourceIp: `10.0.0.${index}` })), httpRecords: [{ uri: '/login?token=private-value' }] });
+  assert.equal(bounded.flows.length, 15);
+  assert.doesNotMatch(JSON.stringify(bounded), /private-value/);
+  assert.throws(() => boundedCaptureSummary({ captureIdentity: 'evidence-1', data: 'x'.repeat(180_001) }), /too large/);
+  assert.deepEqual(clientSafeCaptureOverviewError(new Error('secret upstream detail')), { status: 500, message: 'Unable to generate the capture overview.' });
 });
 
 test('a successful current assessment can be explicitly included', () => {
   const current = record();
+  assert.deepEqual({ schema: current.schemaVersion, provider: current.provider, model: current.model, state: current.generationState, evidence: current.selectedEvidenceId }, { schema: '1', provider: 'OpenAI', model: 'gpt-5.6-sol', state: 'completed', evidence: 'evidence-1' });
   const updated = setInvestigationReportInclusion([current], current, true);
   assert.equal(updated[0].includedInReport, true);
 });

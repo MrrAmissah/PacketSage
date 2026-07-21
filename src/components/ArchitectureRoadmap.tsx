@@ -397,7 +397,7 @@ export default function ArchitectureRoadmap() {
                   },
                   {
                     layer: "AI Processing",
-                    current: "GPT-5.6 investigation from bounded, exact signal evidence",
+                    current: "Evidence-grounded investigation plus a separate optional bounded capture overview",
                     target: "Isolated AI proxy with redaction, audit logs, and policy controls"
                   },
                   {
@@ -433,8 +433,8 @@ export default function ArchitectureRoadmap() {
               title: "Forensic Sandbox Workstation",
               status: "Active",
               statusClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-              desc: "Active browser-side workspace enabling in-memory normalization, deterministic signal review, evidence-scoped GPT-5.6 investigation, and explicit report inclusion.",
-              deliverables: ["In-memory structured schema normalization", "Deterministic evidence relationships", "Evidence-only timeline and report generator", "Server-side GPT-5.6 investigation proxy"]
+              desc: "Active browser-side workspace enabling in-memory normalization, deterministic signal review, evidence-grounded investigation, a separate optional capture overview, and explicit report inclusion.",
+              deliverables: ["In-memory structured schema normalization", "Deterministic evidence relationships", "Evidence-only timeline and report generator", "Separated server-side investigation and capture-overview proxies"]
             },
             {
               id: 2,

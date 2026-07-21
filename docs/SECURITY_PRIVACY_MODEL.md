@@ -47,6 +47,10 @@ To investigate a signal, PacketSage sends only its bounded normalized evidence p
 * **No Raw Packet Payloads**: Capture bytes, packet payloads, and packet `info` fields are never transmitted to the model.
 * **Provider Boundary**: The proxy sends selected metadata to the configured model provider. Operators must review the provider and hosting platform retention settings for their deployment.
 
+The optional Capture Overview is a separate capability. It sends a fixed-limit summary of flows, protocol records, deterministic signal summaries, and protocol statistics to Google Gemini. It does not send capture bytes or raw packet payloads. Its response cannot create deterministic findings, is never treated as observed evidence, has no evidence citations, and is not added to a report unless the operator explicitly includes it as a contextual note.
+
+Both runtime paths retain schema version, provider, model identifier, generation time/state, current evidence or capture identity, and report-inclusion state. Client request identity and cancellation prevent older overview or investigation responses from overwriting the current case.
+
 ### 3.2 Redaction Controls
 Before sending distilled metadata to the server-side AI proxy, PacketSage applies browser-side redaction algorithms:
 * **Authorization Headers**: Suspected credentials, API tokens, and JWT strings found in HTTP user agent headers or request lines are redacted and replaced with a default placeholder string (`[REDACTED_BY_CLIENT]`).

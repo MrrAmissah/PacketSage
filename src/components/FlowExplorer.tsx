@@ -24,7 +24,7 @@ function formatTime(value: string): string {
 }
 
 const riskPillClasses: Record<FlowSummary['riskLevel'], string> = {
-  info: 'border-slate-500/25 bg-slate-600 text-white dark:bg-slate-500',
+  info: 'border-border-subtle bg-surface-muted text-text-muted',
   low: 'border-emerald-500/25 bg-emerald-600 text-white dark:bg-emerald-500',
   medium: 'border-amber-400/30 bg-amber-500 text-white',
   high: 'border-red-500/25 bg-status-danger text-white',

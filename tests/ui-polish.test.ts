@@ -44,8 +44,10 @@ test('Flow Explorer renders every risk level as a semantic colored pill', () => 
   for (const level of ['info', 'low', 'medium', 'high']) {
     assert.match(markup, new RegExp(`data-risk-pill="${level}"`));
   }
-  assert.match(markup, /data-risk-pill="info"[^>]+bg-slate-600[^>]+text-white/);
+  assert.match(markup, /data-risk-pill="info"[^>]+border-border-subtle[^>]+bg-surface-muted[^>]+text-text-muted/);
   assert.doesNotMatch(markup, /data-risk-pill="info"[^>]+bg-blue-/);
+  assert.doesNotMatch(markup, /data-risk-pill="info"[^>]+text-white/);
+  assert.doesNotMatch(markup, /data-risk-pill="info"[^>]+dark:/);
   assert.match(markup, /data-risk-pill="low"[^>]+bg-emerald-600[^>]+text-white/);
   assert.match(markup, /data-risk-pill="medium"[^>]+bg-amber-500[^>]+text-white/);
   assert.match(markup, /data-risk-pill="high"[^>]+bg-status-danger[^>]+text-white/);

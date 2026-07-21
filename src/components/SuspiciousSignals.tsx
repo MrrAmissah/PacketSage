@@ -75,6 +75,7 @@ interface SuspiciousSignalsProps {
     includedInReport: boolean,
   ) => void;
   onSignalSelected?: (signalId: string) => void;
+  onAssessmentWorkspaceChange?: (signalId: string | null) => void;
   onNavigateToEvent: (eventId: string) => void;
   onOpenReport: () => void;
 }
@@ -610,6 +611,7 @@ export default function SuspiciousSignals({
   onInvestigationInvalidated,
   onInvestigationInclusionChange,
   onSignalSelected,
+  onAssessmentWorkspaceChange,
   onNavigateToEvent,
   onOpenReport,
 }: SuspiciousSignalsProps) {
@@ -666,12 +668,16 @@ export default function SuspiciousSignals({
     requestCoordinator.current.invalidate();
     setInvestigationState(null);
     setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
     return () => requestCoordinator.current.invalidate();
-  }, [selectedEvidenceId, currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity]);
+  }, [selectedEvidenceId, currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity, onAssessmentWorkspaceChange]);
 
   useEffect(() => {
-    if (fullAssessmentOpen && !completedRecord) setFullAssessmentOpen(false);
-  }, [fullAssessmentOpen, completedRecord]);
+    if (fullAssessmentOpen && !completedRecord) {
+      setFullAssessmentOpen(false);
+      onAssessmentWorkspaceChange?.(null);
+    }
+  }, [fullAssessmentOpen, completedRecord, onAssessmentWorkspaceChange]);
 
   // Filters State
   const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'>('ALL');
@@ -723,12 +729,16 @@ export default function SuspiciousSignals({
     const guidedSignal = enrichedSignals.find(signal => signal.id === guidedSignalAction.signalId);
     if (!guidedSignal) return;
 
+    setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
     setSelectedSignal(guidedSignal);
     onSignalSelected?.(guidedSignal.id);
     const frame = window.requestAnimationFrame(() => {
       const targetId = guidedSignalAction.focusTarget === 'investigation'
         ? 'evidence-grounded-investigation'
-        : `signal-detail-${guidedSignal.id}`;
+        : guidedSignalAction.focusTarget === 'assessment-summary'
+          ? 'open-full-assessment'
+          : `signal-detail-${guidedSignal.id}`;
       const target = document.getElementById(targetId);
       target?.focus({ preventScroll: true });
       target?.scrollIntoView({
@@ -739,11 +749,12 @@ export default function SuspiciousSignals({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [guidedSignalAction, enrichedSignals, onGuidedSignalActionHandled, onSignalSelected]);
+  }, [guidedSignalAction, enrichedSignals, onAssessmentWorkspaceChange, onGuidedSignalActionHandled, onSignalSelected]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {
     setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
     setSelectedSignal(sig);
     onSignalSelected?.(sig.id);
   };
@@ -829,11 +840,14 @@ export default function SuspiciousSignals({
   };
 
   const handleOpenFullAssessment = () => {
-    if (completedRecord) setFullAssessmentOpen(true);
+    if (!completedRecord) return;
+    setFullAssessmentOpen(true);
+    onAssessmentWorkspaceChange?.(completedRecord.signalId);
   };
 
   const handleCloseFullAssessment = () => {
     setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
     window.requestAnimationFrame(() => fullAssessmentTriggerRef.current?.focus());
   };
 
@@ -847,6 +861,7 @@ export default function SuspiciousSignals({
 
   const handleRerunFromFullAssessment = () => {
     setFullAssessmentOpen(false);
+    onAssessmentWorkspaceChange?.(null);
     void handleInvestigate();
   };
 
@@ -1115,6 +1130,7 @@ export default function SuspiciousSignals({
                     id={`signal-card-${sig.id}`}
                     key={sig.id}
                     type="button"
+                    data-tour-target={recommendedSignalId === sig.id ? 'recommended-signal-action' : undefined}
                     onClick={() => handleSelectSignal(sig)}
                     className={`w-full text-left p-4 transition-all cursor-pointer ${
                       isSelected ? 'bg-accent-soft border-l-4 border-accent-primary' : 'hover:bg-surface-muted/40 border-l-4 border-transparent'
@@ -1223,6 +1239,7 @@ export default function SuspiciousSignals({
                       <tr
                         id={`signal-row-${sig.id}`}
                         key={sig.id}
+                        data-tour-target={recommendedSignalId === sig.id ? 'recommended-signal-action' : undefined}
                         onClick={() => handleSelectSignal(sig)}
                         role="button"
                         tabIndex={0}

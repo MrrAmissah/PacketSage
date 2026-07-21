@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Circle, Compass, X } from 'lucide-react';
+import { Check, Circle, Compass, RotateCcw, X } from 'lucide-react';
 import type { JudgePathAction, JudgePathProgress, JudgePathDestination } from '../lib/judgePath';
 
 interface GuidedSampleJourneyProps {
@@ -7,9 +7,10 @@ interface GuidedSampleJourneyProps {
   onDismiss(): void;
   onNavigate(destination: JudgePathDestination): void;
   onPrimaryAction(action: JudgePathAction): void;
+  onReplayTour(): void;
 }
 
-export default function GuidedSampleJourney({ progress, onDismiss, onNavigate, onPrimaryAction }: GuidedSampleJourneyProps) {
+export default function GuidedSampleJourney({ progress, onDismiss, onNavigate, onPrimaryAction, onReplayTour }: GuidedSampleJourneyProps) {
   return (
     <aside
       aria-label="Guided sample journey"
@@ -45,8 +46,16 @@ export default function GuidedSampleJourney({ progress, onDismiss, onNavigate, o
           <button type="button" onClick={() => onNavigate('capture-overview')} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-2 text-[10px] font-semibold text-text-secondary hover:border-purple-500/30 hover:text-text-primary">
             <Compass size={11} /> Optional capture overview
           </button>
-          <button type="button" onClick={() => onPrimaryAction(progress.nextAction)} className="rounded-lg bg-accent-primary px-3 py-2 text-[10px] font-bold text-white hover:bg-accent-primary-hover">
+          <button
+            type="button"
+            data-tour-target={progress.nextAction.id === 'review-recommended-signal' ? 'recommended-signal-action' : undefined}
+            onClick={() => onPrimaryAction(progress.nextAction)}
+            className="rounded-lg bg-accent-primary px-3 py-2 text-[10px] font-bold text-white hover:bg-accent-primary-hover focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2"
+          >
             {progress.nextAction.label}
+          </button>
+          <button type="button" data-testid="guided-tour-replay" onClick={onReplayTour} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-[10px] font-semibold text-text-muted hover:bg-surface-muted hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary">
+            <RotateCcw aria-hidden="true" size={11} /> Replay guided tour
           </button>
           <button type="button" onClick={onDismiss} className="hidden rounded-md p-1.5 text-text-muted hover:bg-surface-muted hover:text-text-primary lg:inline-flex" aria-label="Dismiss guided sample journey">
             <X size={14} />

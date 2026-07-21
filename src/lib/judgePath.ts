@@ -8,7 +8,7 @@ export type JudgePathActionId =
   | 'run-investigation'
   | 'review-and-include-assessment'
   | 'open-report';
-export type GuidedSignalFocusTarget = 'signal-detail' | 'investigation';
+export type GuidedSignalFocusTarget = 'signal-detail' | 'investigation' | 'assessment-summary';
 
 export interface JudgePathAction {
   id: JudgePathActionId;
@@ -123,7 +123,7 @@ export function deriveJudgePathProgress(state: JudgePathState): JudgePathProgres
   const stages: JudgePathStage[] = [
     { id: 'evidence', label: 'Evidence loaded', complete: state.evidenceLoaded },
     { id: 'signal', label: 'Review recommended signal', complete: recommendedSignalSelected },
-    { id: 'investigation', label: 'Assessment included', complete: recommendedInvestigationIncluded },
+    { id: 'investigation', label: 'Investigate and include assessment', complete: recommendedInvestigationIncluded },
     { id: 'report', label: 'Build report', complete: reportComplete },
   ];
 
@@ -137,7 +137,7 @@ export function deriveJudgePathProgress(state: JudgePathState): JudgePathProgres
     mode: 'guided',
     items: [
       { id: 'evidence', label: 'Evidence decoded', value: state.evidenceLoaded ? 'Complete' : 'Pending', tone: state.evidenceLoaded ? 'blue' : 'slate' },
-      { id: 'signal', label: 'Recommended signal reviewed', value: recommendedSignalSelected ? 'Complete' : state.evidenceLoaded ? 'Current' : 'Pending', tone: recommendedSignalSelected ? 'green' : state.evidenceLoaded ? 'amber' : 'slate' },
+      { id: 'signal', label: 'Recommended signal review', value: recommendedSignalSelected ? 'Complete' : state.evidenceLoaded ? 'Current' : 'Pending', tone: recommendedSignalSelected ? 'green' : state.evidenceLoaded ? 'amber' : 'slate' },
       { id: 'assessment', label: 'Assessment included', value: recommendedInvestigationIncluded ? 'Complete' : recommendedInvestigationCompleted ? 'Review required' : recommendedSignalSelected ? 'Current' : 'Pending', tone: recommendedInvestigationIncluded ? 'green' : recommendedInvestigationCompleted ? 'amber' : recommendedSignalSelected ? 'indigo' : 'slate' },
       { id: 'report', label: 'Report ready', value: reportComplete ? 'Reviewed' : recommendedInvestigationIncluded ? 'Ready' : 'Not ready', tone: reportComplete || recommendedInvestigationIncluded ? 'green' : 'slate' },
     ],

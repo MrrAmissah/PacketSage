@@ -172,10 +172,10 @@ test('workspace provides desktop columns and a naturally stacked narrow layout w
   assert.doesNotMatch(workspace, /min-w-\[(?:[4-9]\d\d|\d{4,})px\]|overflow-x-auto/);
 });
 
-test('later spotlight targets are stable without implementing a tour', () => {
+test('assessment workspace exposes stable live targets to the contextual tour', () => {
   const code = `${source('src/components/SuspiciousSignals.tsx')}\n${source('src/components/CompactInvestigationResult.tsx')}\n${source('src/components/EvidenceGroundedAssessment.tsx')}`;
   assert.match(code, /data-tour-target="investigation-trigger"/);
   assert.match(code, /data-tour-target="open-full-assessment"/);
   assert.match(code, /data-tour-target="assessment-report-inclusion"/);
-  assert.doesNotMatch(code, /spotlight|driver\.js|intro\.js/i);
+  assert.doesNotMatch(code, /driver\.js|intro\.js/i);
 });

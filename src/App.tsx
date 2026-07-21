@@ -27,6 +27,7 @@ import {
   Sparkles,
   Compass,
   Menu,
+  RotateCcw,
 } from 'lucide-react';
 
 import { CaptureOverviewRecord, FlowSummary, InvestigationRecord, SignalReviewStatus } from './types';
@@ -51,6 +52,7 @@ import LearningMode from './components/LearningMode';
 import ArchitectureRoadmap from './components/ArchitectureRoadmap';
 import CaptureOverview from './components/CaptureOverview';
 import GuidedSampleJourney from './components/GuidedSampleJourney';
+import ContextualSpotlightTour from './components/ContextualSpotlightTour';
 import { setCaptureOverviewInclusion } from './lib/captureOverview';
 import {
   createJudgePathSession,
@@ -64,6 +66,15 @@ import {
   type JudgePathSession,
 } from './lib/judgePath';
 import { createReportDetailsSession, type ReportDetailsRecord } from './lib/reportDetails';
+import {
+  GUIDED_TOUR_COMPLETION_VALUE,
+  GUIDED_TOUR_STORAGE_KEY,
+  createGuidedTourSession,
+  deriveGuidedTourWorkflowIndex,
+  replayGuidedTourSession,
+  shouldShowGuidedTour,
+  type GuidedTourSession,
+} from './lib/guidedTour';
 
 type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy' | 'architecture';
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -81,6 +92,8 @@ export default function App() {
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   const [guideSession, setGuideSession] = useState<JudgePathSession | null>(null);
   const [guidedSignalAction, setGuidedSignalAction] = useState<GuidedSignalAction | null>(null);
+  const [guidedTourSession, setGuidedTourSession] = useState<GuidedTourSession | null>(null);
+  const [assessmentWorkspaceSignalId, setAssessmentWorkspaceSignalId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const workspaceScrollRef = React.useRef<HTMLDivElement>(null);
   const recommendedGuidedSignal = React.useMemo(() => parsedData
@@ -94,6 +107,15 @@ export default function App() {
     .filter(record => record.includedInReport)
     .map(record => record.signalId), [currentInvestigationRecords]);
   const hasIncludedInvestigation = includedInvestigationSignalIds.length > 0;
+  const guidedTourWorkflowIndex = React.useMemo(() => deriveGuidedTourWorkflowIndex({
+    parseMode: parsedData?.evidence.parseMode || '',
+    evidenceIdentity: parsedData?.evidence.id || null,
+    recommendedSignalId: recommendedGuidedSignal?.id || null,
+    selectedSignalId: guideSession?.selectedSignalId || null,
+    completedInvestigationSignalIds,
+    includedInvestigationSignalIds,
+    assessmentWorkspaceSignalId,
+  }), [parsedData?.evidence.parseMode, parsedData?.evidence.id, recommendedGuidedSignal?.id, guideSession?.selectedSignalId, completedInvestigationSignalIds, includedInvestigationSignalIds, assessmentWorkspaceSignalId]);
   const guidedProgress = React.useMemo(() => deriveJudgePathProgress({
     evidenceLoaded: Boolean(parsedData),
     recommendedSignalId: recommendedGuidedSignal?.id || null,
@@ -164,7 +186,27 @@ export default function App() {
     }
   }, [activeTab, parsedData?.evidence.id, hasIncludedInvestigation]);
 
+  const finishGuidedTour = React.useCallback(() => {
+    try {
+      localStorage.setItem(GUIDED_TOUR_STORAGE_KEY, GUIDED_TOUR_COMPLETION_VALUE);
+    } catch {
+      // The tour still closes when browser preference storage is unavailable.
+    }
+    setGuidedTourSession(previous => previous ? { ...previous, active: false } : previous);
+  }, []);
+
+  React.useEffect(() => {
+    if (guidedTourWorkflowIndex !== 4 || guidedTourSession?.replay) return;
+    finishGuidedTour();
+  }, [guidedTourWorkflowIndex, guidedTourSession?.replay, finishGuidedTour]);
+
   const handleDataParsed = (data: ParsedResult) => {
+    let tourCompletionPreference: string | null = null;
+    try {
+      tourCompletionPreference = localStorage.getItem(GUIDED_TOUR_STORAGE_KEY);
+    } catch {
+      // Treat unavailable preference storage as a fresh session.
+    }
     setParsedData(data);
     setReportDetails(createReportDetailsSession(data.evidence.id));
     setInvestigations(clearInvestigationRecords());
@@ -175,6 +217,8 @@ export default function App() {
     setTimelineFocusEventId(null);
     setGuideSession(createJudgePathSession(data.evidence.id));
     setGuidedSignalAction(null);
+    setGuidedTourSession(createGuidedTourSession(data.evidence.parseMode, data.evidence.id, tourCompletionPreference));
+    setAssessmentWorkspaceSignalId(null);
     setActiveTab('overview'); // Take them to command center automatically
   };
 
@@ -190,6 +234,8 @@ export default function App() {
       setTimelineFocusEventId(null);
       setGuideSession(null);
       setGuidedSignalAction(null);
+      setGuidedTourSession(null);
+      setAssessmentWorkspaceSignalId(null);
       setActiveTab('import');
     }
   };
@@ -243,6 +289,35 @@ export default function App() {
   const handleGuidedSignalActionHandled = React.useCallback((requestId: number) => {
     setGuidedSignalAction(previous => previous?.requestId === requestId ? null : previous);
   }, []);
+
+  const handleAssessmentWorkspaceChange = React.useCallback((signalId: string | null) => {
+    setAssessmentWorkspaceSignalId(signalId);
+  }, []);
+
+  const handleReplayGuidedTour = React.useCallback(() => {
+    if (parsedData?.evidence.parseMode !== 'demo' || !recommendedGuidedSignal) return;
+    setActiveTab('signals');
+    if (assessmentWorkspaceSignalId) {
+      setGuidedSignalAction(previous => ({
+        signalId: assessmentWorkspaceSignalId,
+        focusTarget: 'assessment-summary',
+        requestId: (previous?.requestId || 0) + 1,
+      }));
+    }
+    setGuidedTourSession(previous => replayGuidedTourSession(
+      parsedData.evidence.id,
+      (previous?.requestId || 0) + 1,
+    ));
+  }, [parsedData?.evidence.id, parsedData?.evidence.parseMode, recommendedGuidedSignal, assessmentWorkspaceSignalId]);
+
+  const handleTourDisplayStepChange = React.useCallback((stepIndex: number) => {
+    if (stepIndex >= 3 || !assessmentWorkspaceSignalId) return;
+    setGuidedSignalAction(previous => ({
+      signalId: assessmentWorkspaceSignalId,
+      focusTarget: 'assessment-summary',
+      requestId: (previous?.requestId || 0) + 1,
+    }));
+  }, [assessmentWorkspaceSignalId]);
 
   const handleTimelineFocusHandled = React.useCallback(() => {
     setTimelineFocusEventId(null);
@@ -317,6 +392,7 @@ export default function App() {
             onInvestigationInvalidated={handleInvestigationInvalidated}
             onInvestigationInclusionChange={handleInvestigationInclusion}
             onSignalSelected={handleSignalSelected}
+            onAssessmentWorkspaceChange={handleAssessmentWorkspaceChange}
             onNavigateToEvent={(eventId) => {
               setTimelineFocusEventId(eventId);
               setActiveTab('timeline');
@@ -639,15 +715,38 @@ export default function App() {
             {parsedData && shouldShowGuidedJourney(parsedData.evidence.parseMode, guideSession) && (
               <GuidedSampleJourney
                 progress={guidedProgress}
-                onDismiss={() => setGuideSession(previous => previous ? { ...previous, dismissed: true } : previous)}
+                onDismiss={() => {
+                  setGuideSession(previous => previous ? { ...previous, dismissed: true } : previous);
+                  finishGuidedTour();
+                }}
                 onNavigate={(destination: JudgePathDestination) => setActiveTab(destination)}
                 onPrimaryAction={handleInvestigationStatusAction}
+                onReplayTour={handleReplayGuidedTour}
               />
+            )}
+            {parsedData?.evidence.parseMode === 'demo' && !shouldShowGuidedJourney(parsedData.evidence.parseMode, guideSession) && (
+              <div className="mb-3 flex justify-end print:hidden">
+                <button type="button" data-testid="guided-tour-replay" onClick={handleReplayGuidedTour} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-2.5 py-2 text-[10px] font-semibold text-text-muted shadow-sm hover:bg-surface-muted hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary">
+                  <RotateCcw aria-hidden="true" size={11} /> Replay guided tour
+                </button>
+              </div>
             )}
             {renderActiveContent()}
           </div>
         </div>
       </main>
+      {guidedTourWorkflowIndex !== null
+        && activeTab !== 'report'
+        && shouldShowGuidedTour(guidedTourSession, parsedData?.evidence.parseMode || '', parsedData?.evidence.id || null) && (
+          <ContextualSpotlightTour
+            workflowIndex={guidedTourWorkflowIndex}
+            replay={guidedTourSession?.replay || false}
+            requestId={guidedTourSession?.requestId || 0}
+            onDismiss={finishGuidedTour}
+            onComplete={finishGuidedTour}
+            onDisplayStepChange={handleTourDisplayStepChange}
+          />
+        )}
     </div>
   );
 }

@@ -187,6 +187,8 @@ body {
   #packet-sage-workspace > aside,
   #packet-sage-workspace main > header,
   [data-testid="guided-sample-journey"],
+  [data-testid="guided-tour-replay"],
+  [data-testid="contextual-spotlight-tour"],
   #report-builder-workspace > :not(.report-document),
   .report-preview-dialog,
   button,

@@ -42,7 +42,7 @@ export default function CompactInvestigationResult({
       >
         Open full assessment <ExternalLink aria-hidden="true" size={12} />
       </button>
-      <button type="button" onClick={onRerun} className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent-primary hover:text-accent-primary-hover focus:outline-none focus:ring-2 focus:ring-accent-primary">
+      <button type="button" data-tour-target="investigation-trigger" onClick={onRerun} className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent-primary hover:text-accent-primary-hover focus:outline-none focus:ring-2 focus:ring-accent-primary">
         <RotateCcw aria-hidden="true" size={10} /> Run again with current referenced evidence
       </button>
     </section>

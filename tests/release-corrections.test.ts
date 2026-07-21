@@ -268,6 +268,13 @@ test('Theme and mobile navigation controls have accessible names', () => {
   assert.match(code, /aria-current={isActive \? 'page'/);
 });
 
+test('Loaded header bounds evidence status before fixed theme and report actions', () => {
+  const code = source('src/App.tsx');
+  assert.match(code, /data-testid="evidence-status-strip"[^>]+sm:w-0 sm:flex-1 sm:overflow-hidden/);
+  assert.match(code, /data-testid="header-actions"[^>]+relative z-10[^>]+shrink-0/);
+  assert.match(code, /min-h-12 overflow-hidden/);
+});
+
 test('Narrow navigation uses an explicit labelled menu instead of horizontal swipe discovery', () => {
   const code = source('src/App.tsx');
   assert.match(code, /Open primary navigation/);

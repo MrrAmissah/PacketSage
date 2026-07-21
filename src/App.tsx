@@ -429,8 +429,8 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 min-h-0">
         
         {/* Top Evidence Bar */}
-        <header className="min-h-12 bg-shell/80 backdrop-blur-md border-b border-border-subtle px-3 sm:px-6 py-2 sm:py-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 select-none transition-colors duration-150 z-20">
-          <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-text-muted font-normal min-w-0 w-full sm:w-auto overflow-x-auto mobile-scroll-snap">
+        <header className="min-h-12 overflow-hidden bg-shell/80 backdrop-blur-md border-b border-border-subtle px-3 sm:px-6 py-2 sm:py-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 select-none transition-colors duration-150 z-20">
+          <div data-testid="evidence-status-strip" className="flex items-center gap-1.5 sm:gap-2 xl:gap-3 text-xs text-text-muted font-normal min-w-0 w-full overflow-x-auto mobile-scroll-snap sm:w-0 sm:flex-1 sm:overflow-hidden">
             {!parsedData ? (
               <>
                 {/* 1. No Evidence Loaded */}
@@ -485,7 +485,7 @@ export default function App() {
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
                   <Database size={12} className="text-accent-primary shrink-0" />
                   <span className="text-text-muted font-normal hidden xs:inline">Evidence:</span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-accent-soft text-accent-primary border border-accent-primary/20 text-[10.5px] font-mono font-bold truncate max-w-[80px] xs:max-w-[110px] sm:max-w-[140px] md:max-w-[170px] lg:max-w-[210px]" title={parsedData.evidence.name}>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-accent-soft text-accent-primary border border-accent-primary/20 text-[10.5px] font-mono font-bold truncate max-w-[80px] xs:max-w-[110px] sm:max-w-[130px] md:max-w-[150px] lg:max-w-[180px] xl:max-w-[230px]" title={parsedData.evidence.name}>
                     {parsedData.evidence.name}
                   </span>
                 </div>
@@ -507,7 +507,7 @@ export default function App() {
                 {/* 3. Included AI-assisted assessments */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <Sparkles size={12} className="text-purple-400 shrink-0" />
-                  <span className="text-text-muted font-normal hidden md:inline">Included assessments:</span>
+                  <span className="text-text-muted font-normal hidden xl:inline">Included assessments:</span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10.5px] font-bold uppercase tracking-wide">
                     {investigations.filter(record => record.includedInReport).length}
                   </span>
@@ -519,7 +519,7 @@ export default function App() {
                 {/* 4. Retention */}
                 <div className="flex items-center gap-1.5 shrink-0 hidden sm:flex">
                   <Clock size={12} className="text-text-muted shrink-0" />
-                  <span className="text-text-muted font-normal hidden lg:inline">Retention:</span>
+                  <span className="text-text-muted font-normal hidden 2xl:inline">Retention:</span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10.5px] font-bold uppercase tracking-wide">
                     Volatile
                   </span>
@@ -530,7 +530,7 @@ export default function App() {
           </div>
 
           {/* Right actions sequence: Theme toggle → Build report → local capture decode */}
-          <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
+          <div data-testid="header-actions" className="relative z-10 flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto bg-shell/80">
             {/* Theme toggle */}
             <div className="flex items-center bg-surface-muted border border-border-subtle rounded-lg p-0.5 h-8">
               {[
@@ -553,7 +553,7 @@ export default function App() {
                     }`}
                   >
                     <Icon size={11} />
-                    <span className="hidden lg:inline">{t.label}</span>
+                    <span className="hidden xl:inline">{t.label}</span>
                   </button>
                 );
               })}
@@ -571,8 +571,8 @@ export default function App() {
                 }`}
                 title={!parsedData ? "Please import evidence to build an incident report" : undefined}
               >
-                <span className="hidden sm:inline">Build Incident Report</span>
-                <span className="sm:hidden">Report</span>
+                <span className="hidden xl:inline">Build Incident Report</span>
+                <span className="xl:hidden">Report</span>
                 <ArrowRight size={11} />
               </button>
             )}
@@ -580,7 +580,7 @@ export default function App() {
             {/* Capture processing boundary */}
             <div className="h-8 px-2 bg-status-success-bg border border-status-success/25 rounded-lg text-[10px] text-status-success font-semibold hidden sm:flex items-center gap-1 select-none">
               <Lock size={10} className="text-status-success" />
-              <span className="hidden xs:inline">Local Capture Decode</span>
+              <span className="hidden 2xl:inline">Local Capture Decode</span>
             </div>
           </div>
         </header>

@@ -180,10 +180,13 @@ export default function App() {
 
   React.useEffect(() => {
     workspaceScrollRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [activeTab, parsedData?.evidence.id, guideSession?.selectedSignalId, assessmentWorkspaceSignalId]);
+
+  React.useEffect(() => {
     if (activeTab === 'report' && hasIncludedInvestigation) {
       setGuideSession(previous => previous ? { ...previous, reportVisitedAfterInclusion: true } : previous);
     }
-  }, [activeTab, parsedData?.evidence.id, hasIncludedInvestigation]);
+  }, [activeTab, hasIncludedInvestigation]);
 
   const finishGuidedTour = React.useCallback(() => {
     try {

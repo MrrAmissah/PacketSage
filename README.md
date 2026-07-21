@@ -1,121 +1,254 @@
 # PacketSage
 
-PacketSage is a defensive network forensics sandbox for reviewing packet exports, decoded telemetry, protocol behavior, evidence-linked observations, AI-assisted assessments, incident timelines, and report-ready investigation notes.
+> Evidence-grounded network investigation with deterministic signals, bounded AI assistance, exact citations, and user-controlled reporting.
 
-It is built for security analysts, incident responders, students, and SOC operators who need a structured workspace for passive packet review. PacketSage ingests raw PCAP/PCAPNG captures, text packet logs, Wireshark CSVs, Suricata EVE alerts, Zeek summaries, TShark JSON, and generated sample metadata, then reconstructs flows, highlights review-worthy observations, and helps draft evidence-bound reports.
+PacketSage is an evidence-grounded network investigation workspace that helps analysts use AI without allowing inference to masquerade as observed fact. It is a **Developer Tools** project for defensive network forensics, packet analysis, incident response, and technical learning.
 
-## License & Use
+[**Open the live workspace**](https://packetsage.vercel.app) · **333/333 production tests** · **`build-week-stage-4a.2-production`** · **Proprietary/source-available**
 
-PacketSage is proprietary and source-available, not open source. Public access to this repository is for transparency, review, portfolio, and collaboration screening only. Copying, redistribution, commercial use, hosted reuse, rebranding, or derivative products require prior written permission from the repository owner. See [LICENSE](./LICENSE) and [CONTRIBUTING.md](./CONTRIBUTING.md).
+Created and developed by **Prince Kofi Frimpong Amissah**.
 
-## Product Preview
+![PacketSage Command Center showing the loaded guided investigation sample in dark mode](./docs/assets/packetsage-hero-dark.png)
 
-<p align="center">
-  <img src="./docs/assets/packetsage-import-evidence.png" alt="PacketSage Import Evidence screen for uploading authorized packet exports, loading a sample incident dataset, or pasting structured logs." width="96%" />
-</p>
+## Why PacketSage exists
 
-<p align="center">
-  <img src="./docs/assets/packetsage-command-center.png" alt="PacketSage Command Center showing decoded packet evidence, protocol stats, signal counts, and investigation brief." width="47%" />
-  <img src="./docs/assets/packetsage-report-builder.png" alt="PacketSage Report Builder showing report settings, evidence metadata, readiness checks, and export controls." width="47%" />
-</p>
+Packet tools expose large volumes of precise but fragmented technical evidence. Generic AI summaries can make that evidence easier to read, but they can also blur the line between a recorded fact and a model inference.
 
----
+PacketSage keeps four layers visibly separate:
 
-## 🚀 Core Positioning & Boundaries
+| Layer | Meaning |
+| --- | --- |
+| **Observed evidence** | Fields supplied by, or decoded from, authorized evidence |
+| **Deterministic derivation** | Stable IDs, flows, protocol records, signals, and exact relationships |
+| **External/contextual orientation** | Optional Capture Overview today; explicitly sourced enrichment in the future |
+| **AI inference** | A bounded selected-signal assessment with validated citations |
 
-To ensure professional forensic integrity, PacketSage operates on a strict **Evidence-First, AI-Second** engineering model. It is designed around the following boundaries:
+> Observed evidence, deterministic derivation, external context and AI inference remain visibly separate.
 
-* **Defensive Analyst Workspace**: PacketSage is designed for defensive posture review and instructional forensics. It is **not** an active malware detector or breach containment system.
-* **Bounded Forensic Workspace**: Raw captures are decoded in browser memory; supported text exports use the parsing endpoint. It is **not** a court-ready forensic evidence vault.
-* **Separated AI Roles**: Evidence-grounded investigation operates on one selected signal and exact citations. The optional Capture Overview operates on a bounded whole-capture summary for orientation only; it is never labelled as observed evidence.
-* **Bounded Native Capture Decoder**: Browser-side `.pcap`/`.pcapng` decoding covers Ethernet and practical IPv4/IPv6 TCP, UDP, ICMP, and basic DNS metadata without stream reassembly, decryption, or payload reconstruction.
+PacketSage does not claim that packet evidence confirms compromise, malware, command and control, credential theft, or exfiltration. It helps an operator inspect the available evidence, document uncertainty, and decide what to verify next.
 
----
+## Who it is for
 
-## 🛠️ Main Features & Functional Modules
+- Security analysts and incident responders reviewing exported network evidence.
+- SOC operators who need a compact evidence-to-report workflow.
+- Students and educators learning packet analysis through a guided defensive sample.
+- Developers reviewing network telemetry, parser behavior, and evidence provenance.
 
-1. **Command Center**: Summarizes only loaded evidence: normalized event, flow, endpoint, byte, protocol-record, signal, and reviewed-finding counts, plus evidence-appropriate next actions.
-2. **Import Evidence**: Supports authorized file imports and a strict pasted-text grammar. Pasted records use `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`; ports accept `0`–`65535`, explicit zero is retained as observed, and omitted source ports remain unknown.
-3. **Flow Explorer**: Searches normalized flows and resolves events through `flow.relatedEvents` and signals through exact `signal.relatedFlowIds`. It does not infer host identity or transport state.
-4. **Protocol Intelligence**: Separate investigative rails for key network applications:
-   * *DNS Log*: Displays only decoded DNS record fields and honest empty states.
-   * *HTTP Traffic*: Displays only decoded HTTP record fields and honest empty states.
-   * *TLS Metadata*: Displays only decoded TLS fields, including SNI/version/fingerprint when recorded, without decryption claims.
-5. **Signals & Observations**: A deterministic rule engine surfaces review-worthy patterns. Analysts can add a reviewed finding to the report or dismiss it as noise.
-6. **AI-Assisted Investigation**: Assesses one selected signal with GPT-5.6 using only its bounded, validated evidence packet. Assessments require explicit inclusion in a report draft.
-7. **Capture Overview**: Optionally asks Google Gemini for broad orientation, traffic-pattern explanation, learning perspectives, and triage questions from a bounded summary. It remains separate from evidence-linked investigation and is excluded from reports by default.
-8. **Incident Timeline**: Orders normalized events by recorded timestamp. Flow and signal navigation is enabled only for exact parser-established event relationships.
-9. **Report Builder**: Compiles deterministic findings and explicitly included assessments. Flow/event report controls are intentionally absent. Print/PDF renders the complete bounded report without application chrome; a capture overview appears only through explicit contextual-note inclusion.
-10. **Packet Academy**: An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles to evaluate defensive reasoning skills.
-11. **Architecture Spec**: Shows the implemented browser, serverless and model-provider boundaries, current processing limits, evidence-to-report pipeline, trust controls, completed delivery stages, and clearly labelled deferred architecture.
+## Three-minute judge path
 
----
+The generated sample provides a complete, non-sensitive walkthrough:
 
-## 📦 Standard Data Models (TypeScript)
+1. Select **Load guided investigation sample**.
+2. Select **Review recommended signal**.
+3. Select **Investigate with AI**. This is a deliberate provider-backed action; PacketSage never starts it automatically.
+4. Select **Open full assessment** and inspect the labelled observation, inference, uncertainty, and next-step sections.
+5. Open one exact flow or event citation, then return to the assessment.
+6. Select **Include AI-assisted assessment in report**.
+7. Select **Build report** or **Build Incident Report**.
+8. Select **Preview** to inspect the report generated from the shared report model.
 
-* **UploadedEvidence**: Tracks properties of the imported log/packet bundle (name, size, parseMode, upload timestamp).
-* **FlowSummary**: Reconstructs TCP/UDP sessions between source and destination endpoints, detailing timestamps, volumes, and calculated risk indicators.
-* **DnsRecord / HttpRecord / TlsRecord**: Normalized protocol-specific structures containing queried domains, requested paths, response codes, and certificate SNIs.
-* **SuspiciousSignal**: Deterministic indicators computed on-the-fly (e.g., cleartext credentials, unusual inbound ports, data transfer spikes, scan patterns).
-* **InvestigationRecord**: Stores a validated, evidence-scoped assessment and its explicit report-inclusion state.
-* **CaptureOverviewRecord**: Stores provider/model provenance, schema version, capture identity, generation time/state, and explicit contextual-note inclusion state.
+Every cost-generating AI request and every report-changing inclusion remains a user action. Capture Overview is optional and does not advance the evidence-grounded judge path.
 
----
+## Shipped capabilities
 
-## 🔒 Security & Privacy Model
+### Evidence intake and bounded decoding
 
-* **Authorized Use Only**: Users must confirm authorization before importing custom logs. A pre-packaged simulated dataset is built-in for zero-credential training.
-* **Processing Boundary**: Raw PCAP/PCAPNG captures are decoded locally. Supported text evidence is sent to the parsing endpoint; selected metadata may later be sent through the AI proxy.
-* **Server-Side AI Proxy**: One selected signal and only its exact related normalized evidence are submitted to the server-side GPT-5.6 investigation endpoint.
-  * Raw packet payloads and capture bytes are not transmitted to the proxy.
-  * Returned citations are validated against the supplied evidence-ID set before display or report inclusion.
-* **Capture Overview Boundary**: A separate server endpoint submits a bounded whole-capture summary to Google Gemini. Its output has no PacketSage evidence citations, cannot modify findings, and never enters the report automatically.
-* **Passive Forensics**: PacketSage is purely passive. It does not perform active network port scans, host pings, or live interface sniffing.
+- Browser-local PCAP and PCAPNG metadata decoding within explicit byte and packet limits.
+- Supported Ethernet, IPv4/IPv6, TCP, UDP, ICMP, and basic DNS paths.
+- Server-parsed Wireshark CSV, Suricata EVE JSON, Zeek TSV/log exports, TShark JSON, and strict structured text.
+- Safe rejection of malformed, truncated, oversized, or unsupported inputs without synthetic evidence.
 
----
+### Deterministic investigation workspace
 
-## 💻 Running Locally
+- Normalized events, flows, DNS/HTTP/TLS protocol records, and deterministic signals.
+- Stable evidence identities, including occurrence handling for repeated visible records.
+- Exact event, flow, protocol-record, and signal relationships across the workspace.
+- Explicit `observed`, `unknown`, and `not-applicable` port provenance.
 
-### 1. Install Dependencies
-```bash
-npm install
+### Evidence-grounded investigation
+
+- One deliberately selected signal is submitted through the server-only OpenAI route using the verified runtime model **`gpt-5.6-sol`**.
+- Its bounded packet contains only exact referenced flows, events, and supported protocol records—never raw captures, packet payloads, packet `info`, or unrelated capture content.
+- Structured responses retain provider/model provenance and separate **Observed evidence**, **Analyst inference**, **Uncertainty / missing evidence**, and **Recommended next investigative steps**.
+- PacketSage accepts citations only when the referenced ID was supplied in the packet. Unsupported citations are removed without substitution.
+- Cancellation, request identity, and evidence identity prevent stale or out-of-order completions from replacing the current assessment.
+
+### Separate Capture Overview
+
+- Optional whole-capture orientation from a separately bounded summary.
+- Beginner and technical perspectives, traffic-pattern explanation, and triage questions.
+- Citation-free contextual output that cannot create or change deterministic findings.
+- Separate explicit **Include overview as contextual note** action.
+- Uses the configured server-side Gemini model; every retained result records its actual provider and model provenance.
+
+### Exact navigation and professional reporting
+
+- Flow and event citations open only the exact referenced record, with unrestricted navigation recoverable afterward.
+- Deterministic findings require review; GPT assessments and Capture Overview notes have separate explicit inclusion controls.
+- One report model powers the on-screen document, **Preview**, **Copy Markdown**, and **Print / PDF**.
+- Reports retain evidence identity, timestamps, exact references, labelled inference, model provenance, and limitations.
+
+### Accessible investigation and learning
+
+- Keyboard-operable primary rows, cards, citations, controls, dialogs, and contextual tour.
+- Responsive navigation and evidence views at approximately 390 px without global horizontal overflow.
+- Light, dark, and system themes.
+- Packet Academy lessons and an in-product Architecture Spec that distinguish current behavior from future direction.
+- **Architecture Spec**: Shows the implemented browser, serverless and model-provider boundaries, enforced limits, evidence-to-report pipeline, and explicitly unimplemented future systems. It remains available before evidence is loaded.
+
+![Signals and Observations showing a deterministic signal and its exact evidence relationships](./docs/assets/packetsage-signals-observations.png)
+
+![Full evidence-grounded assessment with labelled inference and validated citations](./docs/assets/packetsage-evidence-assessment.png)
+
+![Professional PacketSage report preview generated from explicitly included content](./docs/assets/packetsage-report-preview.png)
+
+## Supported evidence and enforced boundaries
+
+| Input or boundary | Current production behavior |
+| --- | --- |
+| PCAP / PCAPNG | Decoded in bounded browser memory; maximum 10 MiB and 20,000 packets |
+| Text evidence | Parsed server-side; maximum 2,000,000 characters and 10,000 records, within a 3 MiB request body |
+| Investigation packet | Maximum 128 KiB, 25 flows, 200 events, and 50 protocol records |
+| Report timeline | Up to 100 normalized event rows |
+| Raw capture bytes | Never sent to either model route |
+| Packet payloads | Not reconstructed and never sent to either model route |
+| Active case state | Volatile; cleared when evidence is replaced or the session is reloaded |
+
+The native decoder intentionally does **not** perform TCP stream reassembly, decryption, payload reconstruction, full protocol dissection, or host-compromise confirmation. Unsupported data fails honestly rather than being guessed.
+
+Strict structured text uses one event per line:
+
+```text
+YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N
 ```
 
-### 2. Configure Environment Variables
-Create a `.env` file in the project root based on `.env.example`:
-```env
-OPENAI_API_KEY="your-openai-api-key"
-GEMINI_API_KEY="your-gemini-api-key"
-APP_URL="http://localhost:3000"
+The timestamp, valid IPv4 endpoints, destination port, protocol, and length are required. Ports may be `0`–`65535`; an explicit zero is observed, while an omitted source port is unknown.
+
+## Production architecture
+
+```mermaid
+flowchart LR
+    Operator["Operator"] --> Browser
+
+    subgraph Browser["Browser — volatile workspace"]
+        Capture["PCAP / PCAPNG<br/>bounded metadata decoder"]
+        Normalized["Normalized observed evidence"]
+        Deterministic["Deterministic derivation<br/>IDs · relationships · signals"]
+        Views["Investigation views"]
+        Report["Shared report model<br/>Preview · Markdown · Print/PDF"]
+        Capture --> Normalized --> Deterministic --> Views
+        Views -->|"Explicit inclusion"| Report
+    end
+
+    Text["Supported text exports"] --> Parse["/api/parse<br/>bounded server parser"] --> Normalized
+    Deterministic -->|"Selected-signal packet"| Investigate["/api/investigate<br/>schema validation"]
+    Investigate --> OpenAI["OpenAI<br/>gpt-5.6-sol"]
+    OpenAI -->|"Validated result and citations"| Views
+    Deterministic -->|"Bounded capture summary"| Overview["/api/analyze<br/>summary validation and redaction"]
+    Overview --> Gemini["Configured Gemini model"]
+    Gemini -->|"Citation-free context"| Views
 ```
-*(Do not prefix either credential with `VITE_`; both must remain server-only.)*
 
-## AI use and provenance
+Raw capture bytes remain on the browser capture path. The two model paths receive different bounded derived inputs and never share assessment state.
 
-* **GPT-5.6** generates the selected-signal Evidence-grounded Investigation from a bounded evidence packet. PacketSage validates its structured schema and removes unsupported citations without substitution.
-* **Google Gemini** powers the optional Capture Overview from a bounded summary of the loaded capture. It provides orientation and learning perspectives, is not observed evidence, and is excluded from reports unless explicitly included as a contextual note.
-* **OpenAI Codex** was used during implementation and review to inspect the repository, implement bounded parsing and trust controls, add regression tests, and run verification. Codex is not a runtime analyst, does not generate PacketSage findings, and is not part of the deployed evidence pipeline.
-* Every retained runtime AI result records schema version, provider, model identifier, generation time/state, evidence or capture identity, and report-inclusion state. Provider details remain available through technical details and report provenance rather than serving as the primary feature label.
+## Evidence-to-report workflow
 
-### 3. Run the Development Server
+```mermaid
+flowchart LR
+    Load["Load authorized evidence"] --> Normalize["Decode or parse<br/>normalized events"]
+    Normalize --> Derive["Derive stable IDs,<br/>flows and exact relationships"]
+    Derive --> Signal["Review deterministic signal"]
+    Signal -->|"Deliberate request"| Assess["Bounded AI assessment"]
+    Assess --> Validate["Validate schema<br/>and citation intersection"]
+    Validate --> Inspect["Inspect evidence,<br/>inference and uncertainty"]
+    Inspect -->|"Explicit inclusion"| Compile["Compile report"]
+    Signal -->|"Reviewed finding"| Compile
+    Compile --> Output["Preview · Markdown · Print/PDF"]
+```
+
+## Build Week 2026
+
+### Before Build Week
+
+The tagged `pre-build-week-2026` baseline already provided a browser investigation workspace with evidence import, flow/protocol/signal views, an incident timeline, Packet Academy, early reporting, responsive navigation, and an earlier whole-capture Gemini analysis capability. It did not yet provide the current deterministic evidence contract, native capture decoder, evidence-scoped GPT investigation, trusted inclusion lifecycle, or final report experience.
+
+### Added or hardened during Build Week
+
+- Deterministic evidence identities and exact parser-established relationships.
+- Bounded native PCAP/PCAPNG metadata decoding and strict structured-text parsing.
+- Evidence-grounded `gpt-5.6-sol` investigation with validated exact citations.
+- Cancellation and stale-response isolation across evidence and signal changes.
+- Explicit report inclusion and a separately bounded Capture Overview.
+- Contextual guided tour, full assessment workspace, and exact-citation navigation.
+- Professional report identity, Preview, Markdown, and verified Print/PDF output.
+- Responsive and keyboard-accessible investigation workflows.
+- Honest unknown-source-port rendering and explicit three-state port provenance.
+- Adversarial review and regression growth to 333/333 tests.
+
+The full chronology, audit findings, production tags, and model-role disclosure are recorded in [OpenAI Build Week 2026](./docs/OPENAI_BUILD_WEEK_2026.md).
+
+## Run locally
+
+Requirements: a current Node.js installation and npm.
+
 ```bash
+npm ci
+cp .env.example .env.local
 npm run dev
 ```
 
-### 4. Access the Workspace
-Open your browser and navigate to `http://localhost:3000`.
+Open `http://127.0.0.1:3000`.
 
----
+The guided sample and deterministic workspace do not require provider credentials. Optional runtime AI capabilities require server-side configuration:
 
-## 🗺️ Production Roadmap
+```env
+OPENAI_API_KEY=your_server_side_key
+GEMINI_API_KEY=your_server_side_key
+```
 
-* **Current forensic workstation**:
-  - Ephemeral browser-side workspace, bounded native PCAP/PCAPNG decoder, text adapters, and deterministic rule engine.
-  - Server-side GPT-5.6 evidence-scoped investigation.
-  - Report Builder with print-clean layouts.
-  - Built-in Packet Academy.
-* **Potential large-capture extension**:
-  - Isolated decoder workers may supplement, rather than replace, the current bounded browser decoder.
-  - Secure Cloud Storage buckets with signed short-lived URLs.
-* **Stage 3: Workspace Authorization & Case Management (Planned)**:
-  - Multi-tenant Firebase Authentication and Firestore persistent case storage.
+Never use `VITE_OPENAI_API_KEY` or `VITE_GEMINI_API_KEY`; `VITE_` variables are browser-exposed by Vite.
+
+## Verify
+
+```bash
+npm test
+npm run lint
+npm run build
+npm audit
+npm audit --omit=dev
+```
+
+The frozen `build-week-stage-4a.2-production` baseline passed 333/333 tests. Future branches should report their own actual totals rather than assume this number.
+
+## Known limitations
+
+- Capture decoding is intentionally bounded and metadata-focused.
+- PacketSage does not reassemble TCP streams, decrypt traffic, reconstruct payloads, or perform full protocol dissection.
+- There are no accounts, persistent cases, collaboration features, SIEM integrations, or enterprise chain-of-custody controls.
+- Active evidence and report state is volatile. Limited interface preferences may persist locally, while hosting and provider retention policies remain external.
+- AI routes depend on configured provider access and can fail or time out without generating fallback findings.
+- Model output is labelled assistance, not observed evidence, and still requires analyst verification.
+- PacketSage is an authorized defensive-analysis workspace, not a live scanner or court-ready evidence vault.
+
+## Future direction
+
+- Bounded Evidence Query with exact cited answers.
+- Identity, access control, durable cases, and version history.
+- Provenance-labelled external context and review collaboration.
+- Scalable capture processing and integrations without weakening evidence boundaries.
+
+See the [Roadmap](./docs/ROADMAP.md) for sequencing, dependencies, and explicitly non-committed research directions.
+
+## Documentation
+
+- [OpenAI Build Week 2026](./docs/OPENAI_BUILD_WEEK_2026.md)
+- [Technical Specification](./docs/TECHNICAL_SPEC.md)
+- [Security and Privacy Model](./docs/SECURITY_PRIVACY_MODEL.md)
+- [User Guide](./docs/USER_GUIDE.md)
+- [Roadmap](./docs/ROADMAP.md)
+- [Contributing](./CONTRIBUTING.md)
+- [License](./LICENSE)
+
+## License and use
+
+PacketSage is proprietary and source-available, not open source. Public repository access supports transparency, evaluation, portfolio review, and contribution screening. Copying, redistribution, commercial use, hosted reuse, rebranding, or derivative products require prior written permission from the creator. See [LICENSE](./LICENSE) and [CONTRIBUTING.md](./CONTRIBUTING.md).

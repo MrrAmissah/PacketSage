@@ -30,6 +30,29 @@ function visibleTarget(selector: string): HTMLElement | null {
   }) || null;
 }
 
+function visibleTargetRect(target: HTMLElement): DOMRect {
+  const targetRect = target.getBoundingClientRect();
+  let left = Math.max(0, targetRect.left);
+  let right = Math.min(window.innerWidth, targetRect.right);
+  let top = Math.max(0, targetRect.top);
+  let bottom = Math.min(window.innerHeight, targetRect.bottom);
+
+  for (let ancestor = target.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    const style = getComputedStyle(ancestor);
+    const ancestorRect = ancestor.getBoundingClientRect();
+    if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+      left = Math.max(left, ancestorRect.left);
+      right = Math.min(right, ancestorRect.right);
+    }
+    if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+      top = Math.max(top, ancestorRect.top);
+      bottom = Math.min(bottom, ancestorRect.bottom);
+    }
+  }
+
+  return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+}
+
 function calloutPosition(rect: DOMRect, height: number): TargetPosition['callout'] {
   const width = Math.min(CALLOUT_MAX_WIDTH, window.innerWidth - EDGE_GAP * 2);
   const left = Math.min(
@@ -85,7 +108,11 @@ export default function ContextualSpotlightTour({
       setPosition(null);
       return;
     }
-    const rect = target.getBoundingClientRect();
+    const rect = visibleTargetRect(target);
+    if (rect.width === 0 || rect.height === 0) {
+      setPosition(null);
+      return;
+    }
     const calloutHeight = calloutRef.current?.getBoundingClientRect().height || 220;
     setPosition({ rect, callout: calloutPosition(rect, calloutHeight) });
   }, [step.target]);
@@ -93,8 +120,15 @@ export default function ContextualSpotlightTour({
   const ensureTargetInView = useCallback(() => {
     const target = visibleTarget(`[data-tour-target="${step.target}"]`);
     if (!target) return;
-    const rect = target.getBoundingClientRect();
-    if (rect.top >= EDGE_GAP && rect.bottom <= window.innerHeight - EDGE_GAP) return;
+    const rect = visibleTargetRect(target);
+    if (
+      rect.width > 0
+      && rect.height > 0
+      && rect.top >= EDGE_GAP
+      && rect.bottom <= window.innerHeight - EDGE_GAP
+      && rect.left >= EDGE_GAP
+      && rect.right <= window.innerWidth - EDGE_GAP
+    ) return;
     target.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
       block: 'center',
@@ -150,7 +184,11 @@ export default function ContextualSpotlightTour({
   const canGoBack = displayStepIndex > 0;
 
   const focusTarget = () => {
-    visibleTarget(`[data-tour-target="${step.target}"]`)?.focus({ preventScroll: true });
+    const target = visibleTarget(`[data-tour-target="${step.target}"]`);
+    const focusable = target?.matches('button, [href], input, select, textarea, [tabindex], [role="button"]')
+      ? target
+      : target?.closest<HTMLElement>('button, [href], input, select, textarea, [tabindex], [role="button"]');
+    focusable?.focus({ preventScroll: true });
   };
 
   const moveToStep = (nextStepIndex: number) => {
@@ -163,7 +201,7 @@ export default function ContextualSpotlightTour({
     if (!progressControl.enabled) return;
     if (displayStepIndex === 0) {
       onReviewSignal();
-      if (workflowIndex >= 1) moveToStep(1);
+      moveToStep(1);
       return;
     }
     if (displayStepIndex === 1) {

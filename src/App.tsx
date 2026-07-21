@@ -292,27 +292,33 @@ export default function App() {
   const handleReplayGuidedTour = React.useCallback(() => {
     if (parsedData?.evidence.parseMode !== 'demo' || !recommendedGuidedSignal) return;
     setActiveTab('signals');
-    if (assessmentWorkspaceSignalId) {
-      setGuidedSignalAction(previous => ({
-        signalId: assessmentWorkspaceSignalId,
-        focusTarget: 'assessment-summary',
-        requestId: (previous?.requestId || 0) + 1,
-      }));
-    }
+    setGuidedSignalAction(previous => ({
+      signalId: recommendedGuidedSignal.id,
+      focusTarget: 'signal-list',
+      requestId: (previous?.requestId || 0) + 1,
+    }));
     setGuidedTourSession(previous => replayGuidedTourSession(
       parsedData.evidence.id,
       (previous?.requestId || 0) + 1,
     ));
-  }, [parsedData?.evidence.id, parsedData?.evidence.parseMode, recommendedGuidedSignal, assessmentWorkspaceSignalId]);
+  }, [parsedData?.evidence.id, parsedData?.evidence.parseMode, recommendedGuidedSignal]);
 
   const handleTourDisplayStepChange = React.useCallback((stepIndex: number) => {
+    if (stepIndex === 0 && recommendedGuidedSignal) {
+      setGuidedSignalAction(previous => ({
+        signalId: recommendedGuidedSignal.id,
+        focusTarget: 'signal-list',
+        requestId: (previous?.requestId || 0) + 1,
+      }));
+      return;
+    }
     if (stepIndex >= 3 || !assessmentWorkspaceSignalId) return;
     setGuidedSignalAction(previous => ({
       signalId: assessmentWorkspaceSignalId,
       focusTarget: 'assessment-summary',
       requestId: (previous?.requestId || 0) + 1,
     }));
-  }, [assessmentWorkspaceSignalId]);
+  }, [assessmentWorkspaceSignalId, recommendedGuidedSignal]);
 
   const handleTimelineFocusHandled = React.useCallback(() => {
     setTimelineFocusEventId(null);

@@ -8,7 +8,7 @@ export type JudgePathActionId =
   | 'run-investigation'
   | 'review-and-include-assessment'
   | 'open-report';
-export type GuidedSignalFocusTarget = 'signal-detail' | 'investigation' | 'assessment-summary' | 'open-assessment';
+export type GuidedSignalFocusTarget = 'signal-list' | 'signal-detail' | 'investigation' | 'assessment-summary' | 'open-assessment';
 
 export interface JudgePathAction {
   id: JudgePathActionId;

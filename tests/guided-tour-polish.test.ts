@@ -53,7 +53,8 @@ test('Step 1 invokes only safe recommended-signal selection and then advances', 
   const app = source('src/App.tsx');
   const tour = source('src/components/ContextualSpotlightTour.tsx');
   assert.match(app, /handleTourReviewSignal[\s\S]*signalId: recommendedGuidedSignal\.id,[\s\S]*focusTarget: 'investigation'/);
-  assert.match(tour, /onReviewSignal\(\);[\s\S]*workflowIndex >= 1[\s\S]*moveToStep\(1\)/);
+  assert.match(tour, /onReviewSignal\(\);[\s\S]*moveToStep\(1\)/);
+  assert.doesNotMatch(tour.slice(tour.indexOf('if (displayStepIndex === 0)'), tour.indexOf('if (displayStepIndex === 1)')), /workflowIndex >= 1/);
   assert.equal(deriveGuidedTourWorkflowIndex(workflow({ selectedSignalId: 'signal-a' })), 1);
 });
 
@@ -133,4 +134,41 @@ test('desktop and 390 px footers use a fixed three-column hierarchy without wrap
   assert.match(footer, /whitespace-nowrap/);
   assert.doesNotMatch(footer, /flex-wrap|min-w-\[(?:4|5|6|7|8|9)\d\dpx\]/);
   assert.match(tour, /Math\.min\(CALLOUT_MAX_WIDTH, window\.innerWidth - EDGE_GAP \* 2\)/);
+});
+
+test('Replay returns Step 1 to an unselected signal list without erasing workflow progress', () => {
+  const app = source('src/App.tsx');
+  const handler = app.slice(app.indexOf('const handleReplayGuidedTour'), app.indexOf('const handleTourDisplayStepChange'));
+  assert.match(handler, /signalId: recommendedGuidedSignal\.id,[\s\S]*focusTarget: 'signal-list'/);
+  assert.doesNotMatch(handler, /selectedSignalId:\s*null|setInvestigations|setGuideSession/);
+});
+
+test('Back to Step 1 also restores the uncluttered signal-list presentation', () => {
+  const app = source('src/App.tsx');
+  const handler = app.slice(app.indexOf('const handleTourDisplayStepChange'), app.indexOf('const handleTimelineFocusHandled'));
+  assert.match(handler, /stepIndex === 0[\s\S]*focusTarget: 'signal-list'/);
+});
+
+test('signal-list presentation action closes drawers without reporting a new signal selection', () => {
+  const signals = source('src/components/SuspiciousSignals.tsx');
+  const action = signals.slice(signals.indexOf("guidedSignalAction.focusTarget === 'signal-list'"), signals.indexOf('const shouldOpenAssessment'));
+  assert.match(action, /setFullAssessmentOpen\(false\)/);
+  assert.match(action, /onAssessmentWorkspaceChange\?\.\(null\)/);
+  assert.match(action, /setSelectedSignal\(null\)/);
+  assert.doesNotMatch(action, /onSignalSelected/);
+});
+
+test('desktop Step 1 spotlights the full keyboard-operable signal row', () => {
+  const signals = source('src/components/SuspiciousSignals.tsx');
+  const desktopRow = signals.slice(signals.indexOf('<tr\n                        id={`signal-row-'), signals.indexOf('{/* Severity badge column */}'));
+  assert.match(desktopRow.slice(0, desktopRow.indexOf('<td')), /data-tour-target=\{recommendedSignalId === sig\.id/);
+  assert.match(desktopRow, /role="button"[\s\S]*tabIndex=\{0\}/);
+});
+
+test('oversized signal rows are clipped to their visible scroll container', () => {
+  const tour = source('src/components/ContextualSpotlightTour.tsx');
+  assert.match(tour, /function visibleTargetRect\(target: HTMLElement\): DOMRect/);
+  assert.match(tour, /\(auto\|scroll\|hidden\|clip\).*style\.overflowX/);
+  assert.match(tour, /right = Math\.min\(right, ancestorRect\.right\)/);
+  assert.match(tour, /rect\.left >= EDGE_GAP[\s\S]*rect\.right <= window\.innerWidth - EDGE_GAP/);
 });

@@ -729,6 +729,31 @@ export default function SuspiciousSignals({
     const guidedSignal = enrichedSignals.find(signal => signal.id === guidedSignalAction.signalId);
     if (!guidedSignal) return;
 
+    if (guidedSignalAction.focusTarget === 'signal-list') {
+      setFullAssessmentOpen(false);
+      onAssessmentWorkspaceChange?.(null);
+      setSelectedSignal(null);
+      const frame = window.requestAnimationFrame(() => {
+        const target = Array.from(document.querySelectorAll<HTMLElement>('[data-tour-target="recommended-signal-action"]'))
+          .find(element => {
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+        const focusable = target?.matches('button, [tabindex], [role="button"]')
+          ? target
+          : target?.closest<HTMLElement>('button, [tabindex], [role="button"]');
+        focusable?.focus({ preventScroll: true });
+        target?.scrollIntoView({
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        });
+        onGuidedSignalActionHandled?.(guidedSignalAction.requestId);
+      });
+
+      return () => window.cancelAnimationFrame(frame);
+    }
+
     const shouldOpenAssessment = guidedSignalAction.focusTarget === 'open-assessment'
       && completedRecord?.signalId === guidedSignal.id;
     setFullAssessmentOpen(shouldOpenAssessment);

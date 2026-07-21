@@ -665,12 +665,6 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                     const Icon = m.icon;
                     const isSelected = selectedLessonId === m.id;
                     const isCompleted = completedLessons.includes(m.id);
-                    const isRecommended = hasEvidence && (
-                      (m.id === 2 && evidenceDnsCount > 0) ||
-                      (m.id === 3 && evidenceHttpCount > 0) ||
-                      (m.id === 4 && evidenceTlsCount > 0)
-                    );
-
                     return (
                       <div
                         key={m.id}
@@ -691,7 +685,7 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                             <span className="text-[10px] font-bold text-accent-primary font-mono tracking-wider">
                               MOD {String(m.id).padStart(2, '0')}
                             </span>
-                            {getStatusIndicator(isCompleted, !!isRecommended)}
+                            {getStatusIndicator(isCompleted, false)}
                           </div>
 
                           <div className="flex items-start gap-2.5">
@@ -742,10 +736,6 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                     const Icon = m.icon;
                     const isSelected = selectedLessonId === m.id;
                     const isCompleted = completedLessons.includes(m.id);
-                    const isRecommended = hasEvidence && (
-                      m.id === 5 && evidenceSignalsCount > 0
-                    );
-
                     return (
                       <div
                         key={m.id}
@@ -766,7 +756,7 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                             <span className="text-[10px] font-bold text-accent-primary font-mono tracking-wider">
                               MOD {String(m.id).padStart(2, '0')}
                             </span>
-                            {getStatusIndicator(isCompleted, !!isRecommended)}
+                            {getStatusIndicator(isCompleted, false)}
                           </div>
 
                           <div className="flex items-start gap-2.5">
@@ -817,10 +807,6 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                     const Icon = m.icon;
                     const isSelected = selectedLessonId === m.id;
                     const isCompleted = completedLessons.includes(m.id);
-                    const isRecommended = hasEvidence && (
-                      m.id === 6 && hasEvidence
-                    );
-
                     return (
                       <div
                         key={m.id}
@@ -841,7 +827,7 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                             <span className="text-[10px] font-bold text-accent-primary font-mono tracking-wider">
                               MOD {String(m.id).padStart(2, '0')}
                             </span>
-                            {getStatusIndicator(isCompleted, !!isRecommended)}
+                            {getStatusIndicator(isCompleted, false)}
                           </div>
 
                           <div className="flex items-start gap-2.5">

@@ -23,6 +23,24 @@ function formatTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
+const riskPillClasses: Record<FlowSummary['riskLevel'], string> = {
+  info: 'border-slate-500/25 bg-slate-600 text-white dark:bg-slate-500',
+  low: 'border-emerald-500/25 bg-emerald-600 text-white dark:bg-emerald-500',
+  medium: 'border-amber-400/30 bg-amber-500 text-white',
+  high: 'border-red-500/25 bg-status-danger text-white',
+};
+
+function RiskPill({ level }: { level: FlowSummary['riskLevel'] }) {
+  return (
+    <span
+      data-risk-pill={level}
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-xs ${riskPillClasses[level]}`}
+    >
+      {level}
+    </span>
+  );
+}
+
 export default function FlowExplorer({
   flows,
   events,
@@ -105,7 +123,7 @@ export default function FlowExplorer({
             <tbody className="divide-y divide-border-subtle">
               {filteredFlows.map(flow => (
                 <tr key={flow.id} id={`flow-row-${flow.id}`} role="button" tabIndex={0} aria-label={`Inspect flow ${flow.id}`} aria-pressed={selectedFlow?.id === flow.id} onClick={() => onSelectFlow(flow)} onKeyDown={event => selectFromKeyboard(event, flow)} className={`cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-primary ${selectedFlow?.id === flow.id ? 'bg-accent-soft' : 'hover:bg-surface-muted/50'}`}>
-                  <td className="p-3 font-mono text-[10px] text-text-muted">{formatTime(flow.firstSeen)}</td><td className="p-3 font-mono">{endpoint(flow.sourceIp, flow.sourcePort)}</td><td className="p-3 font-mono">{endpoint(flow.destinationIp, flow.destinationPort)}</td><td className="p-3">{flow.protocol}{flow.service ? ` · ${flow.service}` : ''}</td><td className="p-3 text-right font-mono">{flow.packetCount}</td><td className="p-3 text-right font-mono">{flow.byteCount}</td><td className="p-3 text-right font-mono">{flow.duration.toFixed(3)}s</td><td className="p-3 uppercase">{flow.riskLevel}</td>
+                  <td className="p-3 font-mono text-[10px] text-text-muted">{formatTime(flow.firstSeen)}</td><td className="p-3 font-mono">{endpoint(flow.sourceIp, flow.sourcePort)}</td><td className="p-3 font-mono">{endpoint(flow.destinationIp, flow.destinationPort)}</td><td className="p-3">{flow.protocol}{flow.service ? ` · ${flow.service}` : ''}</td><td className="p-3 text-right font-mono">{flow.packetCount}</td><td className="p-3 text-right font-mono">{flow.byteCount}</td><td className="p-3 text-right font-mono">{flow.duration.toFixed(3)}s</td><td className="p-3"><RiskPill level={flow.riskLevel} /></td>
                 </tr>
               ))}
               {!filteredFlows.length && <tr><td colSpan={8} className="p-10 text-center text-text-muted">No observed flows match these filters.</td></tr>}
@@ -121,7 +139,7 @@ export default function FlowExplorer({
               <div><dt className="text-text-muted">Destination</dt><dd className="font-mono text-text-primary">{endpoint(selectedFlow.destinationIp, selectedFlow.destinationPort)}</dd></div>
               <div className="grid grid-cols-2 gap-2"><div><dt className="text-text-muted">Protocol</dt><dd>{selectedFlow.protocol}</dd></div><div><dt className="text-text-muted">Service</dt><dd>{selectedFlow.service || 'Not recorded'}</dd></div></div>
               <div className="grid grid-cols-2 gap-2"><div><dt className="text-text-muted">Packets</dt><dd>{selectedFlow.packetCount}</dd></div><div><dt className="text-text-muted">Bytes</dt><dd>{selectedFlow.byteCount}</dd></div></div>
-              <div className="grid grid-cols-2 gap-2"><div><dt className="text-text-muted">Direction</dt><dd>{selectedFlow.direction}</dd></div><div><dt className="text-text-muted">Risk label</dt><dd>{selectedFlow.riskLevel}</dd></div></div>
+              <div className="grid grid-cols-2 gap-2"><div><dt className="text-text-muted">Direction</dt><dd>{selectedFlow.direction}</dd></div><div><dt className="text-text-muted">Risk label</dt><dd className="mt-0.5"><RiskPill level={selectedFlow.riskLevel} /></dd></div></div>
               <div><dt className="text-text-muted">Observed interval</dt><dd className="font-mono text-[10px]">{formatTime(selectedFlow.firstSeen)} — {formatTime(selectedFlow.lastSeen)}</dd></div>
             </dl>
 

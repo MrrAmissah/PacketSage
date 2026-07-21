@@ -206,16 +206,28 @@ body {
     background: #fff !important;
   }
 
-  .report-document section,
-  .report-document article,
-  .report-document table,
   .report-document tr {
     break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-document h2,
+  .report-document h3,
+  .report-document h4,
+  .report-document h5 {
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
   .report-document table {
+    break-inside: auto;
+    page-break-inside: auto;
     min-width: 0 !important;
     width: 100% !important;
+  }
+
+  .report-document thead {
+    display: table-header-group;
   }
 
   .report-document .overflow-x-auto {

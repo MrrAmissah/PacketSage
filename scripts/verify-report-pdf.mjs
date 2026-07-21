@@ -33,6 +33,11 @@ try {
   assert(!text.includes('Import evidence'), 'Application navigation leaked into print output.');
   assert(!text.includes('Packet Academy'), 'Application shell leaked into print output.');
   assert(!text.includes('stages complete'), 'Guided journey leaked into print output.');
+  const pages = text.split('\f').map(page => page.trim()).filter(Boolean);
+  const nearEmptyPage = pages.findIndex(page => page.replace(/\s/g, '').length < 40);
+  assert(nearEmptyPage === -1, `Printed page ${nearEmptyPage + 1} contains only a heading or near-empty content.`);
+  const timelinePage = pages.find(page => page.includes('Timeline'));
+  assert(timelinePage && /evt-[a-z0-9-]+/.test(timelinePage), 'Timeline heading was orphaned from its first event row.');
   const eventIds = new Set(text.match(/evt-[a-z0-9-]+/g) || []);
   assert(eventIds.size > 8, `Expected more than 8 printed timeline events, found ${eventIds.size}.`);
   process.stdout.write(`Verified report-only PDF: ${pdfPath} (${eventIds.size} timeline events)\n`);

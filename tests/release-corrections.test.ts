@@ -231,6 +231,17 @@ test('PDF verification script checks PDF validity, shell absence, late content, 
   assert.match(code, /Application navigation leaked/);
   assert.match(code, /Late report marker/);
   assert.match(code, /eventIds\.size > 8/);
+  assert.match(code, /nearEmptyPage/);
+  assert.match(code, /Timeline heading was orphaned/);
+});
+
+test('report print pagination allows long sections and tables to span pages safely', () => {
+  const css = source('src/index.css');
+  assert.doesNotMatch(css, /\.report-document section,[\s\S]*break-inside: avoid/);
+  assert.match(css, /\.report-document tr \{[\s\S]*break-inside: avoid/);
+  assert.match(css, /\.report-document h2,[\s\S]*break-after: avoid/);
+  assert.match(css, /\.report-document table \{[\s\S]*break-inside: auto/);
+  assert.match(css, /\.report-document thead \{[\s\S]*display: table-header-group/);
 });
 
 test('Non-recommended signal selection does not complete guided review', () => {

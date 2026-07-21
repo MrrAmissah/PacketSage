@@ -7,6 +7,7 @@ import type {
 } from '../types.js';
 import { includedInvestigationRecords } from './investigationRecords.js';
 import { includedCaptureOverview } from './captureOverview.js';
+import { formatEndpoint } from './ports.js';
 import {
   reportDetailsForEvidence,
   type ReportDetails,
@@ -83,9 +84,7 @@ function orderedUnique(values: readonly string[]): string[] {
   return Array.from(new Set(values));
 }
 
-export function formatReportEndpoint(ip: string, port: number): string {
-  return port === 0 ? `${ip}:unknown` : `${ip}:${port}`;
-}
+export const formatReportEndpoint = formatEndpoint;
 
 function statusFor(
   signal: SuspiciousSignal,
@@ -163,8 +162,8 @@ export function buildReportModel(
   const timeline = sortedEvents.slice(0, MAX_REPORT_TIMELINE_EVENTS).map(event => ({
     id: event.id,
     timestamp: event.timestamp,
-    source: formatReportEndpoint(event.sourceIp, event.sourcePort),
-    destination: formatReportEndpoint(event.destinationIp, event.destinationPort),
+    source: formatReportEndpoint(event.sourceIp, event.sourcePort, event.sourcePortState),
+    destination: formatReportEndpoint(event.destinationIp, event.destinationPort, event.destinationPortState),
     protocol: event.service || event.protocol,
     length: event.length,
     signalIds: eventSignalIds.get(event.id) || [],

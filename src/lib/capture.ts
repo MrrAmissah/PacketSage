@@ -1,5 +1,5 @@
 import { PCAPNGParser, type Packet } from '@cto.af/pcap-ng-parser';
-import type { DnsRecord, PacketEvent, UploadedEvidence } from '../types';
+import type { DnsRecord, PacketEvent, PortState, UploadedEvidence } from '../types';
 import { finalizeEvidenceIds } from './deterministic';
 import { MAX_CAPTURE_BYTES, MAX_CAPTURE_PACKETS } from './limits';
 import { sha256Hex } from './checksum';
@@ -21,7 +21,9 @@ interface NetworkPacket {
   sourceIp: string;
   destinationIp: string;
   sourcePort: number;
+  sourcePortState: PortState;
   destinationPort: number;
+  destinationPortState: PortState;
   protocol: string;
   service?: string;
   info: string;
@@ -158,7 +160,7 @@ function parseTransport(
     const destinationPort = readU16(data, offset + 2);
     const flags = data[offset + 13];
     const names = ['FIN', 'SYN', 'RST', 'PSH', 'ACK', 'URG'].filter((_, bit) => (flags & (1 << bit)) !== 0);
-    return { sourceIp, destinationIp, sourcePort, destinationPort, protocol: 'TCP', service: destinationPort === 53 || sourcePort === 53 ? 'DNS' : undefined, info: `TCP${names.length ? ` [${names.join(', ')}]` : ''}` };
+    return { sourceIp, destinationIp, sourcePort, sourcePortState: 'observed', destinationPort, destinationPortState: 'observed', protocol: 'TCP', service: destinationPort === 53 || sourcePort === 53 ? 'DNS' : undefined, info: `TCP${names.length ? ` [${names.join(', ')}]` : ''}` };
   }
   if (nextHeader === 17) {
     requireBytes(data, offset, 8);
@@ -168,13 +170,13 @@ function parseTransport(
     const isDns = sourcePort === 53 || destinationPort === 53;
     const clientIp = sourcePort === 53 ? destinationIp : sourceIp;
     const dns = isDns ? parseDns(data, dnsOffset, clientIp) : undefined;
-    return { sourceIp, destinationIp, sourcePort, destinationPort, protocol: 'UDP', service: dns ? 'DNS' : undefined, info: dns ? `DNS ${dns.queryType} ${dns.query}` : 'UDP datagram', dns };
+    return { sourceIp, destinationIp, sourcePort, sourcePortState: 'observed', destinationPort, destinationPortState: 'observed', protocol: 'UDP', service: dns ? 'DNS' : undefined, info: dns ? `DNS ${dns.queryType} ${dns.query}` : 'UDP datagram', dns };
   }
   if (nextHeader === 1 || nextHeader === 58) {
     requireBytes(data, offset, 4);
-    return { sourceIp, destinationIp, sourcePort: 0, destinationPort: 0, protocol: nextHeader === 58 ? 'ICMPv6' : 'ICMP', info: `ICMP type ${data[offset]} code ${data[offset + 1]}` };
+    return { sourceIp, destinationIp, sourcePort: 0, sourcePortState: 'not-applicable', destinationPort: 0, destinationPortState: 'not-applicable', protocol: nextHeader === 58 ? 'ICMPv6' : 'ICMP', info: `ICMP type ${data[offset]} code ${data[offset + 1]}` };
   }
-  return { sourceIp, destinationIp, sourcePort: 0, destinationPort: 0, protocol: `IP-${nextHeader}`, info: `IP protocol ${nextHeader}` };
+  return { sourceIp, destinationIp, sourcePort: 0, sourcePortState: 'not-applicable', destinationPort: 0, destinationPortState: 'not-applicable', protocol: `IP-${nextHeader}`, info: `IP protocol ${nextHeader}` };
 }
 
 function dissectPacket(data: Uint8Array, linkType: number): NetworkPacket | null {
@@ -204,7 +206,7 @@ function dissectPacket(data: Uint8Array, linkType: number): NetworkPacket | null
     const fragmentOffset = readU16(data, offset + 6) & 0x1fff;
     const sourceIp = ipv4(data, offset + 12);
     const destinationIp = ipv4(data, offset + 16);
-    if (fragmentOffset !== 0) return { sourceIp, destinationIp, sourcePort: 0, destinationPort: 0, protocol: 'IPv4 fragment', info: 'Non-initial IPv4 fragment' };
+    if (fragmentOffset !== 0) return { sourceIp, destinationIp, sourcePort: 0, sourcePortState: 'not-applicable', destinationPort: 0, destinationPortState: 'not-applicable', protocol: 'IPv4 fragment', info: 'Non-initial IPv4 fragment' };
     return parseTransport(data, offset + headerLength, data[offset + 9], sourceIp, destinationIp);
   }
 
@@ -222,7 +224,7 @@ function dissectPacket(data: Uint8Array, linkType: number): NetworkPacket | null
       if (current === 44) {
         const fragmentOffset = readU16(data, transportOffset + 2) >> 3;
         transportOffset += 8;
-        if (fragmentOffset !== 0) return { sourceIp, destinationIp, sourcePort: 0, destinationPort: 0, protocol: 'IPv6 fragment', info: 'Non-initial IPv6 fragment' };
+        if (fragmentOffset !== 0) return { sourceIp, destinationIp, sourcePort: 0, sourcePortState: 'not-applicable', destinationPort: 0, destinationPortState: 'not-applicable', protocol: 'IPv6 fragment', info: 'Non-initial IPv6 fragment' };
       } else {
         transportOffset += (data[transportOffset + 1] + 1) * 8;
       }
@@ -281,8 +283,10 @@ export async function parseCapture(fileName: string, buffer: ArrayBuffer): Promi
       timestamp,
       sourceIp: decoded.sourceIp,
       sourcePort: decoded.sourcePort,
+      sourcePortState: decoded.sourcePortState,
       destinationIp: decoded.destinationIp,
       destinationPort: decoded.destinationPort,
+      destinationPortState: decoded.destinationPortState,
       protocol: decoded.protocol,
       service: decoded.service,
       length: originalLength,

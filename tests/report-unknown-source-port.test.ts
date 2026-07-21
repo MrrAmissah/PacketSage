@@ -65,11 +65,11 @@ test('omitted strict-text source port retains the normalized unknown sentinel', 
 });
 
 test('report endpoint formatter labels the unknown sentinel honestly', () => {
-  assert.equal(formatReportEndpoint('10.0.0.15', 0), '10.0.0.15:unknown');
+  assert.equal(formatReportEndpoint('10.0.0.15', 0, 'unknown'), '10.0.0.15:unknown');
 });
 
 test('report endpoint formatter preserves known observed ports', () => {
-  assert.equal(formatReportEndpoint('10.0.0.15', 53000), '10.0.0.15:53000');
+  assert.equal(formatReportEndpoint('10.0.0.15', 53000, 'observed'), '10.0.0.15:53000');
 });
 
 test('report model never exposes the unknown source-port sentinel as port zero', () => {

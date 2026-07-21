@@ -19,6 +19,7 @@ import {
 import { ParsedResult } from '../lib/parser';
 import { commandCenterLimitation, observedEventDescription } from '../lib/commandCenterPresentation';
 import type { InvestigationStatus, InvestigationStatusTone, JudgePathAction } from '../lib/judgePath';
+import { formatEndpoint } from '../lib/ports';
 import InfoPopover from './InfoPopover';
 
 interface CommandCenterProps {
@@ -61,8 +62,6 @@ const formatSize = (bytes: number) => {
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
-
-const endpoint = (ip: string, port: number) => `${ip.includes(':') ? `[${ip}]` : ip}:${port > 0 ? port : 'unknown'}`;
 
 export default function CommandCenter({ data, onNavigate, investigationStatus, onPrimaryAction, onReplayTour }: CommandCenterProps) {
   if (!data) {
@@ -1000,9 +999,9 @@ export default function CommandCenter({ data, onNavigate, investigationStatus, o
                     <span className="text-text-secondary truncate font-normal block" title={displayInfo}>{displayInfo}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-text-muted shrink-0 sm:border-l sm:border-border-subtle/40 sm:pl-3 font-normal">
-                    <span>{endpoint(evt.sourceIp, evt.sourcePort)}</span>
+                    <span>{formatEndpoint(evt.sourceIp, evt.sourcePort, evt.sourcePortState)}</span>
                     <span>-&gt;</span>
-                    <span>{endpoint(evt.destinationIp, evt.destinationPort)}</span>
+                    <span>{formatEndpoint(evt.destinationIp, evt.destinationPort, evt.destinationPortState)}</span>
                   </div>
                 </div>
               );

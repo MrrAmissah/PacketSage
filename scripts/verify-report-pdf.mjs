@@ -4,9 +4,12 @@ import { dirname, resolve } from 'node:path';
 
 const includedAssessment = process.argv.includes('--included-assessment');
 const unknownSourcePort = process.argv.includes('--unknown-source-port');
+const portProvenance = process.argv.includes('--port-provenance');
 const positional = process.argv.slice(2).filter(argument => !argument.startsWith('--'));
 const baseUrl = positional[0] || 'http://127.0.0.1:3000';
-const pdfPath = resolve(positional[1] || (includedAssessment
+const pdfPath = resolve(positional[1] || (portProvenance
+  ? 'artifacts/packetsage-port-provenance-verification.pdf'
+  : includedAssessment
   ? 'artifacts/packetsage-report-with-assessment-verification.pdf'
   : 'artifacts/packetsage-report-verification.pdf'));
 const session = `packetsage-print-${process.pid}`;
@@ -41,7 +44,26 @@ function waitForText(text, timeoutMs = 75_000) {
 try {
   browser('open', baseUrl);
   browser('wait', '--load', 'networkidle');
-  if (unknownSourcePort) {
+  if (portProvenance && includedAssessment) {
+    const fixtureAssessment = {
+      schemaVersion: '1',
+      provider: 'OpenAI',
+      model: 'gpt-5.6-sol-fixture',
+      assessment: {
+        summary: 'Deterministic PDF layout fixture for the bounded provenance evidence.',
+        observedEvidence: [{ statement: 'The supplied fixture includes an explicitly observed source port zero.', evidenceIds: ['evt-1clvp8k-1'] }],
+        inferences: [{ statement: 'Endpoint context requires independent validation.', confidence: 'low', evidenceIds: ['evt-1clvp8k-1'] }],
+        uncertainties: ['Host and process telemetry were not supplied.'],
+        nextSteps: [{ action: 'Validate the endpoint process that emitted the traffic.', reason: 'The capture contains network metadata only.' }],
+      },
+    };
+    browser('network', 'route', '**/api/investigate', '--body', JSON.stringify(fixtureAssessment));
+  }
+  if (portProvenance) {
+    browser('check', 'input[type="checkbox"]:not([disabled])');
+    browser('upload', 'input[type="file"]', resolve('tests/fixtures/port-provenance.eve.json'));
+    browser('wait', '--text', 'Evidence decoded');
+  } else if (unknownSourcePort) {
     browser('check', 'input[type="checkbox"]:not([disabled])');
     browser('wait', '250');
     browser('fill', 'textarea', '2026-07-21T12:00:00Z 10.0.0.15 -> 203.0.113.80 dst_port=4444 protocol=TCP length=128');
@@ -68,7 +90,9 @@ try {
     browser('find', 'role', 'button', 'click', '--name', 'Review signal Repeated outbound connections');
     browser('find', 'role', 'button', 'click', '--name', 'Investigate with AI');
     waitForText('Open full assessment');
-    browser('find', 'role', 'button', 'click', '--name', 'Open full assessment', '--exact');
+    const assessmentOpened = browser('eval', 'const button = document.querySelector("[data-testid=open-full-assessment]"); if (button instanceof HTMLElement) { button.click(); true } else { false }');
+    assert(assessmentOpened.includes('true'), 'Completed assessment control was unavailable.');
+    browser('wait', '[data-testid="investigation-assessment"]');
     browser('wait', '[data-testid="assessment-report-inclusion"]');
     browser('eval', 'document.querySelector("[data-testid=assessment-report-inclusion]")?.click(); "clicked"');
     waitForText('Remove AI-assisted assessment from report', 10_000);
@@ -107,7 +131,14 @@ try {
   }
   const eventIds = new Set(text.match(/evt-[a-z0-9-]+/g) || []);
   const repeatedTimelineHeaders = (text.match(/Recorded time \/ Evidence ID/g) || []).length;
-  if (unknownSourcePort) {
+  if (portProvenance) {
+    assert(eventIds.size === 6, `Expected the three-state provenance timeline, found ${eventIds.size} events.`);
+    assert(compactText.includes('10.0.0.15:0'), 'Observed literal port zero is missing from PDF output.');
+    assert(compactText.includes('10.0.0.16:unknown'), 'Unknown transport port is missing from PDF output.');
+    assert(compactText.includes('10.0.0.17→203.0.113.82'), 'Portless endpoints are missing from PDF output.');
+    assert(!compactText.includes('10.0.0.17:0'), 'Portless source was rendered as observed port zero.');
+    assert(!compactText.includes('10.0.0.17:unknown'), 'Portless source was rendered as an unknown transport port.');
+  } else if (unknownSourcePort) {
     assert(eventIds.size === 1, `Expected the one strict-text timeline event, found ${eventIds.size}.`);
     assert(!text.includes('10.0.0.15:0'), 'Unknown source-port sentinel leaked into PDF output.');
     assert(compactText.includes('10.0.0.15:unknown'), 'Unknown source port is not labelled honestly in PDF output.');
@@ -129,7 +160,7 @@ try {
     assert(text.includes('Model:'), 'Included assessment model provenance is missing.');
     assert(/(?:flow|evt|dns|http|tls)-[a-z0-9-]+/.test(text), 'Included assessment evidence citations are missing.');
   }
-  process.stdout.write(`Verified report-only PDF: ${pdfPath} (${pages.length} pages, ${eventIds.size} timeline events, ${repeatedTimelineHeaders} repeated Timeline headers, assessment ${includedAssessment ? 'included' : 'excluded'}, unknown source port ${unknownSourcePort ? 'included' : 'excluded'})\n`);
+  process.stdout.write(`Verified report-only PDF: ${pdfPath} (${pages.length} pages, ${eventIds.size} timeline events, ${repeatedTimelineHeaders} repeated Timeline headers, assessment ${includedAssessment ? 'included' : 'excluded'}, unknown source port ${unknownSourcePort ? 'included' : 'excluded'}, three-state provenance ${portProvenance ? 'included' : 'excluded'})\n`);
 } finally {
   try { browser('close'); } catch { /* best-effort browser cleanup */ }
   if (process.env.KEEP_VERIFICATION_PDF !== '1') rmSync(pdfPath, { force: true });

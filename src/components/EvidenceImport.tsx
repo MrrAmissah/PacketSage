@@ -406,7 +406,7 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
                 Paste structured log sample
               </h4>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                One structured event per line. Required: UTC timestamp, source and destination IPv4, destination port, TCP/UDP protocol, and length. Source port is optional and remains unknown when omitted.
+                One structured event per line. Required: UTC timestamp, source and destination IPv4, destination port, TCP/UDP protocol, and length. Ports may be 0–65535; an explicit zero is observed, while an omitted source port remains unknown.
               </p>
             </div>
 

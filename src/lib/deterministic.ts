@@ -7,6 +7,7 @@ import type {
   TlsRecord,
   UploadedEvidence,
 } from '../types.js';
+import { portIdentityPart } from './ports.js';
 
 export interface EvidenceCollections {
   evidence: UploadedEvidence;
@@ -53,9 +54,9 @@ export function finalizeEvidenceIds<T extends EvidenceCollections>(result: T): T
   const events = assignIds(originalEvents, 'evt', event => [
     event.timestamp,
     event.sourceIp,
-    event.sourcePort,
+    portIdentityPart(event.sourcePort, event.sourcePortState),
     event.destinationIp,
-    event.destinationPort,
+    portIdentityPart(event.destinationPort, event.destinationPortState),
     event.protocol,
     event.service,
     event.length,
@@ -73,9 +74,9 @@ export function finalizeEvidenceIds<T extends EvidenceCollections>(result: T): T
     flow.firstSeen,
     flow.lastSeen,
     flow.sourceIp,
-    flow.sourcePort,
+    portIdentityPart(flow.sourcePort, flow.sourcePortState),
     flow.destinationIp,
-    flow.destinationPort,
+    portIdentityPart(flow.destinationPort, flow.destinationPortState),
     flow.protocol,
     flow.packetCount,
     flow.byteCount,

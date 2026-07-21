@@ -17,13 +17,17 @@ export interface UploadedEvidence {
   checksumStatus?: 'calculated' | 'demo-not-applicable' | 'not-calculated';
 }
 
+export type PortState = 'observed' | 'unknown' | 'not-applicable';
+
 export interface PacketEvent {
   id: string;
   timestamp: string;
   sourceIp: string;
   sourcePort: number;
+  sourcePortState: PortState;
   destinationIp: string;
   destinationPort: number;
+  destinationPortState: PortState;
   protocol: string;
   service?: string;
   length: number;
@@ -40,8 +44,10 @@ export interface FlowSummary {
   lastSeen: string;
   sourceIp: string;
   sourcePort: number;
+  sourcePortState: PortState;
   destinationIp: string;
   destinationPort: number;
+  destinationPortState: PortState;
   protocol: string;
   service?: string;
   packetCount: number;
@@ -140,8 +146,10 @@ export interface InvestigationFlowEvidence {
   lastSeen: string;
   sourceIp: string;
   sourcePort: number;
+  sourcePortState: PortState;
   destinationIp: string;
   destinationPort: number;
+  destinationPortState: PortState;
   protocol: string;
   service?: string;
   packetCount: number;
@@ -157,8 +165,10 @@ export interface InvestigationEventEvidence {
   timestamp: string;
   sourceIp: string;
   sourcePort: number;
+  sourcePortState: PortState;
   destinationIp: string;
   destinationPort: number;
+  destinationPortState: PortState;
   protocol: string;
   service?: string;
   length: number;

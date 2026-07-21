@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowDown, ArrowRight, ArrowUp, FileText, Globe, Network, RotateCcw, Search, ShieldCheck, X } from 'lucide-react';
 import type { FlowSummary, PacketEvent, SuspiciousSignal } from '../types';
 import { flowsForEvent, signalsForEvent } from '../lib/evidenceRelationships';
+import { formatEndpoint } from '../lib/ports';
 
 interface IncidentTimelineProps {
   events: PacketEvent[];
@@ -10,11 +11,6 @@ interface IncidentTimelineProps {
   focusedEventId?: string | null;
   onFocusedEventHandled?: () => void;
   onNavigateToFlows?: (flows: FlowSummary[]) => void;
-}
-
-function endpoint(ip: string, port: number): string {
-  const address = ip.includes(':') ? `[${ip}]` : ip;
-  return `${address}:${port > 0 ? port : 'unknown'}`;
 }
 
 function timestamp(value: string): string {
@@ -69,7 +65,7 @@ function observedEventLabel(event: PacketEvent): string {
 function observedEventDescription(event: PacketEvent): string {
   const service = event.service ? ` for the recorded ${event.service} service` : '';
   const detail = event.info ? ` The decoder described it as: ${event.info}` : ' The decoder did not provide an additional description.';
-  return `At ${timestamp(event.timestamp)}, PacketSage recorded ${event.protocol} network traffic${service}. It travelled from source ${endpoint(event.sourceIp, event.sourcePort)} to destination ${endpoint(event.destinationIp, event.destinationPort)}, and the normalized record reports ${event.length} bytes.${detail}`;
+  return `At ${timestamp(event.timestamp)}, PacketSage recorded ${event.protocol} network traffic${service}. It travelled from source ${formatEndpoint(event.sourceIp, event.sourcePort, event.sourcePortState)} to destination ${formatEndpoint(event.destinationIp, event.destinationPort, event.destinationPortState)}, and the normalized record reports ${event.length} bytes.${detail}`;
 }
 
 export default function IncidentTimeline({ events, flows = [], signals = [], focusedEventId = null, onFocusedEventHandled, onNavigateToFlows }: IncidentTimelineProps) {
@@ -112,7 +108,7 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
     return validTimes.length ? Math.min(...validTimes) : null;
   }, [sortedEvents]);
   const visibleEvents = useMemo(() => sortedEvents.filter(event => {
-    const text = `${event.id} ${event.timestamp} ${event.sourceIp} ${event.sourcePort || ''} ${event.destinationIp} ${event.destinationPort || ''} ${event.protocol} ${event.service || ''} ${event.info || ''}`.toLowerCase();
+    const text = `${event.id} ${event.timestamp} ${formatEndpoint(event.sourceIp, event.sourcePort, event.sourcePortState)} ${formatEndpoint(event.destinationIp, event.destinationPort, event.destinationPortState)} ${event.protocol} ${event.service || ''} ${event.info || ''}`.toLowerCase();
     const eventTime = new Date(event.timestamp).getTime();
     const offset = captureStartTime === null || Number.isNaN(eventTime) ? null : eventTime - captureStartTime;
     const inTimeRange = timeFilter === 'ALL'
@@ -260,7 +256,7 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
                       <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-secondary">{event.protocol}</span>
                       {event.service && <span className="text-[10px] text-text-muted">{event.service}</span>}
                     </div>
-                    <p data-testid="timeline-event-route" className="min-w-0 break-words font-mono text-[10px] text-text-muted [overflow-wrap:anywhere] sm:col-start-2 sm:row-start-1 sm:text-right">{endpoint(event.sourceIp, event.sourcePort)} → {endpoint(event.destinationIp, event.destinationPort)}</p>
+                    <p data-testid="timeline-event-route" className="min-w-0 break-words font-mono text-[10px] text-text-muted [overflow-wrap:anywhere] sm:col-start-2 sm:row-start-1 sm:text-right">{formatEndpoint(event.sourceIp, event.sourcePort, event.sourcePortState)} → {formatEndpoint(event.destinationIp, event.destinationPort, event.destinationPortState)}</p>
                     <p className="text-xs font-semibold text-text-primary sm:col-start-1 sm:row-start-2">{observedEventLabel(event)}</p>
                     <p className="line-clamp-2 text-[11px] leading-relaxed text-text-secondary sm:col-start-1 sm:row-start-3">{event.info || 'No decoded description was recorded.'}</p>
                     <p data-testid="timeline-event-relationships" className="text-[9px] text-text-muted sm:col-start-2 sm:row-start-3 sm:self-end sm:text-right">{exactFlowCount} related flow{exactFlowCount === 1 ? '' : 's'} · {exactSignalCount} signal{exactSignalCount === 1 ? '' : 's'}</p>
@@ -284,8 +280,8 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
               <dl className="divide-y divide-border-subtle/60 overflow-hidden rounded-lg border border-border-subtle bg-canvas text-[10px]">
                 <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Evidence ID</dt><dd className="break-all font-mono text-text-primary">{selectedEvent.id}</dd></div>
                 <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Recorded time</dt><dd className="break-all font-mono text-text-primary">{timestamp(selectedEvent.timestamp)}</dd></div>
-                <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Source endpoint</dt><dd className="break-all font-mono text-text-primary">{endpoint(selectedEvent.sourceIp, selectedEvent.sourcePort)}</dd></div>
-                <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Destination</dt><dd className="break-all font-mono text-text-primary">{endpoint(selectedEvent.destinationIp, selectedEvent.destinationPort)}</dd></div>
+                <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Source endpoint</dt><dd className="break-all font-mono text-text-primary">{formatEndpoint(selectedEvent.sourceIp, selectedEvent.sourcePort, selectedEvent.sourcePortState)}</dd></div>
+                <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Destination</dt><dd className="break-all font-mono text-text-primary">{formatEndpoint(selectedEvent.destinationIp, selectedEvent.destinationPort, selectedEvent.destinationPortState)}</dd></div>
                 <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Protocol</dt><dd className="font-mono text-text-primary">{selectedEvent.protocol}</dd></div>
                 {selectedEvent.service && <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Recorded service</dt><dd className="font-mono text-text-primary">{selectedEvent.service}</dd></div>}
                 <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 p-2.5"><dt className="font-semibold text-text-muted">Record length</dt><dd className="font-mono text-text-primary">{selectedEvent.length} bytes</dd></div>
@@ -300,7 +296,7 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
               <p className="mb-2 mt-1 text-[10px] leading-relaxed text-text-muted">Only observations that explicitly reference this event ID are shown.</p>
               {relatedSignals.length ? <ul className="space-y-2">{relatedSignals.map(signal => <li key={signal.id} className="rounded-lg border border-border-subtle p-2.5 text-[10px]"><div className="flex items-start justify-between gap-2"><span className="font-semibold text-text-primary">{signal.title}</span><span className="shrink-0 rounded bg-surface-muted px-1.5 py-0.5 text-[8px] font-bold uppercase text-text-secondary">{signal.severity}</span></div><p className="mt-1 text-text-muted">{signal.category}</p><code className="mt-1 block break-all text-text-secondary">{signal.id}</code></li>)}</ul> : <p className="text-[11px] text-text-muted">No observation explicitly records this event ID.</p>}
             </section>
-            <section><h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">Exact related flows ({relatedFlows.length})</h3>{relatedFlows.length ? <ul className="space-y-2">{relatedFlows.map(flow => <li key={flow.id} className="rounded-lg border border-border-subtle p-2 text-[10px]"><code>{flow.id}</code><p className="mt-1 font-mono text-text-muted">{endpoint(flow.sourceIp, flow.sourcePort)} → {endpoint(flow.destinationIp, flow.destinationPort)}</p></li>)}</ul> : <p className="text-[11px] text-text-muted">No flow explicitly records this event ID.</p>}</section>
+            <section><h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">Exact related flows ({relatedFlows.length})</h3>{relatedFlows.length ? <ul className="space-y-2">{relatedFlows.map(flow => <li key={flow.id} className="rounded-lg border border-border-subtle p-2 text-[10px]"><code>{flow.id}</code><p className="mt-1 font-mono text-text-muted">{formatEndpoint(flow.sourceIp, flow.sourcePort, flow.sourcePortState)} → {formatEndpoint(flow.destinationIp, flow.destinationPort, flow.destinationPortState)}</p></li>)}</ul> : <p className="text-[11px] text-text-muted">No flow explicitly records this event ID.</p>}</section>
             <button type="button" disabled={!relatedFlows.length || !onNavigateToFlows} onClick={() => onNavigateToFlows?.(relatedFlows)} className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent-primary py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-muted">{relatedFlows.length ? 'Open exact related flow' : 'Related flow unavailable'}<ArrowRight aria-hidden="true" size={12} /></button>
           </aside>
         )}

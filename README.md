@@ -35,7 +35,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 ## 🛠️ Main Features & Functional Modules
 
 1. **Command Center**: Summarizes only loaded evidence: normalized event, flow, endpoint, byte, protocol-record, signal, and reviewed-finding counts, plus evidence-appropriate next actions.
-2. **Import Evidence**: Supports authorized file imports and a strict pasted-text grammar. Pasted records use `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`; omitted source ports remain unknown.
+2. **Import Evidence**: Supports authorized file imports and a strict pasted-text grammar. Pasted records use `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`; ports accept `0`–`65535`, explicit zero is retained as observed, and omitted source ports remain unknown.
 3. **Flow Explorer**: Searches normalized flows and resolves events through `flow.relatedEvents` and signals through exact `signal.relatedFlowIds`. It does not infer host identity or transport state.
 4. **Protocol Intelligence**: Separate investigative rails for key network applications:
    * *DNS Log*: Displays only decoded DNS record fields and honest empty states.

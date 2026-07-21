@@ -12,11 +12,11 @@ const root = new URL('../', import.meta.url);
 const source = (path: string) => readFileSync(new URL(path, root), 'utf8');
 
 function event(id: string, overrides: Partial<PacketEvent> = {}): PacketEvent {
-  return { id, timestamp: '2026-07-21T12:00:00.000Z', sourceIp: '10.0.0.15', sourcePort: 50_000, destinationIp: '203.0.113.80', destinationPort: 4444, protocol: 'TCP', length: 128, info: '[SYN]', ...overrides };
+  return { id, timestamp: '2026-07-21T12:00:00.000Z', sourceIp: '10.0.0.15', sourcePort: 50_000, sourcePortState: 'observed', destinationIp: '203.0.113.80', destinationPort: 4444, destinationPortState: 'observed', protocol: 'TCP', length: 128, info: '[SYN]', ...overrides };
 }
 
 function flow(id: string, overrides: Partial<FlowSummary> = {}): FlowSummary {
-  return { id, firstSeen: '2026-07-21T12:00:00.000Z', lastSeen: '2026-07-21T12:00:00.000Z', sourceIp: '10.0.0.15', sourcePort: 50_000, destinationIp: '203.0.113.80', destinationPort: 4444, protocol: 'TCP', packetCount: 1, byteCount: 128, duration: 0, direction: 'outbound', riskLevel: 'high', relatedEvents: [], ...overrides };
+  return { id, firstSeen: '2026-07-21T12:00:00.000Z', lastSeen: '2026-07-21T12:00:00.000Z', sourceIp: '10.0.0.15', sourcePort: 50_000, sourcePortState: 'observed', destinationIp: '203.0.113.80', destinationPort: 4444, destinationPortState: 'observed', protocol: 'TCP', packetCount: 1, byteCount: 128, duration: 0, direction: 'outbound', riskLevel: 'high', relatedEvents: [], ...overrides };
 }
 
 function signal(id: string, overrides: Partial<SuspiciousSignal> = {}): SuspiciousSignal {

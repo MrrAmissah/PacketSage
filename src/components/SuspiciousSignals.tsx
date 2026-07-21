@@ -46,6 +46,7 @@ import {
 } from '../lib/investigationRequests';
 import { selectPresentedSignals } from '../lib/signalPresentation';
 import { resolveRelatedFlows } from '../lib/relatedFlows';
+import { formatEndpoint } from '../lib/ports';
 import {
   completedInvestigationRecord,
 } from '../lib/investigationRecords';
@@ -710,8 +711,8 @@ export default function SuspiciousSignals({
         relatedFlowsCount: relatedFlows.length,
         flowsList: relatedFlows.map(flow => ({
           id: flow.id,
-          src: `${flow.sourceIp}:${flow.sourcePort}`,
-          dst: `${flow.destinationIp}:${flow.destinationPort}`,
+          src: formatEndpoint(flow.sourceIp, flow.sourcePort, flow.sourcePortState),
+          dst: formatEndpoint(flow.destinationIp, flow.destinationPort, flow.destinationPortState),
           proto: flow.protocol,
         })),
         firstSeenTime: firstSeen ? firstSeen.replace('T', ' ').slice(0, 19) : 'Not provided',

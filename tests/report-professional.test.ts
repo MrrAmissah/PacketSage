@@ -25,8 +25,8 @@ function fixture(): ParsedResult {
       retentionMode: 'Browser memory only', status: 'completed', sha256: 'b'.repeat(64), checksumStatus: 'calculated',
     },
     events: [
-      { id: 'evt-late', timestamp: '2026-07-21T10:02:00.000Z', sourceIp: '10.0.0.2', sourcePort: 51000, destinationIp: '203.0.113.10', destinationPort: 443, protocol: 'TCP', service: 'HTTPS', length: 128, info: 'Later event' },
-      { id: 'evt-early', timestamp: '2026-07-21T09:58:00.000Z', sourceIp: '10.0.0.2', sourcePort: 53000, destinationIp: '10.0.0.1', destinationPort: 53, protocol: 'UDP', service: 'DNS', length: 74, info: 'Earlier event' },
+      { id: 'evt-late', timestamp: '2026-07-21T10:02:00.000Z', sourceIp: '10.0.0.2', sourcePort: 51000, sourcePortState: 'observed', destinationIp: '203.0.113.10', destinationPort: 443, destinationPortState: 'observed', protocol: 'TCP', service: 'HTTPS', length: 128, info: 'Later event' },
+      { id: 'evt-early', timestamp: '2026-07-21T09:58:00.000Z', sourceIp: '10.0.0.2', sourcePort: 53000, sourcePortState: 'observed', destinationIp: '10.0.0.1', destinationPort: 53, destinationPortState: 'observed', protocol: 'UDP', service: 'DNS', length: 74, info: 'Earlier event' },
     ],
     flows: [], dns: [], http: [], tls: [], signals: [], protocolStats: [],
   };
@@ -57,7 +57,7 @@ function includedRecord(): InvestigationRecord {
       version: '1',
       signal: { id: 'sig-1', title: 'Selected deterministic signal', severity: 'medium', confidence: 'high', category: 'Review', observedEvidence: 'Exact observation.', interpretation: 'Review required.', whatItDoesNotProve: 'Not confirmed.', recommendedDefensiveCheck: 'Validate independently.', relatedFlowIds: [], relatedEventIds: ['evt-early'] },
       flows: [],
-      events: [{ id: 'evt-early', timestamp: '2026-07-21T09:58:00.000Z', sourceIp: '10.0.0.2', sourcePort: 53000, destinationIp: '10.0.0.1', destinationPort: 53, protocol: 'UDP', service: 'DNS', length: 74 }],
+      events: [{ id: 'evt-early', timestamp: '2026-07-21T09:58:00.000Z', sourceIp: '10.0.0.2', sourcePort: 53000, sourcePortState: 'observed', destinationIp: '10.0.0.1', destinationPort: 53, destinationPortState: 'observed', protocol: 'UDP', service: 'DNS', length: 74 }],
       dns: [], http: [], tls: [], limitsApplied: { flowsTruncated: false, eventsTruncated: false, protocolRecordsTruncated: false },
     },
     assessment: {

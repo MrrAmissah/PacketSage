@@ -93,8 +93,7 @@ Every cost-generating AI request and every report-changing inclusion remains a u
 - Keyboard-operable primary rows, cards, citations, controls, dialogs, and contextual tour.
 - Responsive navigation and evidence views at approximately 390 px without global horizontal overflow.
 - Light, dark, and system themes.
-- Packet Academy lessons and an in-product Architecture Spec that distinguish current behavior from future direction.
-- **Architecture Spec**: Shows the implemented browser, serverless and model-provider boundaries, enforced limits, evidence-to-report pipeline, and explicitly unimplemented future systems. It remains available before evidence is loaded.
+- Packet Academy provides guided defensive learning, while the in-product Architecture Spec documents implemented browser, serverless and provider boundaries, enforced limits, the evidence-to-report pipeline, and explicitly unimplemented future systems.
 
 ![Signals and Observations showing a deterministic signal and its exact evidence relationships](./docs/assets/packetsage-signals-observations.png)
 

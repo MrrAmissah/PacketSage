@@ -290,7 +290,7 @@ Stage 1 was merged at `03203ae9a134f35b3b073f7297a8274f1da0f020` without a separ
 | Public role | Creator and Developer |
 | Repository | [github.com/MrrAmissah/PacketSage](https://github.com/MrrAmissah/PacketSage) |
 | Production | [packetsage.vercel.app](https://packetsage.vercel.app) |
-| Codex Feedback ID | `019f4e33-1bdf-72a3-9223-affd8b1546b6` |
+| Codex `/feedback` Session ID | The primary Codex `/feedback` Session ID has been preserved and will be submitted privately through the Devpost submission form. |
 | Final video URL | _To be added after recording_ |
 | Final Devpost URL | _To be added after submission creation_ |
 

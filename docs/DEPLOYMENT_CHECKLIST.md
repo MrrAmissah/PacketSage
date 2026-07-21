@@ -26,8 +26,8 @@ Before initiating any deployment or committing changes:
 Protect keys and ensure environment integrity:
 
 ### 2.1 Server-Side Secrets
-* [ ] **OPENAI_API_KEY**: Configure `OPENAI_API_KEY` only in the hosting provider's server-side secret store.
-  * *Critical Check*: Never prefix `OPENAI_API_KEY` with `VITE_`.
+* [ ] **Server-only AI credentials**: Configure `OPENAI_API_KEY` and `GEMINI_API_KEY` only in the hosting provider's server-side secret store.
+  * *Critical Check*: Never expose either credential through a `VITE_`-prefixed variable.
   * *Critical Check*: Confirm the credential is not committed, logged, or bundled for the browser.
 
 ### 2.2 Client-Side Configurations
@@ -75,9 +75,9 @@ For Vercel-hosted previews:
 
 ### 4B.2 Serverless API Compatibility
 * [ ] **API Runtime**: Vercel preview deployments use serverless functions for `/api/health`, `/api/parse`, and `/api/investigate`.
-* [ ] **Server-Side Secret Boundary**: `OPENAI_API_KEY` must be configured only as a server-side Vercel environment variable for Preview and Production.
+* [ ] **Server-Side Secret Boundary**: `OPENAI_API_KEY` and `GEMINI_API_KEY` must be configured only as server-side Vercel environment variables for Preview and Production.
 * [ ] **Client Environment Label**: `VITE_APP_ENV` may be set to `preview` for Preview deployments and `production` for Production deployments.
-* [ ] **No Browser AI Key**: Do not create `VITE_OPENAI_API_KEY`.
+* [ ] **No Browser AI Key**: Do not create `VITE_OPENAI_API_KEY` or `VITE_GEMINI_API_KEY`.
 * [ ] **AI Timeout Guard**: `/api/investigate` returns a client-safe timeout without generating fallback findings.
 * [ ] **SPA Routing**: `vercel.json` rewrites non-file routes to `index.html` for client-side navigation while preserving API function routes.
 
@@ -120,5 +120,5 @@ Once deployed, run these sequential verifications on the live instance:
 If issues are detected on the production deployment:
 
 1. **Immediate Reversion**: Revert the hosting environment to the last known stable commit hash in your main or release branch.
-2. **Key Rotation**: If exposure is suspected, immediately rotate `OPENAI_API_KEY` in the server-side secret store.
+2. **Key Rotation**: If exposure is suspected, immediately rotate the affected server-side `OPENAI_API_KEY` or `GEMINI_API_KEY` credential.
 3. **Log Review**: Inspect standard standard-out/standard-error streams on your hosting provider to isolate relative path errors, missing modules, or API exceptions.

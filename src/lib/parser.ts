@@ -337,7 +337,8 @@ export function parseDemoData(): ParsedResult {
     parseMode: 'demo',
     sourceFormat: 'PCAP Export',
     retentionMode: 'Ephemeral Memory',
-    status: 'completed'
+    status: 'completed',
+    checksumStatus: 'demo-not-applicable',
   };
 
   return finalizeEvidenceIds({

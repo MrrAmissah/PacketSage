@@ -20,11 +20,11 @@ export default async function handler(req: any, res: any) {
 
   try {
     const evidence = parseInvestigationRequest(req.body);
-    const assessment = await requestOpenAiInvestigation(evidence, {
+    const result = await requestOpenAiInvestigation(evidence, {
       apiKey: process.env.OPENAI_API_KEY,
       signal: clientAbort.signal,
     });
-    return res.status(200).json(assessment);
+    return res.status(200).json(result);
   } catch (error) {
     if (clientAbort.signal.aborted || res.destroyed) return;
     const safe = clientSafeInvestigationError(error);

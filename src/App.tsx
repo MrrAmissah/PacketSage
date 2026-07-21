@@ -24,12 +24,19 @@ import {
   Sun,
   Moon,
   Monitor,
-  Sparkles
+  Sparkles,
+  Compass
 } from 'lucide-react';
 
-import { AiAnalysisResult, FlowSummary, SignalReviewStatus } from './types';
+import { CaptureOverviewRecord, FlowSummary, InvestigationRecord, SignalReviewStatus } from './types';
 import { ParsedResult } from './lib/parser';
 import { resolveRelatedFlows } from './lib/relatedFlows';
+import {
+  clearInvestigationRecords,
+  removeInvestigationRecord,
+  setInvestigationReportInclusion,
+  upsertInvestigationRecord,
+} from './lib/investigationRecords';
 import { PacketSageLogo } from './components/Logo';
 import InfoPopover from './components/InfoPopover';
 import CommandCenter from './components/CommandCenter';
@@ -37,19 +44,21 @@ import EvidenceImport from './components/EvidenceImport';
 import FlowExplorer from './components/FlowExplorer';
 import ProtocolIntelligence from './components/ProtocolIntelligence';
 import SuspiciousSignals from './components/SuspiciousSignals';
-import AiAnalyst from './components/AiAnalyst';
 import IncidentTimeline from './components/IncidentTimeline';
 import ReportBuilder from './components/ReportBuilder';
 import LearningMode from './components/LearningMode';
 import ArchitectureRoadmap from './components/ArchitectureRoadmap';
+import CaptureOverview from './components/CaptureOverview';
+import { setCaptureOverviewInclusion } from './lib/captureOverview';
 
-type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'ai' | 'timeline' | 'report' | 'academy' | 'architecture';
+type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy' | 'architecture';
 type ThemeMode = 'light' | 'dark' | 'system';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('import');
   const [parsedData, setParsedData] = useState<ParsedResult | null>(null);
-  const [aiResult, setAiResult] = useState<AiAnalysisResult | null>(null);
+  const [investigations, setInvestigations] = useState<InvestigationRecord[]>([]);
+  const [captureOverview, setCaptureOverview] = useState<CaptureOverviewRecord | null>(null);
   const [selectedFlow, setSelectedFlow] = useState<FlowSummary | null>(null);
   const [relatedFlowScopeIds, setRelatedFlowScopeIds] = useState<string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -102,7 +111,8 @@ export default function App() {
 
   const handleDataParsed = (data: ParsedResult) => {
     setParsedData(data);
-    setAiResult(null); // Reset AI result when new data is parsed
+    setInvestigations(clearInvestigationRecords());
+    setCaptureOverview(null);
     setSignalStatusOverrides({});
     setSelectedFlow(null);
     setRelatedFlowScopeIds(null);
@@ -112,7 +122,8 @@ export default function App() {
   const handleResetData = () => {
     if (confirm("Are you sure you want to clear current forensic evidence? All volatile packet and log tables will be deleted.")) {
       setParsedData(null);
-      setAiResult(null);
+      setInvestigations(clearInvestigationRecords());
+      setCaptureOverview(null);
       setSignalStatusOverrides({});
       setSelectedFlow(null);
       setRelatedFlowScopeIds(null);
@@ -142,6 +153,21 @@ export default function App() {
       ...parsedData,
       signals: updatedSignals
     });
+  };
+
+  const handleInvestigationCompleted = (record: InvestigationRecord) => {
+    setInvestigations(previous => upsertInvestigationRecord(previous, record));
+  };
+
+  const handleInvestigationInvalidated = (signalId: string) => {
+    setInvestigations(previous => removeInvestigationRecord(previous, signalId));
+  };
+
+  const handleInvestigationInclusion = (
+    context: { selectedEvidenceId: string; signalId: string; packetIdentity: string },
+    includedInReport: boolean,
+  ) => {
+    setInvestigations(previous => setInvestigationReportInclusion(previous, context, includedInReport));
   };
 
   const renderActiveContent = () => {
@@ -188,6 +214,11 @@ export default function App() {
             http={parsedData?.http || []}
             tls={parsedData?.tls || []}
             signalStatusOverrides={signalStatusOverrides}
+            selectedEvidenceId={parsedData?.evidence.id || ''}
+            investigationRecords={investigations}
+            onInvestigationCompleted={handleInvestigationCompleted}
+            onInvestigationInvalidated={handleInvestigationInvalidated}
+            onInvestigationInclusionChange={handleInvestigationInclusion}
             onNavigateToFlows={(relatedFlows) => {
               setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
               setSelectedFlow(relatedFlows[0] || null);
@@ -196,22 +227,16 @@ export default function App() {
             onUpdateSignalStatus={handleUpdateSignalStatus}
           />
         );
-      case 'ai':
-        return (
-          <AiAnalyst
-            flows={parsedData?.flows || []}
-            dns={parsedData?.dns || []}
-            http={parsedData?.http || []}
-            tls={parsedData?.tls || []}
-            signals={parsedData?.signals || []}
-            stats={parsedData?.protocolStats || []}
-            fileName={parsedData?.evidence.name || 'unnamed_evidence'}
-            analysisResult={aiResult}
-            onAnalysisCompleted={setAiResult}
-            isLoading={isLoading}
-            setIsLoading={setIsLoading}
+      case 'capture-overview':
+        return parsedData ? (
+          <CaptureOverview
+            data={parsedData}
+            record={captureOverview}
+            onCompleted={setCaptureOverview}
+            onInvalidated={() => setCaptureOverview(null)}
+            onInclusionChange={(included) => setCaptureOverview(previous => setCaptureOverviewInclusion(previous, parsedData.evidence.id, included))}
           />
-        );
+        ) : null;
       case 'timeline':
         return (
           <IncidentTimeline
@@ -226,7 +251,7 @@ export default function App() {
           />
         );
       case 'report':
-        return <ReportBuilder data={parsedData} aiResult={aiResult} isLoading={isLoading} signalStatusOverrides={signalStatusOverrides} />;
+        return <ReportBuilder data={parsedData} investigations={investigations} captureOverview={captureOverview} signalStatusOverrides={signalStatusOverrides} />;
       case 'academy':
         return <LearningMode hasEvidence={!!parsedData} parsedData={parsedData} />;
       case 'architecture':
@@ -258,7 +283,7 @@ export default function App() {
               { id: 'flows', label: 'Flow explorer', icon: Layers, enabled: !!parsedData },
               { id: 'protocols', label: 'Protocol intelligence', icon: Globe, enabled: !!parsedData },
               { id: 'signals', label: 'Signals & observations', icon: ShieldCheck, enabled: !!parsedData },
-              { id: 'ai', label: 'AI analyst memo', icon: Cpu, enabled: !!parsedData },
+              { id: 'capture-overview', label: 'Capture overview', icon: Compass, enabled: !!parsedData },
               { id: 'timeline', label: 'Incident timeline', icon: Activity, enabled: !!parsedData },
               { id: 'report', label: 'Report builder', icon: FileText, enabled: !!parsedData },
               { id: 'academy', label: 'Packet Academy', icon: BookOpen, enabled: true },
@@ -372,10 +397,10 @@ export default function App() {
 
                 <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
 
-                {/* 3. AI memo N/A */}
+                {/* 3. AI assessment N/A */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <Sparkles size={12} className="text-text-muted shrink-0" />
-                  <span className="text-text-muted font-normal hidden md:inline">AI memo:</span>
+                  <span className="text-text-muted font-normal hidden md:inline">AI assessments:</span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-muted border border-border-subtle/50 text-text-muted text-[10.5px] font-semibold tracking-wide uppercase select-none">
                     N/A
                   </span>
@@ -418,18 +443,14 @@ export default function App() {
 
                 <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0" />
 
-                {/* 3. AI memo */}
+                {/* 3. Included AI-assisted assessments */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <Sparkles size={12} className="text-purple-400 shrink-0" />
-                  <span className="text-text-muted font-normal hidden md:inline">AI memo:</span>
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10.5px] font-bold uppercase tracking-wide ${
-                    aiResult 
-                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
-                      : 'bg-status-warning-bg/15 text-status-warning border border-status-warning/20'
-                  }`}>
-                    {aiResult ? 'Generated' : 'Pending'}
+                  <span className="text-text-muted font-normal hidden md:inline">Included assessments:</span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10.5px] font-bold uppercase tracking-wide">
+                    {investigations.filter(record => record.includedInReport).length}
                   </span>
-                  <InfoPopover content="AI memo generation uses selected decoded metadata and summaries to draft an analyst memo. PacketSage still requires human validation before conclusions are drawn." align="left" />
+                  <InfoPopover content="Only successful evidence-scoped assessments that you explicitly include are added to the report draft. Inclusion does not confirm an inference." align="left" />
                 </div>
 
                 <span className="h-3 w-[1px] bg-border-subtle/60 shrink-0 hidden sm:inline" />

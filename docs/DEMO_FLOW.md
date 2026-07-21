@@ -47,10 +47,10 @@ This guide outlines a polished, end-to-end demonstration script and conversation
 * **Suggested Talk Track**:
   > *"The platform includes a deterministic browser-side rules engine that matches flow behaviors against common defensive markers. Instead of presenting AI-generated guesses as facts, PacketSage relies on predictable rules first. As an analyst, I can inspect each signal's evidence and mark it as 'Validated' or 'Dismissed' to commit my decisions to the final report."*
 
-### Step 6: Server-Side AI Interpretation
-* **Action**: Go to the **AI Analyst Memo** tab and click **Synthesize Narrative Memo**. Point out the **Evidence Scope Sidebar** on the right as it finishes.
+### Step 6: Evidence-Scoped AI Investigation
+* **Action**: Select a signal with related evidence, click **Investigate with AI**, review all four labelled sections, then explicitly add the assessment to the report draft.
 * **Suggested Talk Track**:
-  > *"With our observations completed, we now generate an executive analysis. In the AI Analyst Memo tab, we call our server-side Gemini API proxy. Observe the Evidence Scope sidebar on the right: it strictly bounds Gemini to the ingested logs, preventing hallucinations. The model produces a readable summary, an executive analogy that explains complex technical anomalies in human terms, and explicit, defense-oriented containing steps."*
+  > *"This assessment uses only the selected signal's exact validated evidence packet. Observations remain separate from inference, citations retain exact evidence IDs, and the result enters the report only after explicit inclusion."*
 
 ### Step 7: Incident Timeline and Report Generation
 * **Action**: Open the **Incident Timeline** tab to display the chronological sequence of events. Then transition to the **Report Builder** tab. Enter your name in the investigator input, write some brief notes in the Analyst Notes field, toggle a section, and highlight the **Report Readiness** meter before clicking **Print / Export PDF**.

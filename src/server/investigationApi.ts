@@ -1,4 +1,4 @@
-import type { InvestigationAssessment, InvestigationEvidencePacket } from '../types.js';
+import type { InvestigationApiResult, InvestigationEvidencePacket } from '../types.js';
 import { INVESTIGATION_TIMEOUT_MS } from '../lib/limits.js';
 import {
   evidenceIds,
@@ -8,6 +8,8 @@ import {
 } from '../lib/investigation.js';
 
 export const OPENAI_INVESTIGATION_MODEL = 'gpt-5.6-sol';
+export const OPENAI_INVESTIGATION_PROVIDER = 'OpenAI';
+export const INVESTIGATION_API_SCHEMA_VERSION = '1';
 
 export class InvestigationServiceError extends Error {
   constructor(readonly status: 503 | 504, readonly clientMessage: string) {
@@ -125,7 +127,7 @@ export function createOpenAiInvestigationRequest(packet: InvestigationEvidencePa
 export async function requestOpenAiInvestigation(
   packet: InvestigationEvidencePacket,
   options: InvestigationApiOptions,
-): Promise<InvestigationAssessment> {
+): Promise<InvestigationApiResult> {
   if (!options.apiKey) throw new InvestigationServiceError(503, 'AI-assisted investigation is unavailable. Try again later.');
   const fetchImpl = options.fetchImpl || fetch;
   const controller = new AbortController();
@@ -158,7 +160,15 @@ export async function requestOpenAiInvestigation(
       throw new InvestigationServiceError(503, 'AI-assisted investigation returned an invalid response. Try again.');
     }
     try {
-      return validateInvestigationAssessment(parsed, evidenceIds(packet));
+      if (!responseBody || typeof responseBody !== 'object') throw new Error('missing provenance');
+      const actualModel = (responseBody as Record<string, unknown>).model;
+      if (typeof actualModel !== 'string' || !actualModel.trim() || actualModel.length > 160) throw new Error('missing provenance');
+      return {
+        schemaVersion: INVESTIGATION_API_SCHEMA_VERSION,
+        provider: OPENAI_INVESTIGATION_PROVIDER,
+        model: actualModel.trim(),
+        assessment: validateInvestigationAssessment(parsed, evidenceIds(packet)),
+      };
     } catch {
       throw new InvestigationServiceError(503, 'AI-assisted investigation returned an invalid response. Try again.');
     }

@@ -3,6 +3,7 @@ import { Upload, FileText, Shield, Terminal, AlertCircle, Database, Info, Lock }
 import { ParsedResult } from '../lib/parser';
 import { parseCapture } from '../lib/capture';
 import { MAX_CAPTURE_BYTES, MAX_TEXT_CHARACTERS } from '../lib/limits';
+import { sha256Hex } from '../lib/checksum';
 import InfoPopover from './InfoPopover';
 
 interface EvidenceImportProps {
@@ -46,11 +47,12 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
     setErrorMessage(null);
 
     try {
+      const buffer = await file.arrayBuffer();
       if (isCapture) {
-        const data = await parseCapture(file.name, await file.arrayBuffer());
+        const data = await parseCapture(file.name, buffer);
         onDataParsed(data);
       } else {
-        const text = await file.text();
+        const text = new TextDecoder().decode(buffer);
         let mode = parseMode;
         if (lowerName.endsWith('.csv')) mode = 'csv';
         else if (lowerName.endsWith('.json') && lowerName.includes('eve')) mode = 'suricata';
@@ -75,7 +77,11 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
         }
 
         const data: ParsedResult = await response.json();
-        onDataParsed(data);
+        const sha256 = await sha256Hex(buffer);
+        onDataParsed({
+          ...data,
+          evidence: { ...data.evidence, sha256, checksumStatus: 'calculated' },
+        });
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to parse file. Ensure format is valid.');
@@ -118,7 +124,11 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
       }
 
       const data: ParsedResult = await response.json();
-      onDataParsed(data);
+      const sha256 = await sha256Hex(pastedLog);
+      onDataParsed({
+        ...data,
+        evidence: { ...data.evidence, sha256, checksumStatus: 'calculated' },
+      });
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to parse pasted data.');
     } finally {
@@ -145,7 +155,10 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
       }
 
       const data: ParsedResult = await response.json();
-      onDataParsed(data);
+      onDataParsed({
+        ...data,
+        evidence: { ...data.evidence, checksumStatus: 'demo-not-applicable' },
+      });
     } catch (err: any) {
       setErrorMessage(err.message);
     } finally {

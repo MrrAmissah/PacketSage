@@ -19,7 +19,7 @@ PacketSage is built on a modern, robust, full-stack JavaScript/TypeScript archit
 * **Server Framework**: Node.js with Express.
 * **Language**: TypeScript with type-stripping support.
 * **Server Dev / Build**: `tsx` for direct TypeScript execution in development; `esbuild` for bundling the production server into a single CJS bundle (`dist/server.cjs`).
-* **Model Integration**: Google GenAI SDK (`@google/genai`) loaded server-side using the `process.env.GEMINI_API_KEY`.
+* **Model Integration**: The server-side `/api/investigate` endpoint calls GPT-5.6 with `process.env.OPENAI_API_KEY`, strict structured output, and bounded evidence packets. The separate `/api/analyze` endpoint calls Google Gemini with `process.env.GEMINI_API_KEY` for a bounded, citation-free whole-capture overview.
 
 ---
 
@@ -121,7 +121,7 @@ The Report Builder monitors global React states. Any updates to:
 * The active investigator name.
 * The parsed flows and total counts.
 * The count of validated suspicious signals.
-* The generated state of the AI Analyst Memo.
+* Explicitly included, validated investigation records.
 * Analyst validation text notes.
 re-trigger the **Report Readiness Score** algorithm instantly.
 
@@ -170,4 +170,4 @@ node dist/server.cjs
 | **Data Payload Store** | Transient React and Express RAM | Encrypted Cloud Storage (GCS / S3) |
 | **Case Retention** | Volatile (lost on page reload) | Durable database persistence (Firebase/Firestore) |
 | **User Management** | None (Single Session Sandbox) | Multi-tenant Firebase Authentication |
-| **AI Processing** | Server-side Gemini API Proxy | Isolated enterprise API gateway with auditing |
+| **AI Processing** | Server-side evidence-scoped GPT-5.6 proxy | Isolated enterprise API gateway with auditing |

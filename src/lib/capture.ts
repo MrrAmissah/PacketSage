@@ -2,6 +2,7 @@ import { PCAPNGParser, type Packet } from '@cto.af/pcap-ng-parser';
 import type { DnsRecord, PacketEvent, UploadedEvidence } from '../types';
 import { finalizeEvidenceIds } from './deterministic';
 import { MAX_CAPTURE_BYTES, MAX_CAPTURE_PACKETS } from './limits';
+import { sha256Hex } from './checksum';
 import {
   buildFlowsFromEvents,
   computeProtocolStats,
@@ -307,6 +308,8 @@ export async function parseCapture(fileName: string, buffer: ArrayBuffer): Promi
     sourceFormat: parser.ng ? 'PCAPNG (browser-decoded)' : 'PCAP (browser-decoded)',
     retentionMode: 'Browser memory only',
     status: 'completed',
+    sha256: await sha256Hex(buffer),
+    checksumStatus: 'calculated',
   };
 
   return finalizeEvidenceIds({ evidence, events, flows, dns, http: [], tls: [], signals, protocolStats });

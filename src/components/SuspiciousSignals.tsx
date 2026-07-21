@@ -26,6 +26,7 @@ import {
   HttpRecord,
   InvestigationAssessment,
   InvestigationEvidencePacket,
+  InvestigationRecord,
   PacketEvent,
   SignalReviewStatus,
   SuspiciousSignal,
@@ -37,7 +38,7 @@ import {
   buildInvestigationEvidencePacket,
   evidenceIds,
   investigationPacketIdentity,
-  validateInvestigationAssessment,
+  validateInvestigationApiResult,
 } from '../lib/investigation';
 import {
   InvestigationRequestCoordinator,
@@ -45,6 +46,10 @@ import {
 } from '../lib/investigationRequests';
 import { selectPresentedSignals } from '../lib/signalPresentation';
 import { resolveRelatedFlows } from '../lib/relatedFlows';
+import {
+  completedInvestigationRecord,
+  currentInvestigationRecord,
+} from '../lib/investigationRecords';
 
 interface SuspiciousSignalsProps {
   signals: SuspiciousSignal[];
@@ -54,8 +59,16 @@ interface SuspiciousSignalsProps {
   http: HttpRecord[];
   tls: TlsRecord[];
   signalStatusOverrides?: Record<string, SignalReviewStatus>;
+  selectedEvidenceId: string;
+  investigationRecords: InvestigationRecord[];
   onNavigateToFlows: (flows: FlowSummary[]) => void;
   onUpdateSignalStatus?: (id: string, status: SignalReviewStatus, linkedIds?: string[]) => void;
+  onInvestigationCompleted: (record: InvestigationRecord) => void;
+  onInvestigationInvalidated: (signalId: string) => void;
+  onInvestigationInclusionChange: (
+    context: { selectedEvidenceId: string; signalId: string; packetIdentity: string },
+    includedInReport: boolean,
+  ) => void;
 }
 
 // Rich high-fidelity signals matching the reference image layout and metadata
@@ -593,8 +606,13 @@ export default function SuspiciousSignals({
   http,
   tls,
   signalStatusOverrides = EMPTY_SIGNAL_STATUS_OVERRIDES,
+  selectedEvidenceId,
+  investigationRecords,
   onNavigateToFlows,
-  onUpdateSignalStatus
+  onUpdateSignalStatus,
+  onInvestigationCompleted,
+  onInvestigationInvalidated,
+  onInvestigationInclusionChange,
 }: SuspiciousSignalsProps) {
   // Rich local state derived only from parser/rule-engine signals.
   const [enrichedSignals, setEnrichedSignals] = useState<EnrichedSignal[]>([]);
@@ -626,17 +644,28 @@ export default function SuspiciousSignals({
     : null;
   const currentInvestigationContextRef = useRef(currentInvestigationContext);
   currentInvestigationContextRef.current = currentInvestigationContext;
+  const completedRecord = currentInvestigationContext
+    ? currentInvestigationRecord(investigationRecords, { selectedEvidenceId, ...currentInvestigationContext })
+    : null;
   const activeInvestigation = investigationState
     && investigationState.signalId === currentInvestigationContext?.signalId
     && investigationState.packetIdentity === currentInvestigationContext.packetIdentity
     ? investigationState
-    : null;
+    : completedRecord
+      ? {
+          signalId: completedRecord.signalId,
+          packetIdentity: completedRecord.packetIdentity,
+          status: 'success' as const,
+          packet: completedRecord.packet,
+          assessment: completedRecord.assessment,
+        }
+      : null;
 
   useEffect(() => {
     requestCoordinator.current.invalidate();
     setInvestigationState(null);
     return () => requestCoordinator.current.invalidate();
-  }, [currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity]);
+  }, [selectedEvidenceId, currentInvestigationContext?.signalId, currentInvestigationContext?.packetIdentity]);
 
   // Filters State
   const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'>('ALL');
@@ -721,6 +750,7 @@ export default function SuspiciousSignals({
     const signalId = selectedSignal.id;
     const request = requestCoordinator.current.begin({ signalId, packetIdentity });
     if (!request) return;
+    onInvestigationInvalidated(signalId);
     setInvestigationState({ signalId, packetIdentity, status: 'analysing', packet: investigationPacket });
     const outcome = await runInvestigationRequest(
       requestCoordinator.current,
@@ -745,12 +775,19 @@ export default function SuspiciousSignals({
             : 'AI-assisted investigation could not be completed. Try again.';
           throw new Error(safeMessage);
         }
-        return validateInvestigationAssessment(body, evidenceIds(investigationPacket));
+        return validateInvestigationApiResult(body, evidenceIds(investigationPacket));
       },
     );
     if (outcome.status === 'ignored') return;
     if (outcome.status === 'success') {
-      setInvestigationState({ signalId, packetIdentity, status: 'success', packet: investigationPacket, assessment: outcome.value });
+      setInvestigationState({ signalId, packetIdentity, status: 'success', packet: investigationPacket, assessment: outcome.value.assessment });
+      onInvestigationCompleted(completedInvestigationRecord({
+        selectedEvidenceId,
+        signalId,
+        packetIdentity,
+        packet: investigationPacket,
+        apiResult: outcome.value,
+      }));
     } else {
       const message = outcome.error instanceof Error && outcome.error.message
         ? outcome.error.message
@@ -1435,10 +1472,18 @@ export default function SuspiciousSignals({
             <div className="space-y-2 border-b border-border-subtle pb-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">AI-assisted investigation</h4>
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Evidence-grounded investigation</h4>
                   <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
                     Uses only this signal and its exact referenced evidence IDs. Inference is not observed fact.
                   </p>
+                  <details className="mt-1 text-[9px] text-text-muted">
+                    <summary className="cursor-pointer font-semibold">Technical details</summary>
+                    <div className="mt-1">
+                      <div><strong>Provider:</strong> {completedRecord?.provider || 'Recorded after generation'}</div>
+                      <div><strong>Model:</strong> {completedRecord?.model || 'Recorded after generation'}</div>
+                      <div><strong>Schema:</strong> {completedRecord?.schemaVersion || 'Recorded after generation'}</div>
+                    </div>
+                  </details>
                 </div>
                 {!activeInvestigation || activeInvestigation.status === 'failure' ? (
                   <button
@@ -1480,6 +1525,20 @@ export default function SuspiciousSignals({
                     flows={flows}
                     onNavigateToFlows={onNavigateToFlows}
                   />
+                  <button
+                    type="button"
+                    disabled={!completedRecord}
+                    onClick={() => {
+                      if (!completedRecord) return;
+                      onInvestigationInclusionChange(
+                        { selectedEvidenceId, signalId: completedRecord.signalId, packetIdentity: completedRecord.packetIdentity },
+                        !completedRecord.includedInReport,
+                      );
+                    }}
+                    className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${completedRecord?.includedInReport ? 'border-status-success/30 bg-status-success/10 text-status-success' : 'border-accent-primary bg-accent-primary text-white hover:bg-accent-primary-hover'}`}
+                  >
+                    {completedRecord?.includedInReport ? <><Check size={11} /> Included in report draft — Remove from report</> : <><Clipboard size={11} /> Add AI-assisted assessment to report</>}
+                  </button>
                   <button
                     type="button"
                     onClick={handleInvestigate}
@@ -1525,11 +1584,11 @@ export default function SuspiciousSignals({
                   {selectedSignal.status === 'Added to report' ? (
                     <>
                       <Check size={12} />
-                      <span>Added</span>
+                      <span>Finding added</span>
                     </>
                   ) : (
                     <>
-                      <span>Add to report</span>
+                      <span>Add finding to report</span>
                     </>
                   )}
                 </button>

@@ -48,7 +48,7 @@ export default function InvestigationAssessmentPanel({
   return (
     <div data-testid="investigation-assessment" className="space-y-3 rounded-xl border border-accent-primary/20 bg-accent-soft/20 p-3">
       <div className="space-y-1">
-        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-accent-primary">AI-assisted investigation</div>
+        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-accent-primary">AI-assisted assessment</div>
         <p className="text-[11px] leading-relaxed text-text-primary">{assessment.summary}</p>
       </div>
 

@@ -134,7 +134,7 @@ const questionTopics: Record<number, { title: string; tag: string; skill: string
     title: "Analytical Boundaries",
     tag: "EVIDENCE LIMITS",
     skill: "Scientific defensive writing & multi-source endpoint correlation",
-    views: ["Report Builder", "AI Memo", "Command Center"],
+    views: ["Report Builder", "Signals & observations", "Command Center"],
     whyMatters: "Preserves forensic credibility by separating observed transit behaviors from unverified endpoint actions."
   }
 };
@@ -228,7 +228,7 @@ const lessonModules: LessonModule[] = [
         "Transition all legacy systems to HTTPS.",
         "Implement HTTP Strict Transport Security (HSTS) headers."
       ],
-      relatedViews: ["Protocol Intelligence", "AI Analyst Memo"]
+      relatedViews: ["Protocol Intelligence", "Signals & observations"]
     }
   },
   {
@@ -328,7 +328,7 @@ const lessonModules: LessonModule[] = [
         "Quote raw packet headers and packet-capture identifiers in your narrative.",
         "Avoid guessing attacker identities or motivations in official reports."
       ],
-      relatedViews: ["Report Builder", "AI Analyst Memo"]
+      relatedViews: ["Report Builder", "Signals & observations"]
     }
   },
   {

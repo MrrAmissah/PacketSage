@@ -13,6 +13,8 @@ export interface UploadedEvidence {
   sourceFormat: string;
   retentionMode: string;
   status: 'parsing' | 'completed' | 'failed';
+  sha256?: string;
+  checksumStatus?: 'calculated' | 'demo-not-applicable' | 'not-calculated';
 }
 
 export interface PacketEvent {
@@ -236,19 +238,49 @@ export interface InvestigationAssessment {
   }>;
 }
 
+export interface InvestigationApiResult {
+  schemaVersion: string;
+  provider: string;
+  model: string;
+  assessment: InvestigationAssessment;
+}
+
+export interface InvestigationRecord {
+  schemaVersion: string;
+  provider: string;
+  model: string;
+  generationState: 'completed';
+  createdAt: string;
+  selectedEvidenceId: string;
+  signalId: string;
+  packetIdentity: string;
+  packet: InvestigationEvidencePacket;
+  assessment: InvestigationAssessment;
+  includedInReport: boolean;
+}
+
 export interface AiAnalysisResult {
   executiveSummary: string;
   whatHappened: string;
   normalActivity: string;
   suspiciousActivity: string;
-  keyEvidence: string;
   analystQuestions: string;
   recommendedChecks: string;
   beginnerExplanation: string;
   technicalExplanation: string;
   confidence: 'low' | 'medium' | 'high';
   limitations: string;
-  reportReadySummary: string;
+}
+
+export interface CaptureOverviewRecord {
+  schemaVersion: '1';
+  provider: 'Google';
+  model: string;
+  captureIdentity: string;
+  generationState: 'completed';
+  createdAt: string;
+  includedInReport: boolean;
+  result: AiAnalysisResult;
 }
 
 export interface AnalysisReport {

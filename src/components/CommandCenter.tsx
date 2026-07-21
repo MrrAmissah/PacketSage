@@ -1135,15 +1135,15 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
               </div>
 
               <div 
-                onClick={() => onNavigate('ai')}
+                onClick={() => onNavigate('signals')}
                 className="flex items-start gap-3 p-2 hover:bg-surface-muted/20 rounded-lg cursor-pointer transition-colors group"
               >
                 <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
                   <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
                 </div>
                 <div className="space-y-0.5">
-                  <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Generate AI analyst memo</p>
-                  <p className="text-[10px] text-text-muted font-normal">Create a memo with key findings.</p>
+                  <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">Investigate referenced evidence</p>
+                  <p className="text-[10px] text-text-muted font-normal">Run a bounded assessment from one signal’s exact evidence.</p>
                 </div>
               </div>
             </div>
@@ -1152,11 +1152,11 @@ export default function CommandCenter({ data, onNavigate }: CommandCenterProps) 
           {/* Action Button */}
           <div className="pt-2">
             <button
-              onClick={() => onNavigate('ai')}
+              onClick={() => onNavigate('signals')}
               className="w-full py-2 bg-transparent hover:bg-accent-soft border border-accent-primary text-accent-primary hover:text-accent-primary-hover font-semibold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm animate-pulse"
             >
               <FileText size={13} />
-              Open AI analyst memo
+              Open signals for investigation
             </button>
           </div>
 

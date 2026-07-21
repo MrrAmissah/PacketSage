@@ -1,12 +1,12 @@
 import React from 'react';
 import { Check, Circle, Compass, X } from 'lucide-react';
-import type { JudgePathProgress, JudgePathActionId, JudgePathDestination } from '../lib/judgePath';
+import type { JudgePathAction, JudgePathProgress, JudgePathDestination } from '../lib/judgePath';
 
 interface GuidedSampleJourneyProps {
   progress: JudgePathProgress;
   onDismiss(): void;
   onNavigate(destination: JudgePathDestination): void;
-  onPrimaryAction(actionId: JudgePathActionId): void;
+  onPrimaryAction(action: JudgePathAction): void;
 }
 
 export default function GuidedSampleJourney({ progress, onDismiss, onNavigate, onPrimaryAction }: GuidedSampleJourneyProps) {
@@ -45,7 +45,7 @@ export default function GuidedSampleJourney({ progress, onDismiss, onNavigate, o
           <button type="button" onClick={() => onNavigate('capture-overview')} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-2 text-[10px] font-semibold text-text-secondary hover:border-purple-500/30 hover:text-text-primary">
             <Compass size={11} /> Optional capture overview
           </button>
-          <button type="button" onClick={() => onPrimaryAction(progress.nextAction.id)} className="rounded-lg bg-accent-primary px-3 py-2 text-[10px] font-bold text-white hover:bg-accent-primary-hover">
+          <button type="button" onClick={() => onPrimaryAction(progress.nextAction)} className="rounded-lg bg-accent-primary px-3 py-2 text-[10px] font-bold text-white hover:bg-accent-primary-hover">
             {progress.nextAction.label}
           </button>
           <button type="button" onClick={onDismiss} className="hidden rounded-md p-1.5 text-text-muted hover:bg-surface-muted hover:text-text-primary lg:inline-flex" aria-label="Dismiss guided sample journey">

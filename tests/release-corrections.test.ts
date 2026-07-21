@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { commandCenterLimitation, commandCenterNextActions, recordedHostnames } from '../src/lib/commandCenterPresentation';
+import { commandCenterLimitation, recordedHostnames } from '../src/lib/commandCenterPresentation';
 import { eventsForFlow, flowsForEvent, hasSameObservedFlowIdentity, signalsForEvent, signalsForFlow } from '../src/lib/evidenceRelationships';
-import { createJudgePathSession, deriveJudgePathProgress } from '../src/lib/judgePath';
+import { createJudgePathSession, deriveGeneralInvestigationStatus, deriveJudgePathProgress } from '../src/lib/judgePath';
 import { EvidenceParseError, parseTextLog, type ParsedResult } from '../src/lib/parser';
 import { buildProtocolFlags, buildProtocolInventory } from '../src/lib/protocolPresentation';
 import type { DnsRecord, FlowSummary, HttpRecord, PacketEvent, ProtocolStat, SuspiciousSignal, TlsRecord } from '../src/types';
@@ -116,8 +116,8 @@ test('Rejected text produces no partial ParsedResult', () => {
 });
 
 test('Command Center actions do not prompt for a nonexistent signal', () => {
-  const data = parsed({ events: [event('evt-1')], flows: [flow('flow-1')] });
-  assert.deepEqual(commandCenterNextActions(data).map(action => action.destination), ['flows', 'timeline']);
+  const status = deriveGeneralInvestigationStatus({ evidenceLoaded: true, signalCount: 0, hasFlows: true, hasEvents: true, selectedSignalId: null, completedInvestigationSignalIds: [], includedInvestigationSignalIds: [], reportVisitedAfterInclusion: false });
+  assert.deepEqual(status.nextAction, { id: 'review-decoded-evidence', label: 'Review decoded evidence', destination: 'flows' });
 });
 
 test('Command Center records only evidence-backed hostnames', () => {
@@ -307,7 +307,7 @@ test('Command Center restores the original evidence-dashboard visual structure',
   assert.match(code, /Top observed endpoint transmitters/);
   assert.match(code, /Signals requiring review/);
   assert.match(code, /Timeline preview/);
-  assert.match(code, /Investigation Brief/);
+  assert.match(code, /Investigation status/);
 });
 
 test('restored Command Center visuals remain bounded and evidence-derived', () => {
@@ -316,8 +316,9 @@ test('restored Command Center visuals remain bounded and evidence-derived', () =
   assert.match(code, /const maxBuckets = 64/);
   assert.match(code, /durationMs <= 0[\s\S]*\? 1/);
   assert.match(code, /observedEventDescription\(evt\)/);
-  assert.match(code, /commandCenterNextActions\(data\)/);
+  assert.match(code, /investigationStatus\.items\.map/);
   assert.match(code, /commandCenterLimitation\(evidence\.parseMode\)/);
+  assert.doesNotMatch(code, /Next analyst actions|Investigation Brief/);
   assert.doesNotMatch(code, /DESKTOP-25KH|api\.github\.com|Draft can be generated|Analysis complete/);
 });
 

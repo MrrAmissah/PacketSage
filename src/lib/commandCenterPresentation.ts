@@ -12,18 +12,6 @@ export function observedEventDescription(event: PacketEvent): string {
   return event.info.trim() || `${event.protocol} record from ${event.sourceIp} to ${event.destinationIp}`;
 }
 
-export type CommandCenterDestination = 'signals' | 'flows' | 'protocols' | 'timeline' | 'import';
-
-export function commandCenterNextActions(data: ParsedResult): Array<{ destination: CommandCenterDestination; label: string }> {
-  const actions: Array<{ destination: CommandCenterDestination; label: string }> = [];
-  if (data.signals.length) actions.push({ destination: 'signals', label: 'Review observed signals' });
-  if (data.flows.length) actions.push({ destination: 'flows', label: 'Inspect decoded flows' });
-  if (data.dns.length || data.http.length || data.tls.length || data.protocolStats.length) actions.push({ destination: 'protocols', label: 'Review protocol metadata' });
-  if (data.events.length) actions.push({ destination: 'timeline', label: 'Review the observed timeline' });
-  if (!actions.length) actions.push({ destination: 'import', label: 'Import evidence with supported records' });
-  return actions;
-}
-
 export function recordedHostnames(data: Pick<ParsedResult, 'dns' | 'http' | 'tls'>): string[] {
   const unsupportedPlaceholders = new Set(['', 'unknown', 'encrypted', 'host', 'domain', 'query.domain']);
   return Array.from(new Set([

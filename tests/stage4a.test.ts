@@ -46,7 +46,7 @@ test('guided progress derives only from real workflow state and uses correct des
 
   const selected = deriveJudgePathProgress({ evidenceLoaded: true, recommendedSignalId: 'sig-a', selectedSignalId: 'sig-a', includedInvestigationSignalIds: [], reportVisitedAfterInclusion: false });
   assert.equal(selected.completedCount, 2);
-  assert.deepEqual(selected.nextAction, { id: 'focus-investigation', label: 'Run and include investigation', destination: 'signals' });
+  assert.deepEqual(selected.nextAction, { id: 'run-investigation', label: 'Run evidence-grounded investigation', destination: 'signals' });
 
   const included = deriveJudgePathProgress({ evidenceLoaded: true, recommendedSignalId: 'sig-a', selectedSignalId: 'sig-a', includedInvestigationSignalIds: ['sig-a'], reportVisitedAfterInclusion: false });
   assert.equal(included.completedCount, 3);
@@ -80,7 +80,7 @@ test('guide actions select and focus the recommended signal without starting an 
   const appSource = source('src/App.tsx');
   const signalsSource = source('src/components/SuspiciousSignals.tsx');
   assert.match(appSource, /findGuidedInvestigationSignal/);
-  assert.match(appSource, /signalId: recommendedGuidedSignal\.id/);
+  assert.match(appSource, /action\.id === 'review-recommended-signal'[\s\S]*recommendedGuidedSignal\?\.id/);
   assert.match(signalsSource, /setSelectedSignal\(guidedSignal\)/);
   assert.match(signalsSource, /`signal-detail-\$\{guidedSignal\.id\}`/);
   assert.match(signalsSource, /'evidence-grounded-investigation'/);
@@ -109,7 +109,7 @@ test('Capture Overview remains optional and never advances the primary stages', 
   assert.deepEqual(before.stages.map(stage => stage.id), ['evidence', 'signal', 'investigation', 'report']);
   assert.equal(before.completedCount, 2);
   assert.equal(before.stages.find(stage => stage.id === 'investigation')?.complete, false);
-  assert.equal(before.nextAction.id, 'focus-investigation');
+  assert.equal(before.nextAction.id, 'run-investigation');
 });
 
 test('model output remains excluded from reports until explicit inclusion', () => {

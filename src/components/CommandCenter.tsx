@@ -8,7 +8,6 @@ import {
   Cpu,
   FileText,
   ShieldCheck,
-  Shield,
   ChevronRight,
   Lock,
   CheckCircle2,
@@ -17,14 +16,25 @@ import {
   HardDrive
 } from 'lucide-react';
 import { ParsedResult } from '../lib/parser';
-import { commandCenterLimitation, commandCenterNextActions, observedEventDescription } from '../lib/commandCenterPresentation';
+import { commandCenterLimitation, observedEventDescription } from '../lib/commandCenterPresentation';
+import type { InvestigationStatus, InvestigationStatusTone, JudgePathAction } from '../lib/judgePath';
 import InfoPopover from './InfoPopover';
 
 interface CommandCenterProps {
   data: ParsedResult | null;
   onNavigate: (tab: string) => void;
-  signalStatusOverrides?: Record<string, string>;
+  investigationStatus: InvestigationStatus;
+  onPrimaryAction(action: JudgePathAction): void;
 }
+
+const STATUS_ICON_CLASS = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-sm';
+const STATUS_ICON_TONE: Record<InvestigationStatusTone, string> = {
+  blue: 'bg-blue-600',
+  indigo: 'bg-indigo-600',
+  amber: 'bg-amber-500',
+  green: 'bg-emerald-600',
+  slate: 'bg-slate-500',
+};
 
 const formatUploadedDate = (dateStr: string) => {
   try {
@@ -52,7 +62,7 @@ const formatSize = (bytes: number) => {
 
 const endpoint = (ip: string, port: number) => `${ip.includes(':') ? `[${ip}]` : ip}:${port > 0 ? port : 'unknown'}`;
 
-export default function CommandCenter({ data, onNavigate, signalStatusOverrides = {} }: CommandCenterProps) {
+export default function CommandCenter({ data, onNavigate, investigationStatus, onPrimaryAction }: CommandCenterProps) {
   if (!data) {
     return (
       <div id="cmd-empty" className="flex flex-col items-center justify-center py-24 text-center font-sans">
@@ -114,9 +124,6 @@ export default function CommandCenter({ data, onNavigate, signalStatusOverrides 
   const uniqueDstIps = Array.from(new Set(events.map(e => e.destinationIp)));
   const uniqueEndpoints = Array.from(new Set([...uniqueSrcIps, ...uniqueDstIps]));
   const cleartextCount = http.filter(h => h.cleartext).length;
-  const reviewedSignalCount = signals.filter(signal => (signalStatusOverrides[signal.id] || signal.status) === 'Added to report').length;
-  const nextActions = commandCenterNextActions(data);
-
   const dominantProto = React.useMemo(() => {
     if (!donutSegments || donutSegments.length === 0) return 'None';
     const sorted = [...donutSegments].sort((a, b) => b.percentage - a.percentage);
@@ -996,120 +1003,51 @@ export default function CommandCenter({ data, onNavigate, signalStatusOverrides 
 
       </div>
 
-      {/* Right Column: Persistent Investigation Brief Panel (Memo style) */}
+      {/* Right Column: Persistent case workflow summary */}
       <div className="w-full xl:w-[360px] shrink-0 space-y-6">
-        <div className="p-5 md:p-6 bg-surface rounded-xl border border-border-subtle shadow-sm space-y-5 h-fit xl:sticky xl:top-24">
+        <section className="h-fit space-y-4 rounded-xl border border-border-subtle bg-surface p-5 shadow-sm md:p-6 xl:sticky xl:top-24" aria-labelledby="investigation-status-title" data-testid="investigation-status">
+          <header className="border-b border-border-subtle pb-3">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-accent-primary">Persistent case summary</p>
+            <h3 id="investigation-status-title" className="mt-0.5 text-sm font-semibold text-text-primary">Investigation status</h3>
+          </header>
 
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3 select-none">
-            <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-              <FileText size={15} className="text-accent-primary" />
-              Investigation Brief
-            </h3>
-            <span className="text-[10px] text-text-muted font-bold font-mono uppercase tracking-wider">NEXT STEPS</span>
-          </div>
-
-          {/* Section 1: Current assessment */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-accent-soft text-accent-primary rounded-lg shrink-0 select-none">
-              <Shield size={16} />
-            </div>
-            <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Deterministic summary</span>
-              <p className="text-text-secondary leading-relaxed font-normal">
-                {signals.length > 0
-                  ? `${signals.length} deterministic signal${signals.length === 1 ? '' : 's'} were generated from the loaded records.`
-                  : 'No deterministic signals were generated from the loaded records.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Section 2: Recommended next action */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-[#0062f1] text-white rounded-lg shrink-0 select-none shadow-xs">
-              <Cpu size={16} />
-            </div>
-            <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Primary next action</span>
-              <p className="text-text-primary font-semibold">{nextActions[0].label}</p>
-            </div>
-          </div>
-
-          {/* Section 3: Confidence */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-status-warning-bg/15 text-[#f59e0b] border border-[#f59e0b]/20 rounded-lg shrink-0 select-none">
-              <ShieldCheck size={16} />
-            </div>
-            <div className="space-y-1.5 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Review state</span>
-              <span className="inline-block px-2.5 py-0.5 bg-status-warning-bg text-status-warning border border-status-warning/15 font-semibold rounded text-[10px] uppercase tracking-wider select-none">
-                {signals.length > 0 ? 'Analyst validation required' : 'No signals to review'}
-              </span>
-            </div>
-          </div>
-
-          {/* Section 4: Report readiness */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-status-success text-white rounded-lg shrink-0 select-none shadow-xs">
-              <CheckCircle2 size={16} />
-            </div>
-            <div className="space-y-1.5 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Report readiness</span>
-              <span className="inline-block px-2.5 py-0.5 bg-status-success-bg text-status-success border border-status-success/15 font-semibold rounded text-[10px] select-none">
-                {reviewedSignalCount > 0 ? `${reviewedSignalCount} reviewed finding${reviewedSignalCount === 1 ? '' : 's'} included` : 'No reviewed findings included yet'}
-              </span>
-            </div>
-          </div>
-
-          {/* Section 5: Limitations */}
-          <div className="flex gap-3 items-start border-b border-border-subtle/50 pb-4">
-            <div className="p-1.5 bg-surface-muted border border-border-subtle text-text-muted rounded-lg shrink-0 select-none">
-              <AlertTriangle size={16} />
-            </div>
-            <div className="space-y-1 text-xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Limitations</span>
-              <p className="text-text-muted leading-relaxed font-normal">
-                {commandCenterLimitation(evidence.parseMode)}
-              </p>
-            </div>
-          </div>
-
-          {/* Section 6: Next analyst actions */}
-          <div className="space-y-3 pt-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block select-none">Next analyst actions</span>
-
-            <div className="space-y-2">
-              {nextActions.slice(0, 4).map(action => (
-                <button
-                  key={action.destination}
-                  type="button"
-                  onClick={() => onNavigate(action.destination)}
-                  className="flex w-full items-start gap-3 rounded-lg p-2 text-left hover:bg-surface-muted/20 cursor-pointer transition-colors group"
-                >
-                  <div className="w-4 h-4 rounded-full border border-border-strong flex items-center justify-center shrink-0 mt-0.5 text-text-muted group-hover:border-accent-primary group-hover:text-accent-primary transition-colors select-none">
-                    <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-accent-primary transition-colors" />
+          <dl className="space-y-3" aria-live="polite">
+            {investigationStatus.items.map(item => {
+              const Icon = item.id === 'evidence' ? Database : item.id === 'signal' ? ShieldCheck : item.id === 'assessment' ? Cpu : FileText;
+              return (
+                <div key={item.id} className="flex items-center gap-3">
+                  <div data-testid="investigation-status-icon" className={`${STATUS_ICON_CLASS} ${STATUS_ICON_TONE[item.tone]}`} aria-hidden="true">
+                    <Icon size={15} />
                   </div>
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-text-primary text-xs group-hover:text-accent-primary transition-colors">{action.label}</p>
-                    <p className="text-[10px] text-text-muted font-normal">Open the corresponding evidence view.</p>
+                  <div className="min-w-0 flex-1 text-xs">
+                    <dt className="font-medium text-text-primary">{item.label}</dt>
+                    <dd className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">{item.value}</dd>
                   </div>
-                </button>
-              ))}
+                </div>
+              );
+            })}
+          </dl>
+
+          <div className="flex items-start gap-3 border-t border-border-subtle/60 pt-3">
+            <div data-testid="investigation-status-icon" className={`${STATUS_ICON_CLASS} ${STATUS_ICON_TONE.slate}`} aria-hidden="true">
+              <AlertTriangle size={15} />
+            </div>
+            <div className="min-w-0 text-xs">
+              <p className="font-medium text-text-primary">Limitation</p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-text-muted">{commandCenterLimitation(evidence.parseMode)}</p>
             </div>
           </div>
 
-          {/* Action Button */}
-          <div className="pt-2">
-            <button
-              onClick={() => onNavigate(nextActions[0].destination)}
-              className="w-full py-2 bg-transparent hover:bg-accent-soft border border-accent-primary text-accent-primary hover:text-accent-primary-hover font-semibold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm animate-pulse"
-            >
-              <FileText size={13} />
-              {nextActions[0].label}
-            </button>
-          </div>
-
-        </div>
+          <button
+            type="button"
+            data-testid="investigation-status-primary-action"
+            onClick={() => onPrimaryAction(investigationStatus.nextAction)}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent-primary px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-accent-primary-hover focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-2"
+          >
+            {investigationStatus.nextAction.label}
+            <ChevronRight aria-hidden="true" size={13} />
+          </button>
+        </section>
       </div>
 
       </div>

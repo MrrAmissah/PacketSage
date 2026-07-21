@@ -53,11 +53,12 @@ import GuidedSampleJourney from './components/GuidedSampleJourney';
 import { setCaptureOverviewInclusion } from './lib/captureOverview';
 import {
   createJudgePathSession,
+  deriveGeneralInvestigationStatus,
   deriveJudgePathProgress,
   findGuidedInvestigationSignal,
   shouldShowGuidedJourney,
   type GuidedSignalAction,
-  type JudgePathActionId,
+  type JudgePathAction,
   type JudgePathDestination,
   type JudgePathSession,
 } from './lib/judgePath';
@@ -81,10 +82,36 @@ export default function App() {
   const recommendedGuidedSignal = React.useMemo(() => parsedData
     ? findGuidedInvestigationSignal(parsedData.evidence.parseMode, parsedData.signals, parsedData.flows, parsedData.events)
     : null, [parsedData]);
-  const includedGuidedSignalIds = React.useMemo(() => investigations
-    .filter(record => record.selectedEvidenceId === parsedData?.evidence.id && record.includedInReport)
-    .map(record => record.signalId), [investigations, parsedData?.evidence.id]);
-  const guidedInvestigationIncluded = Boolean(recommendedGuidedSignal && includedGuidedSignalIds.includes(recommendedGuidedSignal.id));
+  const currentInvestigationRecords = React.useMemo(() => investigations
+    .filter(record => record.selectedEvidenceId === parsedData?.evidence.id), [investigations, parsedData?.evidence.id]);
+  const completedInvestigationSignalIds = React.useMemo(() => currentInvestigationRecords
+    .map(record => record.signalId), [currentInvestigationRecords]);
+  const includedInvestigationSignalIds = React.useMemo(() => currentInvestigationRecords
+    .filter(record => record.includedInReport)
+    .map(record => record.signalId), [currentInvestigationRecords]);
+  const hasIncludedInvestigation = includedInvestigationSignalIds.length > 0;
+  const guidedProgress = React.useMemo(() => deriveJudgePathProgress({
+    evidenceLoaded: Boolean(parsedData),
+    recommendedSignalId: recommendedGuidedSignal?.id || null,
+    selectedSignalId: guideSession?.selectedSignalId || null,
+    completedInvestigationSignalIds,
+    includedInvestigationSignalIds,
+    reportVisitedAfterInclusion: guideSession?.reportVisitedAfterInclusion || false,
+  }), [parsedData, recommendedGuidedSignal?.id, guideSession?.selectedSignalId, guideSession?.reportVisitedAfterInclusion, completedInvestigationSignalIds, includedInvestigationSignalIds]);
+  const investigationStatus = React.useMemo(() => (
+    parsedData?.evidence.parseMode === 'demo' && recommendedGuidedSignal
+      ? guidedProgress.status
+      : deriveGeneralInvestigationStatus({
+        evidenceLoaded: Boolean(parsedData),
+        signalCount: parsedData?.signals.length || 0,
+        hasFlows: Boolean(parsedData?.flows.length),
+        hasEvents: Boolean(parsedData?.events.length),
+        selectedSignalId: guideSession?.selectedSignalId || null,
+        completedInvestigationSignalIds,
+        includedInvestigationSignalIds,
+        reportVisitedAfterInclusion: guideSession?.reportVisitedAfterInclusion || false,
+      })
+  ), [parsedData, recommendedGuidedSignal, guidedProgress.status, guideSession?.selectedSignalId, guideSession?.reportVisitedAfterInclusion, completedInvestigationSignalIds, includedInvestigationSignalIds]);
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('packet-sage-theme');
@@ -128,10 +155,10 @@ export default function App() {
 
   React.useEffect(() => {
     workspaceScrollRef.current?.scrollTo({ top: 0, left: 0 });
-    if (activeTab === 'report' && guidedInvestigationIncluded) {
+    if (activeTab === 'report' && hasIncludedInvestigation) {
       setGuideSession(previous => previous ? { ...previous, reportVisitedAfterInclusion: true } : previous);
     }
-  }, [activeTab, parsedData?.evidence.id, guidedInvestigationIncluded]);
+  }, [activeTab, parsedData?.evidence.id, hasIncludedInvestigation]);
 
   const handleDataParsed = (data: ParsedResult) => {
     setParsedData(data);
@@ -196,7 +223,7 @@ export default function App() {
     includedInReport: boolean,
   ) => {
     setInvestigations(previous => setInvestigationReportInclusion(previous, context, includedInReport));
-    if (context.signalId === recommendedGuidedSignal?.id) {
+    if (includedInReport) {
       setGuideSession(previous => previous ? { ...previous, reportVisitedAfterInclusion: false } : previous);
     }
   };
@@ -209,17 +236,16 @@ export default function App() {
     setGuidedSignalAction(previous => previous?.requestId === requestId ? null : previous);
   }, []);
 
-  const handleGuidePrimaryAction = (actionId: JudgePathActionId) => {
-    if (actionId === 'open-report') {
-      setActiveTab('report');
-      return;
-    }
-
-    setActiveTab('signals');
-    if (!recommendedGuidedSignal) return;
+  const handleInvestigationStatusAction = (action: JudgePathAction) => {
+    setActiveTab(action.destination as TabType);
+    if (action.destination !== 'signals' || action.id === 'review-observed-signals') return;
+    const signalId = action.id === 'review-recommended-signal'
+      ? recommendedGuidedSignal?.id
+      : guideSession?.selectedSignalId || recommendedGuidedSignal?.id;
+    if (!signalId) return;
     setGuidedSignalAction(previous => ({
-      signalId: recommendedGuidedSignal.id,
-      focusTarget: actionId === 'focus-investigation' ? 'investigation' : 'signal-detail',
+      signalId,
+      focusTarget: action.id === 'review-recommended-signal' ? 'signal-detail' : 'investigation',
       requestId: (previous?.requestId || 0) + 1,
     }));
   };
@@ -232,7 +258,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'overview':
-        return <CommandCenter data={parsedData} signalStatusOverrides={signalStatusOverrides} onNavigate={(tab) => {
+        return <CommandCenter data={parsedData} investigationStatus={investigationStatus} onPrimaryAction={handleInvestigationStatusAction} onNavigate={(tab) => {
           if (tab === 'flows') setRelatedFlowScopeIds(null);
           setActiveTab(tab as TabType);
         }} />;
@@ -316,7 +342,7 @@ export default function App() {
       case 'academy':
         return <LearningMode hasEvidence={!!parsedData} parsedData={parsedData} />;
       default:
-        return <CommandCenter data={parsedData} signalStatusOverrides={signalStatusOverrides} onNavigate={(tab) => {
+        return <CommandCenter data={parsedData} investigationStatus={investigationStatus} onPrimaryAction={handleInvestigationStatusAction} onNavigate={(tab) => {
           if (tab === 'flows') setRelatedFlowScopeIds(null);
           setActiveTab(tab as TabType);
         }} />;
@@ -590,16 +616,10 @@ export default function App() {
           <div className="max-w-[1440px] mx-auto w-full">
             {parsedData && shouldShowGuidedJourney(parsedData.evidence.parseMode, guideSession) && (
               <GuidedSampleJourney
-                progress={deriveJudgePathProgress({
-                  evidenceLoaded: true,
-                  recommendedSignalId: recommendedGuidedSignal?.id || null,
-                  selectedSignalId: guideSession?.selectedSignalId || null,
-                  includedInvestigationSignalIds: includedGuidedSignalIds,
-                  reportVisitedAfterInclusion: guideSession?.reportVisitedAfterInclusion || false,
-                })}
+                progress={guidedProgress}
                 onDismiss={() => setGuideSession(previous => previous ? { ...previous, dismissed: true } : previous)}
                 onNavigate={(destination: JudgePathDestination) => setActiveTab(destination)}
-                onPrimaryAction={handleGuidePrimaryAction}
+                onPrimaryAction={handleInvestigationStatusAction}
               />
             )}
             {renderActiveContent()}

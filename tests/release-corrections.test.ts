@@ -185,6 +185,15 @@ test('Timeline contains no synthetic flow or orphan report state', () => {
   assert.doesNotMatch(code, /temp-|localStorage|Add event to report|packet_sage_timeline_reports/);
 });
 
+test('Timeline restores the connected event spine without heuristic event claims', () => {
+  const code = source('src/components/IncidentTimeline.tsx');
+  assert.match(code, /data-testid="connected-incident-timeline"/);
+  assert.match(code, /data-testid="timeline-spine-segment"/);
+  assert.match(code, /data-testid="timeline-event-marker"/);
+  assert.match(code, /markerForEvent\(event: PacketEvent\)/);
+  assert.doesNotMatch(code, /credential submission|exfiltration|beacon|malicious|severity.*marker/i);
+});
+
 test('Flow and Timeline report controls are completely removed', () => {
   const code = `${source('src/components/FlowExplorer.tsx')}\n${source('src/components/IncidentTimeline.tsx')}`;
   assert.doesNotMatch(code, /Add this flow to report|Add event to report|Added to report/);

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Activity, ArrowRight, Search, X } from 'lucide-react';
+import { Activity, ArrowRight, FileText, Globe, Network, Search, ShieldCheck, X } from 'lucide-react';
 import type { FlowSummary, PacketEvent, SuspiciousSignal } from '../types';
 import { flowsForEvent, signalsForEvent } from '../lib/evidenceRelationships';
 
@@ -20,6 +20,30 @@ function timestamp(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
+function timelineTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(11, 19);
+}
+
+function relativeTimelineTime(value: string, startTime: number | null): string {
+  const eventTime = new Date(value).getTime();
+  if (startTime === null || Number.isNaN(eventTime)) return 'offset unknown';
+  const totalSeconds = Math.max(0, Math.floor((eventTime - startTime) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `+${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function markerForEvent(event: PacketEvent) {
+  const recordedLabels = [event.protocol, event.service].filter(Boolean).map(value => value!.toUpperCase());
+  if (recordedLabels.includes('DNS')) return { Icon: Globe, style: 'border-violet-700 bg-violet-500 text-white' };
+  if (recordedLabels.some(value => value === 'HTTP' || value === 'HTTP/1.1' || value === 'HTTP/2')) return { Icon: FileText, style: 'border-amber-600 bg-amber-500 text-white' };
+  if (recordedLabels.some(value => value === 'TLS' || value === 'HTTPS' || value.startsWith('TLSV'))) return { Icon: ShieldCheck, style: 'border-emerald-700 bg-emerald-600 text-white' };
+  if (recordedLabels.some(value => value === 'TCP' || value === 'UDP')) return { Icon: Network, style: 'border-sky-700 bg-sky-600 text-white' };
+  return { Icon: Activity, style: 'border-slate-600 bg-slate-500 text-white' };
+}
+
 export default function IncidentTimeline({ events, flows = [], signals = [], onNavigateToFlows }: IncidentTimelineProps) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -30,6 +54,10 @@ export default function IncidentTimeline({ events, flows = [], signals = [], onN
     const text = `${event.id} ${event.timestamp} ${event.sourceIp} ${event.sourcePort || ''} ${event.destinationIp} ${event.destinationPort || ''} ${event.protocol} ${event.service || ''} ${event.info || ''}`.toLowerCase();
     return (protocolFilter === 'ALL' || event.protocol === protocolFilter) && text.includes(search.trim().toLowerCase());
   }), [sortedEvents, protocolFilter, search]);
+  const captureStartTime = useMemo(() => {
+    const validTimes = sortedEvents.map(event => new Date(event.timestamp).getTime()).filter(Number.isFinite);
+    return validTimes.length ? Math.min(...validTimes) : null;
+  }, [sortedEvents]);
   const selectedEvent = events.find(event => event.id === selectedEventId) || null;
   const relatedFlows = selectedEvent ? flowsForEvent(selectedEvent.id, flows) : [];
   const relatedSignals = selectedEvent ? signalsForEvent(selectedEvent.id, signals) : [];
@@ -48,13 +76,27 @@ export default function IncidentTimeline({ events, flows = [], signals = [], onN
       </div>
 
       <div className={`grid gap-5 ${selectedEvent ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
-        <ol className="space-y-2" aria-label="Timeline events">
-          {visibleEvents.map(event => {
+        <ol className="space-y-2" aria-label="Timeline events" data-testid="connected-incident-timeline">
+          {visibleEvents.map((event, index) => {
             const exactFlowCount = flowsForEvent(event.id, flows).length;
             const exactSignalCount = signalsForEvent(event.id, signals).length;
+            const { Icon: MarkerIcon, style: markerStyle } = markerForEvent(event);
+            const isFirst = index === 0;
+            const isLast = index === visibleEvents.length - 1;
+            const isSelected = selectedEventId === event.id;
             return (
-              <li key={event.id}>
-                <button type="button" onClick={() => setSelectedEventId(event.id)} aria-pressed={selectedEventId === event.id} className={`w-full rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary ${selectedEventId === event.id ? 'border-accent-primary bg-accent-soft' : 'border-border-subtle bg-surface hover:bg-surface-muted/40'}`}>
+              <li key={event.id} className="grid min-h-[4.5rem] grid-cols-[3.4rem_2.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[5rem_2.5rem_minmax(0,1fr)] sm:gap-3">
+                <time className="flex min-w-0 flex-col justify-center text-right font-mono" dateTime={event.timestamp}>
+                  <span className="truncate text-[10px] font-bold text-text-primary sm:text-[11px]">{timelineTime(event.timestamp)}</span>
+                  <span className="mt-0.5 hidden text-[9px] text-text-muted sm:block">{relativeTimelineTime(event.timestamp, captureStartTime)}</span>
+                </time>
+                <div className="relative flex w-10 shrink-0 items-center justify-center" aria-hidden="true" data-testid="timeline-marker-column">
+                  <span data-testid="timeline-spine-segment" className={`absolute w-0.5 bg-border-subtle dark:bg-slate-700 ${isFirst ? 'top-1/2' : 'top-0'} ${isLast ? 'bottom-1/2' : 'bottom-0'}`} />
+                  <span className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-lg border shadow-sm transition-transform ${markerStyle} ${isSelected ? 'scale-110 ring-2 ring-accent-primary ring-offset-2 ring-offset-white dark:ring-offset-slate-950' : ''}`} data-testid="timeline-event-marker">
+                    <MarkerIcon size={14} className="stroke-[2.5]" />
+                  </span>
+                </div>
+                <button type="button" onClick={() => setSelectedEventId(event.id)} aria-pressed={isSelected} className={`min-w-0 w-full rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary ${isSelected ? 'border-accent-primary bg-accent-soft' : 'border-border-subtle bg-surface hover:bg-surface-muted/40'}`}>
                   <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Activity aria-hidden="true" size={13} className="text-accent-primary" /><code className="text-[10px] text-text-muted">{event.id}</code><span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-secondary">{event.protocol}</span>{event.service && <span className="text-[10px] text-text-muted">{event.service}</span>}</div><p className="mt-2 text-xs text-text-primary">{event.info || 'No decoded description was recorded.'}</p><p className="mt-2 font-mono text-[10px] text-text-muted">{endpoint(event.sourceIp, event.sourcePort)} → {endpoint(event.destinationIp, event.destinationPort)}</p></div><time className="shrink-0 font-mono text-[10px] text-text-muted" dateTime={event.timestamp}>{timestamp(event.timestamp)}</time></div>
                   <p className="mt-3 text-[9px] text-text-muted">Exact relationships: {exactFlowCount} flow{exactFlowCount === 1 ? '' : 's'} · {exactSignalCount} signal{exactSignalCount === 1 ? '' : 's'}</p>
                 </button>

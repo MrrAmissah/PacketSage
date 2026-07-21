@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Activity, ArrowRight, FileText, Globe, Network, Search, ShieldCheck, X } from 'lucide-react';
+import { Activity, ArrowDown, ArrowRight, ArrowUp, FileText, Globe, Network, RotateCcw, Search, ShieldCheck, X } from 'lucide-react';
 import type { FlowSummary, PacketEvent, SuspiciousSignal } from '../types';
 import { flowsForEvent, signalsForEvent } from '../lib/evidenceRelationships';
 
@@ -44,20 +44,64 @@ function markerForEvent(event: PacketEvent) {
   return { Icon: Activity, style: 'border-slate-600 bg-slate-500 text-white' };
 }
 
+function observedEventLabel(event: PacketEvent): string {
+  const protocol = event.protocol || 'Network';
+  const service = event.service && event.service.toLowerCase() !== protocol.toLowerCase() ? `${event.service} / ` : '';
+  return `${service}${protocol} event observed`;
+}
+
+function observedEventDescription(event: PacketEvent): string {
+  const detail = event.info ? ` Decoder detail: ${event.info}` : ' No decoded description was recorded.';
+  return `${observedEventLabel(event)} from ${endpoint(event.sourceIp, event.sourcePort)} to ${endpoint(event.destinationIp, event.destinationPort)}. ${event.length} bytes were recorded.${detail}`;
+}
+
 export default function IncidentTimeline({ events, flows = [], signals = [], onNavigateToFlows }: IncidentTimelineProps) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [protocolFilter, setProtocolFilter] = useState('ALL');
+  const [serviceFilter, setServiceFilter] = useState('ALL');
+  const [sourceFilter, setSourceFilter] = useState('ALL');
+  const [timeFilter, setTimeFilter] = useState('ALL');
+  const [ascending, setAscending] = useState(true);
   const sortedEvents = useMemo(() => [...events].sort((left, right) => left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id)), [events]);
   const protocols = useMemo(() => Array.from(new Set(events.map(event => event.protocol))).sort(), [events]);
-  const visibleEvents = useMemo(() => sortedEvents.filter(event => {
-    const text = `${event.id} ${event.timestamp} ${event.sourceIp} ${event.sourcePort || ''} ${event.destinationIp} ${event.destinationPort || ''} ${event.protocol} ${event.service || ''} ${event.info || ''}`.toLowerCase();
-    return (protocolFilter === 'ALL' || event.protocol === protocolFilter) && text.includes(search.trim().toLowerCase());
-  }), [sortedEvents, protocolFilter, search]);
+  const services = useMemo(() => Array.from(new Set(events.map(event => event.service).filter((service): service is string => Boolean(service)))).sort(), [events]);
+  const sources = useMemo(() => Array.from(new Set(events.map(event => event.sourceIp))).sort(), [events]);
   const captureStartTime = useMemo(() => {
     const validTimes = sortedEvents.map(event => new Date(event.timestamp).getTime()).filter(Number.isFinite);
     return validTimes.length ? Math.min(...validTimes) : null;
   }, [sortedEvents]);
+  const visibleEvents = useMemo(() => sortedEvents.filter(event => {
+    const text = `${event.id} ${event.timestamp} ${event.sourceIp} ${event.sourcePort || ''} ${event.destinationIp} ${event.destinationPort || ''} ${event.protocol} ${event.service || ''} ${event.info || ''}`.toLowerCase();
+    const eventTime = new Date(event.timestamp).getTime();
+    const offset = captureStartTime === null || Number.isNaN(eventTime) ? null : eventTime - captureStartTime;
+    const inTimeRange = timeFilter === 'ALL'
+      || (timeFilter === 'FIRST_5_SECONDS' && offset !== null && offset <= 5_000)
+      || (timeFilter === 'FIRST_MINUTE' && offset !== null && offset <= 60_000)
+      || (timeFilter === 'AFTER_FIRST_MINUTE' && offset !== null && offset > 60_000);
+    return inTimeRange
+      && (protocolFilter === 'ALL' || event.protocol === protocolFilter)
+      && (serviceFilter === 'ALL' || event.service === serviceFilter)
+      && (sourceFilter === 'ALL' || event.sourceIp === sourceFilter)
+      && text.includes(search.trim().toLowerCase());
+  }).sort((left, right) => ascending
+    ? left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id)
+    : right.timestamp.localeCompare(left.timestamp) || right.id.localeCompare(left.id)), [sortedEvents, captureStartTime, timeFilter, protocolFilter, serviceFilter, sourceFilter, search, ascending]);
+  const visibleRange = useMemo(() => {
+    const validTimes = visibleEvents.map(event => new Date(event.timestamp).getTime()).filter(Number.isFinite);
+    if (!validTimes.length) return 'Unavailable';
+    return `${new Date(Math.min(...validTimes)).toISOString().slice(11, 19)} – ${new Date(Math.max(...validTimes)).toISOString().slice(11, 19)} UTC`;
+  }, [visibleEvents]);
+  const visibleLinkedFlowCount = useMemo(() => new Set(visibleEvents.flatMap(event => flowsForEvent(event.id, flows).map(flow => flow.id))).size, [visibleEvents, flows]);
+  const visibleLinkedSignalCount = useMemo(() => new Set(visibleEvents.flatMap(event => signalsForEvent(event.id, signals).map(signal => signal.id))).size, [visibleEvents, signals]);
+  const filtersActive = Boolean(search || protocolFilter !== 'ALL' || serviceFilter !== 'ALL' || sourceFilter !== 'ALL' || timeFilter !== 'ALL');
+  const resetFilters = () => {
+    setSearch('');
+    setProtocolFilter('ALL');
+    setServiceFilter('ALL');
+    setSourceFilter('ALL');
+    setTimeFilter('ALL');
+  };
   const selectedEvent = events.find(event => event.id === selectedEventId) || null;
   const relatedFlows = selectedEvent ? flowsForEvent(selectedEvent.id, flows) : [];
   const relatedSignals = selectedEvent ? signalsForEvent(selectedEvent.id, signals) : [];
@@ -68,14 +112,34 @@ export default function IncidentTimeline({ events, flows = [], signals = [], onN
         <p className="text-[10px] font-bold uppercase tracking-widest text-accent-primary">Observed chronology</p>
         <h1 id="timeline-title" className="text-xl font-bold text-text-primary">Incident timeline</h1>
         <p className="mt-1 text-xs text-text-muted">Chronological normalized records. Related flows and signals resolve only through explicit parser-established IDs.</p>
+        <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border-subtle/60 pt-3 md:grid-cols-4" data-testid="timeline-metadata">
+          <div><dt className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Timeline events</dt><dd className="mt-0.5 text-xs font-medium text-text-primary"><span className="font-mono">{visibleEvents.length}</span> of <span className="font-mono">{events.length}</span></dd></div>
+          <div><dt className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Displayed range</dt><dd className="mt-0.5 truncate font-mono text-[10px] font-medium text-text-primary">{visibleRange}</dd></div>
+          <div><dt className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Exact linked signals</dt><dd className="mt-0.5 text-xs font-medium text-text-primary"><span className="font-mono">{visibleLinkedSignalCount}</span> observed</dd></div>
+          <div><dt className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Exact related flows</dt><dd className="mt-0.5 text-xs font-medium text-text-primary"><span className="font-mono">{visibleLinkedFlowCount}</span> observed</dd></div>
+        </dl>
       </header>
 
-      <div className="grid gap-3 rounded-xl border border-border-subtle bg-surface p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <label className="relative"><span className="sr-only">Search timeline events</span><Search aria-hidden="true" size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" /><input value={search} onChange={event => setSearch(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas py-2 pl-9 pr-3 text-xs" placeholder="Search observed event fields" /></label>
-        <label className="text-[10px] text-text-muted">Protocol<select aria-label="Filter timeline by protocol" value={protocolFilter} onChange={event => setProtocolFilter(event.target.value)} className="ml-2 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs text-text-primary"><option>ALL</option>{protocols.map(protocol => <option key={protocol}>{protocol}</option>)}</select></label>
+      <div className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-surface p-3 shadow-sm xl:flex-row xl:items-center" data-testid="timeline-filter-bar">
+        <label className="relative min-w-0 flex-1 xl:max-w-sm"><span className="sr-only">Search timeline events</span><Search aria-hidden="true" size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" /><input value={search} onChange={event => setSearch(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas py-2 pl-9 pr-3 text-xs" placeholder="Search details, endpoints, IDs…" /></label>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Time<select aria-label="Filter timeline by capture time" value={timeFilter} onChange={event => setTimeFilter(event.target.value)} className="ml-1.5 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option value="ALL">All times</option><option value="FIRST_5_SECONDS">First 5s</option><option value="FIRST_MINUTE">First 1m</option><option value="AFTER_FIRST_MINUTE">After 1m</option></select></label>
+          <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Protocol<select aria-label="Filter timeline by protocol" value={protocolFilter} onChange={event => setProtocolFilter(event.target.value)} className="ml-1.5 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option>ALL</option>{protocols.map(protocol => <option key={protocol}>{protocol}</option>)}</select></label>
+          {services.length > 0 && <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Service<select aria-label="Filter timeline by recorded service" value={serviceFilter} onChange={event => setServiceFilter(event.target.value)} className="ml-1.5 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option>ALL</option>{services.map(service => <option key={service}>{service}</option>)}</select></label>}
+          {sources.length > 1 && <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Source<select aria-label="Filter timeline by source endpoint" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)} className="ml-1.5 max-w-40 rounded border border-border-subtle bg-canvas px-2 py-2 text-xs font-normal normal-case tracking-normal text-text-primary"><option>ALL</option>{sources.map(source => <option key={source}>{source}</option>)}</select></label>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button type="button" onClick={() => setAscending(value => !value)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-canvas px-2.5 py-2 text-[10px] font-semibold text-text-secondary"><span aria-hidden="true">{ascending ? <ArrowDown size={12} /> : <ArrowUp size={12} />}</span>{ascending ? 'Earliest first' : 'Latest first'}</button>
+          {filtersActive && <button type="button" onClick={resetFilters} className="inline-flex items-center gap-1.5 rounded-lg border border-accent-primary/20 bg-accent-soft px-2.5 py-2 text-[10px] font-bold text-accent-primary"><RotateCcw aria-hidden="true" size={12} />Reset</button>}
+        </div>
       </div>
 
       <div className={`grid gap-5 ${selectedEvent ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
+        <div className="min-w-0">
+          <div className="mb-3 flex items-center justify-between gap-2 border-b border-border-subtle/60 px-1 pb-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-text-primary">Capture session reconstruction</h2>
+            <span className="shrink-0 font-mono text-[10px] text-text-muted">{visibleEvents.length} observed event{visibleEvents.length === 1 ? '' : 's'}</span>
+          </div>
         <ol className="space-y-2" aria-label="Timeline events" data-testid="connected-incident-timeline">
           {visibleEvents.map((event, index) => {
             const exactFlowCount = flowsForEvent(event.id, flows).length;
@@ -97,7 +161,7 @@ export default function IncidentTimeline({ events, flows = [], signals = [], onN
                   </span>
                 </div>
                 <button type="button" onClick={() => setSelectedEventId(event.id)} aria-pressed={isSelected} className={`min-w-0 w-full rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary ${isSelected ? 'border-accent-primary bg-accent-soft' : 'border-border-subtle bg-surface hover:bg-surface-muted/40'}`}>
-                  <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Activity aria-hidden="true" size={13} className="text-accent-primary" /><code className="text-[10px] text-text-muted">{event.id}</code><span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-secondary">{event.protocol}</span>{event.service && <span className="text-[10px] text-text-muted">{event.service}</span>}</div><p className="mt-2 text-xs text-text-primary">{event.info || 'No decoded description was recorded.'}</p><p className="mt-2 font-mono text-[10px] text-text-muted">{endpoint(event.sourceIp, event.sourcePort)} → {endpoint(event.destinationIp, event.destinationPort)}</p></div><time className="shrink-0 font-mono text-[10px] text-text-muted" dateTime={event.timestamp}>{timestamp(event.timestamp)}</time></div>
+                  <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Activity aria-hidden="true" size={13} className="text-accent-primary" /><code className="text-[10px] text-text-muted">{event.id}</code><span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-secondary">{event.protocol}</span>{event.service && <span className="text-[10px] text-text-muted">{event.service}</span>}</div><p className="mt-2 text-xs font-semibold text-text-primary">{observedEventLabel(event)}</p><p className="mt-1 text-[11px] text-text-secondary">{event.info || 'No decoded description was recorded.'}</p><p className="mt-2 font-mono text-[10px] text-text-muted">{endpoint(event.sourceIp, event.sourcePort)} → {endpoint(event.destinationIp, event.destinationPort)}</p></div><time className="shrink-0 font-mono text-[10px] text-text-muted" dateTime={event.timestamp}>{timestamp(event.timestamp)}</time></div>
                   <p className="mt-3 text-[9px] text-text-muted">Exact relationships: {exactFlowCount} flow{exactFlowCount === 1 ? '' : 's'} · {exactSignalCount} signal{exactSignalCount === 1 ? '' : 's'}</p>
                 </button>
               </li>
@@ -105,11 +169,13 @@ export default function IncidentTimeline({ events, flows = [], signals = [], onN
           })}
           {!visibleEvents.length && <li className="rounded-xl border border-dashed border-border-subtle bg-surface p-10 text-center text-xs text-text-muted">No observed timeline events match these filters.</li>}
         </ol>
+        </div>
 
         {selectedEvent && (
           <aside className="h-fit space-y-4 rounded-xl border border-border-subtle bg-surface p-4 shadow-sm" aria-label={`Timeline event detail ${selectedEvent.id}`}>
             <header className="flex items-start justify-between border-b border-border-subtle pb-3"><div><p className="text-[9px] font-bold uppercase tracking-widest text-accent-primary">Observed event</p><h2 className="font-mono text-xs font-bold text-text-primary">{selectedEvent.id}</h2></div><button type="button" onClick={() => setSelectedEventId(null)} aria-label="Close timeline event details" className="rounded border border-border-subtle p-1.5 text-text-muted"><X aria-hidden="true" size={13} /></button></header>
-            <dl className="grid gap-2 text-[11px]"><div><dt className="text-text-muted">Timestamp</dt><dd className="font-mono">{timestamp(selectedEvent.timestamp)}</dd></div><div><dt className="text-text-muted">Source</dt><dd className="font-mono">{endpoint(selectedEvent.sourceIp, selectedEvent.sourcePort)}</dd></div><div><dt className="text-text-muted">Destination</dt><dd className="font-mono">{endpoint(selectedEvent.destinationIp, selectedEvent.destinationPort)}</dd></div><div className="grid grid-cols-2"><div><dt className="text-text-muted">Protocol</dt><dd>{selectedEvent.protocol}</dd></div><div><dt className="text-text-muted">Length</dt><dd>{selectedEvent.length} bytes</dd></div></div><div><dt className="text-text-muted">Decoded description</dt><dd>{selectedEvent.info || 'Not recorded'}</dd></div></dl>
+            <section><h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">Event description</h3><p className="rounded-lg border border-border-subtle bg-canvas p-3 text-[11px] leading-relaxed text-text-secondary">{observedEventDescription(selectedEvent)}</p></section>
+            <dl className="grid gap-2 text-[11px]"><div><dt className="text-text-muted">Timestamp</dt><dd className="font-mono">{timestamp(selectedEvent.timestamp)}</dd></div><div><dt className="text-text-muted">Source</dt><dd className="font-mono">{endpoint(selectedEvent.sourceIp, selectedEvent.sourcePort)}</dd></div><div><dt className="text-text-muted">Destination</dt><dd className="font-mono">{endpoint(selectedEvent.destinationIp, selectedEvent.destinationPort)}</dd></div><div className="grid grid-cols-2"><div><dt className="text-text-muted">Protocol</dt><dd>{selectedEvent.protocol}</dd></div><div><dt className="text-text-muted">Length</dt><dd>{selectedEvent.length} bytes</dd></div></div></dl>
             <section><h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">Exact related flows ({relatedFlows.length})</h3>{relatedFlows.length ? <ul className="space-y-2">{relatedFlows.map(flow => <li key={flow.id} className="rounded-lg border border-border-subtle p-2 text-[10px]"><code>{flow.id}</code><p className="mt-1 font-mono text-text-muted">{endpoint(flow.sourceIp, flow.sourcePort)} → {endpoint(flow.destinationIp, flow.destinationPort)}</p></li>)}</ul> : <p className="text-[11px] text-text-muted">No flow explicitly records this event ID.</p>}</section>
             <section><h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">Exact related signals ({relatedSignals.length})</h3>{relatedSignals.length ? <ul className="space-y-2">{relatedSignals.map(signal => <li key={signal.id} className="rounded-lg border border-border-subtle p-2 text-[10px]"><span className="font-semibold text-text-primary">{signal.title}</span><code className="mt-1 block">{signal.id}</code></li>)}</ul> : <p className="text-[11px] text-text-muted">No signal explicitly records this event ID.</p>}</section>
             <button type="button" disabled={!relatedFlows.length || !onNavigateToFlows} onClick={() => onNavigateToFlows?.(relatedFlows)} className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent-primary py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-muted">{relatedFlows.length ? 'Open exact related flow' : 'Related flow unavailable'}<ArrowRight aria-hidden="true" size={12} /></button>

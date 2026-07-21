@@ -187,10 +187,14 @@ test('Timeline contains no synthetic flow or orphan report state', () => {
 
 test('Timeline restores the connected event spine without heuristic event claims', () => {
   const code = source('src/components/IncidentTimeline.tsx');
+  assert.match(code, /data-testid="timeline-metadata"/);
+  assert.match(code, /data-testid="timeline-filter-bar"/);
+  assert.match(code, /Capture session reconstruction/);
   assert.match(code, /data-testid="connected-incident-timeline"/);
   assert.match(code, /data-testid="timeline-spine-segment"/);
   assert.match(code, /data-testid="timeline-event-marker"/);
   assert.match(code, /markerForEvent\(event: PacketEvent\)/);
+  assert.match(code, /observedEventDescription\(selectedEvent\)/);
   assert.doesNotMatch(code, /credential submission|exfiltration|beacon|malicious|severity.*marker/i);
 });
 

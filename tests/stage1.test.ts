@@ -29,7 +29,7 @@ test('deterministic IDs are reproducible and duplicate records remain unique', (
 });
 
 test('signal presentation never adds demo-only findings', () => {
-  const upload = parseTextLog('user.log', '10.0.0.2 to 8.8.8.8 port 443 Protocol TCP');
+  const upload = parseTextLog('user.log', '2026-07-21T12:00:00Z 10.0.0.2 -> 8.8.8.8 dst_port=443 protocol=TCP length=64');
   const presented = selectPresentedSignals(upload.signals);
   assert.deepEqual(presented.map(signal => signal.id), upload.signals.map(signal => signal.id));
   assert.equal(presented.length, upload.signals.length);

@@ -406,7 +406,7 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
                 Paste structured log sample
               </h4>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                Paste raw console text, network logs, or packet events below to parse immediately.
+                One structured event per line. Required: UTC timestamp, source and destination IPv4, destination port, TCP/UDP protocol, and length. Source port is optional and remains unknown when omitted.
               </p>
             </div>
 
@@ -415,9 +415,11 @@ export default function EvidenceImport({ onDataParsed, isLoading, setIsLoading }
                 id="paste-textarea"
                 value={pastedLog}
                 onChange={(e) => setPastedLog(e.target.value)}
-                placeholder="e.g. 10.0.0.15 to 203.0.113.80 port 4444 Protocol TCP"
+                placeholder="2026-07-21T12:00:00Z 10.0.0.15 -> 203.0.113.80 dst_port=4444 protocol=TCP length=128"
+                aria-describedby="strict-text-grammar"
                 className="w-full h-[60px] bg-surface-muted border border-border-subtle focus:border-accent-primary/40 rounded-lg p-2 font-mono text-[11px] text-text-primary placeholder:text-text-muted focus:outline-none resize-none focus:ring-1 focus:ring-accent-primary/20"
               />
+              <code id="strict-text-grammar" className="block text-[9px] leading-relaxed text-text-muted">YYYY-MM-DDTHH:mm:ssZ SRC_IP -&gt; DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N</code>
             </div>
 
             {pastedLog.trim() && !authorizedChecked && (

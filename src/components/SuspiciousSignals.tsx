@@ -406,23 +406,7 @@ const DEMO_SIGNAL_MATCHERS: Record<string, (signal: SuspiciousSignal) => boolean
 };
 
 const getLinkedSignalIds = (displaySignal: SuspiciousSignal, sourceSignals: SuspiciousSignal[]) => {
-  const exact = sourceSignals.filter(signal => signal.id === displaySignal.id).map(signal => signal.id);
-  if (exact.length > 0) return exact;
-
-  const matcher = DEMO_SIGNAL_MATCHERS[displaySignal.id];
-  if (matcher) {
-    return sourceSignals.filter(matcher).map(signal => signal.id);
-  }
-
-  const displayTitle = normalizeSignalText(displaySignal.title);
-  const displayEvidence = normalizeSignalText(displaySignal.observedEvidence).slice(0, 80);
-  return sourceSignals
-    .filter(signal => {
-      const sourceTitle = normalizeSignalText(signal.title);
-      const sourceEvidence = normalizeSignalText(signal.observedEvidence);
-      return sourceTitle === displayTitle || (!!displayEvidence && sourceEvidence.includes(displayEvidence));
-    })
-    .map(signal => signal.id);
+  return sourceSignals.some(signal => signal.id === displaySignal.id) ? [displaySignal.id] : [];
 };
 
 const getPersistedStatus = (
@@ -697,7 +681,6 @@ export default function SuspiciousSignals({
       return;
     }
 
-    const confidenceScores: Record<string, number> = { high: 75, medium: 60, low: 45, info: 30 };
     const mapped = selectPresentedSignals(signals).map(sig => {
       const cleanedSig = sanitizeSignal(sig);
       const relatedFlows = resolveRelatedFlows(sig.relatedFlowIds, flows);
@@ -705,7 +688,7 @@ export default function SuspiciousSignals({
       return {
         ...cleanedSig,
         subtitle: cleanedSig.observedEvidence ? `${cleanedSig.observedEvidence.substring(0, 50)}...` : 'Deterministic observation',
-        confidenceScore: confidenceScores[cleanedSig.confidence] || 50,
+        confidenceScore: 0,
         observedSnippet: cleanedSig.observedEvidence ? cleanedSig.observedEvidence.substring(0, 30) : 'No evidence summary supplied',
         relatedFlowsCount: relatedFlows.length,
         flowsList: relatedFlows.map(flow => ({
@@ -1008,7 +991,7 @@ export default function SuspiciousSignals({
                   <button 
                     onClick={() => {
                       const csvRows = ['id,title,severity,confidence,category,status,firstSeen'];
-                      enrichedSignals.forEach(s => csvRows.push(`"${s.id}","${s.title}","${s.severity}","${s.confidenceScore}%","${s.category}","${s.status}","${s.firstSeenTime}"`));
+                      enrichedSignals.forEach(s => csvRows.push(`"${s.id}","${s.title}","${s.severity}","${s.confidence}","${s.category}","${s.status}","${s.firstSeenTime}"`));
                       const blob = new Blob([csvRows.join('\n')], {type: 'text/csv'});
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
@@ -1129,7 +1112,7 @@ export default function SuspiciousSignals({
                       </div>
                       <div className="space-y-1">
                         <span className="block text-text-muted font-bold uppercase tracking-wider">Confidence</span>
-                        <span className="font-mono text-text-primary font-semibold">{sig.confidenceScore}%</span>
+                        <span className="font-mono text-text-primary font-semibold uppercase">{sig.confidence}</span>
                       </div>
                       <div className="space-y-1">
                         <span className="block text-text-muted font-bold uppercase tracking-wider">Related flows</span>
@@ -1189,6 +1172,15 @@ export default function SuspiciousSignals({
                         id={`signal-row-${sig.id}`}
                         key={sig.id}
                         onClick={() => handleSelectSignal(sig)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Review signal ${sig.title}`}
+                        aria-pressed={isSelected}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return;
+                          event.preventDefault();
+                          handleSelectSignal(sig);
+                        }}
                         className={`hover:bg-surface-muted/50 cursor-pointer transition-all ${
                           isSelected ? 'bg-accent-soft font-medium' : ''
                         }`}
@@ -1227,12 +1219,7 @@ export default function SuspiciousSignals({
 
                         {/* Confidence indicator column */}
                         <td className="py-3.5 px-4 whitespace-nowrap min-w-[95px]">
-                          <div className="space-y-1 w-16">
-                            <div className="font-mono text-[11px] text-text-primary font-semibold">{sig.confidenceScore}%</div>
-                            <div className="w-16 h-1 bg-surface-muted rounded-full overflow-hidden">
-                              <div className="bg-accent-primary h-full" style={{ width: `${sig.confidenceScore}%` }} />
-                            </div>
-                          </div>
+                          <span className="font-mono text-[11px] font-semibold uppercase text-text-primary">{sig.confidence}</span>
                         </td>
 
                         {/* Category column */}
@@ -1394,7 +1381,7 @@ export default function SuspiciousSignals({
 
                 {/* Confidence Badge */}
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-[9.5px] font-bold bg-surface-muted border border-border-subtle text-text-secondary">
-                  Confidence: {selectedSignal.confidenceScore}%
+                  Confidence: {selectedSignal.confidence}
                 </span>
 
                 {/* Status Badge */}
@@ -1409,14 +1396,6 @@ export default function SuspiciousSignals({
               </div>
             </div>
 
-            {/* Finding Summary Section */}
-            <div className="space-y-1.5 py-1 border-b border-border-subtle pb-3">
-              <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Finding summary</h4>
-              <p className="text-[11px] text-text-secondary leading-relaxed">
-                {FINDING_SUMMARIES[selectedSignal.id] || `An observation of ${selectedSignal.category.toLowerCase()} was recorded for this host. Review the observed evidence and corresponding telemetry below.`}
-              </p>
-            </div>
-
             {/* Observed Evidence Section - structured with compact table-like fields */}
             <div className="space-y-2 py-1 border-b border-border-subtle pb-3">
               <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Observed evidence</h4>
@@ -1424,36 +1403,13 @@ export default function SuspiciousSignals({
                 {redactSensitive(selectedSignal.observedEvidence)}
               </p>
 
-              {/* Structured Key/Value Rows */}
-              <div className="bg-surface-muted/20 border border-border-subtle/50 rounded-xl overflow-hidden divide-y divide-border-subtle/30 text-[10px] mt-2">
-                <div className="flex justify-between items-center px-3 py-1.5">
-                  <span className="text-text-muted">Source host</span>
-                  <span className="font-mono text-text-primary font-semibold">10.0.0.15</span>
-                </div>
-
-                <div className="flex justify-between items-center px-3 py-1.5">
-                  <span className="text-text-muted">Target / Destination</span>
-                  <span className="font-mono text-text-primary font-semibold text-right truncate max-w-[200px]" title={selectedSignal.observedSnippet}>
-                    {redactSensitive(selectedSignal.observedSnippet)}
-                  </span>
-                </div>
-
-                {selectedSignal.metrics && selectedSignal.metrics.map((m, idx) => (
-                  <div key={idx} className="flex justify-between items-center px-3 py-1.5">
-                    <span className="text-text-muted">{m.label}</span>
-                    <span className="font-mono text-text-primary font-semibold text-right truncate max-w-[200px]" title={m.value}>
-                      {redactSensitive(m.value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
             </div>
 
             {/* Analyst Interpretation - neutral & forensic */}
             <div className="space-y-1.5 py-1 border-b border-border-subtle pb-3">
               <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Analyst interpretation</h4>
               <p className="text-[11px] leading-relaxed text-text-secondary">
-                {ANALYST_INTERPRETATIONS[selectedSignal.id] || selectedSignal.interpretation}
+                {selectedSignal.interpretation || 'No deterministic interpretation was recorded.'}
               </p>
             </div>
 
@@ -1464,7 +1420,7 @@ export default function SuspiciousSignals({
                 <span>What this does NOT prove</span>
               </h4>
               <p className="text-[11px] text-text-secondary leading-relaxed">
-                {WHAT_IT_DOES_NOT_PROVE[selectedSignal.id] || "This observation does not confirm endpoint compromise or unauthorized activity on its own. Similar patterns can also result from legitimate services or resolver behaviors."}
+                {selectedSignal.whatItDoesNotProve || 'No limitation statement was recorded.'}
               </p>
             </div>
 
@@ -1621,16 +1577,7 @@ export default function SuspiciousSignals({
               <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
                 Recommended defensive checks
               </h4>
-              <ul className="text-[11px] text-text-secondary leading-relaxed space-y-1.5 list-disc pl-4.5">
-                {(DEFENSIVE_CHECKS[selectedSignal.id] || [
-                  'Confirm whether the destination/domain is expected.',
-                  'Review DNS query logs for surrounding activity.',
-                  'Compare with endpoint process or scheduled task telemetry.',
-                  'Add independently reviewed findings to the report.'
-                ]).map((check, idx) => (
-                  <li key={idx} className="marker:text-text-muted">{check}</li>
-                ))}
-              </ul>
+              <p className="text-[11px] leading-relaxed text-text-secondary">{selectedSignal.recommendedDefensiveCheck || 'No defensive check was recorded.'}</p>
             </div>
 
             {/* Workflow Action Buttons at the bottom */}

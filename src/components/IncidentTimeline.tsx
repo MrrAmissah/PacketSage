@@ -27,6 +27,20 @@ function timelineTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(11, 19);
 }
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function timelineDate(value: string): { key: string; label: string } {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return { key: `unavailable:${value}`, label: 'Recorded date unavailable' };
+  }
+  const isoDate = date.toISOString().slice(0, 10);
+  return {
+    key: isoDate,
+    label: `${MONTH_LABELS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} UTC`,
+  };
+}
+
 function relativeTimelineTime(value: string, startTime: number | null): string {
   const eventTime = new Date(value).getTime();
   if (startTime === null || Number.isNaN(eventTime)) return 'offset unknown';
@@ -118,6 +132,12 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
     if (!validTimes.length) return 'Unavailable';
     return `${new Date(Math.min(...validTimes)).toISOString().slice(11, 19)} – ${new Date(Math.max(...validTimes)).toISOString().slice(11, 19)} UTC`;
   }, [visibleEvents]);
+  const visibleDateGroups = useMemo(() => Array.from(new Map(visibleEvents.map(event => {
+    const group = timelineDate(event.timestamp);
+    return [group.key, group] as const;
+  })).values()), [visibleEvents]);
+  const singleVisibleDate = visibleDateGroups.length === 1 ? visibleDateGroups[0] : null;
+  const showDateSeparators = visibleDateGroups.length > 1;
   const visibleLinkedFlowCount = useMemo(() => new Set(visibleEvents.flatMap(event => flowsForEvent(event.id, flows).map(flow => flow.id))).size, [visibleEvents, flows]);
   const visibleLinkedSignalCount = useMemo(() => new Set(visibleEvents.flatMap(event => signalsForEvent(event.id, signals).map(signal => signal.id))).size, [visibleEvents, signals]);
   const filtersActive = Boolean(search || protocolFilter !== 'ALL' || serviceFilter !== 'ALL' || sourceFilter !== 'ALL' || timeFilter !== 'ALL');
@@ -162,23 +182,41 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
 
       <div className={`grid gap-5 ${selectedEvent ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
         <div className="min-w-0">
-          <div className="mb-3 flex items-center justify-between gap-2 border-b border-border-subtle/60 px-1 pb-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-text-primary">Capture session reconstruction</h2>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-1 border-b border-border-subtle/60 px-1 pb-2">
+            <div className="min-w-0">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-text-primary">Capture session reconstruction</h2>
+              {singleVisibleDate && (
+                <time data-testid="timeline-session-date" dateTime={singleVisibleDate.key} className="mt-1 block text-[10px] text-text-muted">
+                  Recorded on {singleVisibleDate.label}
+                </time>
+              )}
+            </div>
             <span className="shrink-0 font-mono text-[10px] text-text-muted">{visibleEvents.length} observed event{visibleEvents.length === 1 ? '' : 's'}</span>
           </div>
         <ol className="space-y-2" aria-label="Timeline events" data-testid="connected-incident-timeline">
           {visibleEvents.map((event, index) => {
             const exactFlowCount = flowsForEvent(event.id, flows).length;
             const exactSignalCount = signalsForEvent(event.id, signals).length;
+            const eventDate = timelineDate(event.timestamp);
+            const previousDate = index > 0 ? timelineDate(visibleEvents[index - 1].timestamp) : null;
+            const beginsDateGroup = showDateSeparators && (!previousDate || previousDate.key !== eventDate.key);
             const { Icon: MarkerIcon, style: markerStyle } = markerForEvent(event);
             const isFirst = index === 0;
             const isLast = index === visibleEvents.length - 1;
             const isSelected = selectedEventId === event.id;
             return (
-              <li key={event.id} className="grid min-h-[4.5rem] grid-cols-[3.4rem_2.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[5rem_2.5rem_minmax(0,1fr)] sm:gap-3">
+              <React.Fragment key={event.id}>
+              {beginsDateGroup && (
+                <li data-testid="timeline-date-separator" className="grid grid-cols-[3.4rem_2.5rem_minmax(0,1fr)] items-center gap-2 py-1 sm:grid-cols-[5rem_2.5rem_minmax(0,1fr)] sm:gap-3">
+                  <span aria-hidden="true" />
+                  <span className="h-px bg-border-subtle" aria-hidden="true" />
+                  <time dateTime={eventDate.key} className="text-[9px] font-bold uppercase tracking-wider text-text-muted">{eventDate.label}</time>
+                </li>
+              )}
+              <li className="grid min-h-[4.25rem] grid-cols-[3.4rem_2.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[5rem_2.5rem_minmax(0,1fr)] sm:gap-3">
                 <time className="flex min-w-0 flex-col justify-center text-right font-mono" dateTime={event.timestamp}>
                   <span className="truncate text-[10px] font-bold text-text-primary sm:text-[11px]">{timelineTime(event.timestamp)}</span>
-                  <span className="mt-0.5 hidden text-[9px] text-text-muted sm:block">{relativeTimelineTime(event.timestamp, captureStartTime)}</span>
+                  <span className="mt-0.5 whitespace-nowrap text-[8px] text-text-muted sm:text-[9px]">{relativeTimelineTime(event.timestamp, captureStartTime)}</span>
                 </time>
                 <div className="relative flex w-10 shrink-0 items-center justify-center" aria-hidden="true" data-testid="timeline-marker-column">
                   <span data-testid="timeline-spine-segment" className={`absolute w-0.5 bg-border-subtle dark:bg-slate-700 ${isFirst ? 'top-1/2' : 'top-0'} ${isLast ? 'bottom-1/2' : 'bottom-0'}`} />
@@ -186,11 +224,22 @@ export default function IncidentTimeline({ events, flows = [], signals = [], foc
                     <MarkerIcon size={14} className="stroke-[2.5]" />
                   </span>
                 </div>
-                <button id={`timeline-event-${event.id}`} type="button" onClick={() => setSelectedEventId(event.id)} aria-pressed={isSelected} className={`min-w-0 w-full rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary ${isSelected ? 'border-accent-primary bg-accent-soft' : 'border-border-subtle bg-surface hover:bg-surface-muted/40'}`}>
-                  <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Activity aria-hidden="true" size={13} className="text-accent-primary" /><code className="text-[10px] text-text-muted">{event.id}</code><span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-secondary">{event.protocol}</span>{event.service && <span className="text-[10px] text-text-muted">{event.service}</span>}</div><p className="mt-2 text-xs font-semibold text-text-primary">{observedEventLabel(event)}</p><p className="mt-1 text-[11px] text-text-secondary">{event.info || 'No decoded description was recorded.'}</p><p className="mt-2 font-mono text-[10px] text-text-muted">{endpoint(event.sourceIp, event.sourcePort)} → {endpoint(event.destinationIp, event.destinationPort)}</p></div><time className="shrink-0 font-mono text-[10px] text-text-muted" dateTime={event.timestamp}>{timestamp(event.timestamp)}</time></div>
-                  <p className="mt-3 text-[9px] text-text-muted">Exact relationships: {exactFlowCount} flow{exactFlowCount === 1 ? '' : 's'} · {exactSignalCount} signal{exactSignalCount === 1 ? '' : 's'}</p>
+                <button data-testid="timeline-event-card" data-event-id={event.id} id={`timeline-event-${event.id}`} type="button" onClick={() => setSelectedEventId(event.id)} aria-pressed={isSelected} className={`min-w-0 w-full rounded-xl border p-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary ${isSelected ? 'border-accent-primary bg-accent-soft' : 'border-border-subtle bg-surface hover:bg-surface-muted/40'}`}>
+                  <div className="grid min-w-0 gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)]">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:col-start-1 sm:row-start-1">
+                      <Activity aria-hidden="true" size={13} className="shrink-0 text-accent-primary" />
+                      <code className="break-all text-[10px] text-text-muted">{event.id}</code>
+                      <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-secondary">{event.protocol}</span>
+                      {event.service && <span className="text-[10px] text-text-muted">{event.service}</span>}
+                    </div>
+                    <p data-testid="timeline-event-route" className="min-w-0 break-words font-mono text-[10px] text-text-muted [overflow-wrap:anywhere] sm:col-start-2 sm:row-start-1 sm:text-right">{endpoint(event.sourceIp, event.sourcePort)} → {endpoint(event.destinationIp, event.destinationPort)}</p>
+                    <p className="text-xs font-semibold text-text-primary sm:col-start-1 sm:row-start-2">{observedEventLabel(event)}</p>
+                    <p className="line-clamp-2 text-[11px] leading-relaxed text-text-secondary sm:col-start-1 sm:row-start-3">{event.info || 'No decoded description was recorded.'}</p>
+                    <p data-testid="timeline-event-relationships" className="text-[9px] text-text-muted sm:col-start-2 sm:row-start-3 sm:self-end sm:text-right">{exactFlowCount} related flow{exactFlowCount === 1 ? '' : 's'} · {exactSignalCount} signal{exactSignalCount === 1 ? '' : 's'}</p>
+                  </div>
                 </button>
               </li>
+              </React.Fragment>
             );
           })}
           {!visibleEvents.length && <li className="rounded-xl border border-dashed border-border-subtle bg-surface p-10 text-center text-xs text-text-muted">No observed timeline events match these filters.</li>}

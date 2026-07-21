@@ -76,7 +76,7 @@ test('Architecture spec labels future architecture without presenting it as acti
 
 test('Architecture documentation and product navigation agree', () => {
   assert.match(source('README.md'), /\*\*Architecture Spec\*\*: Shows the implemented browser, serverless and model-provider boundaries/);
-  assert.match(source('docs/PRODUCT_SPEC.md'), /### 4\.11 Architecture Spec/);
+  assert.match(source('docs/ROADMAP.md'), /in-product Architecture Spec/);
   assert.match(source('docs/TECHNICAL_SPEC.md'), /Packet Academy, and Architecture spec/);
   assert.match(source('docs/TECHNICAL_SPEC.md'), /Architecture spec is evidence-independent/);
   assert.match(source('docs/USER_GUIDE.md'), /Open \*\*Architecture spec\*\* at any time, including before loading evidence/);

@@ -1,114 +1,310 @@
 # PacketSage Technical Specification
 
-This document describes PacketSage’s current bounded browser workspace, serverless parsing and AI boundaries, and in-memory state models.
+This specification describes the shipped PacketSage production baseline at tag `build-week-stage-4a.2-production` and commit `e2d13e59c4fbf8f32e687110af3a91386af5d2ee`. It documents implemented behavior, not a commitment to future infrastructure.
 
----
+PacketSage is an evidence-grounded network investigation workspace that helps analysts use AI without allowing inference to masquerade as observed fact.
 
-## 1. Technical Stack
+## 1. Runtime architecture
 
-PacketSage is built on a modern, robust, full-stack JavaScript/TypeScript architecture:
+PacketSage is a React 19 and TypeScript workspace built with Vite. Tailwind CSS 4 supplies the tokenized visual system, `motion` supplies bounded interface transitions, and `lucide-react` supplies icons. An Express development/production server and Vercel serverless functions expose the parsing and model routes.
 
-### 1.1 Frontend Architecture
-* **Library/Framework**: React 19 with Vite.
-* **Styling**: Tailwind CSS 4 with semantic CSS variables.
-* **Animations**: Fluid layouts, entering fades, and interactive transitions using `motion` (imported from `motion/react`).
-* **Icons**: Standard SVG vector icons imported from `lucide-react`.
+The architecture deliberately keeps three processing paths distinct:
 
-### 1.2 Backend Architecture
-* **Server Framework**: Node.js with Express.
-* **Language**: TypeScript with type-stripping support.
-* **Server Dev / Build**: `tsx` for direct TypeScript execution in development; `esbuild` for bundling the production server into a single CJS bundle (`dist/server.cjs`).
-* **Model Integration**: The server-side `/api/investigate` endpoint calls GPT-5.6 with `process.env.OPENAI_API_KEY`, strict structured output, and bounded evidence packets. The separate `/api/analyze` endpoint calls Google Gemini with `process.env.GEMINI_API_KEY` for a bounded, citation-free whole-capture overview.
+```mermaid
+flowchart LR
+    subgraph B[Browser workspace]
+        U[Authorized operator]
+        C[PCAP or PCAPNG bytes]
+        D[Bounded native capture decoder]
+        S[Volatile normalized evidence state]
+        R[Deterministic rules and exact relationships]
+        UI[Investigation views and report compiler]
+        U --> C --> D --> S --> R --> UI
+    end
 
----
+    subgraph P[Server parsing path]
+        T[Supported text export]
+        PA[POST /api/parse]
+        A[Strict parser adapters]
+        T --> PA --> A
+    end
 
-## 2. Evidence State & Normalization Model
+    subgraph M[Server-only model paths]
+        I[POST /api/investigate]
+        O[POST /api/analyze and bounded summary reduction]
+        GPT[OpenAI gpt-5.6-sol]
+        GEM[Configured Gemini model]
+        I --> GPT
+        O -->|bounded and redacted summary| GEM
+    end
 
-All imported data is normalized into a standard, in-memory TypeScript schema.
-
-The canonical definitions live in `src/types.ts`. `UploadedEvidence` records deterministic identity, source format, parse mode, status, retention wording, and checksum state. `PacketEvent` records timestamp, endpoints, ports, protocol, observed length, and a bounded decoded description. `FlowSummary` records the observed five-tuple, interval, counts, direction/risk labels, and exact `relatedEvents` IDs. DNS, HTTP, and TLS records carry optional IDs plus explicit `relatedEventIds`. `SuspiciousSignal` carries observed evidence, separately worded interpretation/limitations/checks, and optional exact `relatedFlowIds`/`relatedEventIds`. `InvestigationRecord` and `CaptureOverviewRecord` retain schema, provider, model, generation time/state, evidence identity, and explicit report-inclusion state.
-
----
-
-## 3. Data Pipelines & Integration Flows
-
-### 3.1 Sample Dataset Pipeline
-For demonstration and training, a generated defensive-analysis dataset containing routine and review-worthy activity is packaged with PacketSage. **Load guided investigation sample** hydrates the same deterministic evidence state used by the normal workflow; it does not assert an intrusion or compromise.
-
-### 3.2 File Upload & Copy-Paste Flow
-When a user uploads or pastes a text-based packet capture export, PacketSage loops through registered parser adapters:
-* **CSV Adapter**: Splits comma-separated values exported from Wireshark, identifying standard headers (Time, Source, Destination, Protocol, Length, Info).
-* **Suricata EVE JSON Adapter**: Normalizes alerts, DNS queries, and flow data from JSON lines.
-* **Zeek Log TSV Adapter**: Normalizes tab-separated Zeek logs (dns.log, conn.log, http.log).
-* **TShark JSON Adapter**: Parses structured JSON extracts dumped via the command-line command `tshark -T json`.
-* **Strict Text Adapter**: Accepts one event per line using `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`. Timestamp, valid IPv4 endpoints, destination port, protocol, and length are required. Ports accept `0`–`65535`; explicit zero is recorded with `observed` provenance, while an omitted source port is stored as numeric `0` with `unknown` provenance and rendered as `unknown`. Incomplete or ambiguous lines fail with a line-specific error and produce no partial evidence.
-* **Port provenance**: Every normalized event and flow carries required source and destination port states: `observed`, `unknown`, or `not-applicable`. TCP/UDP header values remain observed even when zero; absent transport fields remain unknown; ICMP, non-initial fragments, and unsupported IP protocols are portless. The state participates in ambiguous-zero identity and grouping while ordinary observed nonzero identities remain stable.
-
-Raw `.pcap`/`.pcapng` files are decoded in the browser with bounded container, packet-count, and byte-size limits. The current decoder supports Ethernet and practical IPv4/IPv6 TCP, UDP, ICMP, and basic DNS metadata; unsupported link types and malformed or truncated captures fail without synthetic evidence.
-
-### 3.3 Signals & Verification Persistence
-Signals are calculated by deterministic rule evaluators. **Add finding to report** and **Dismiss noise** update local review state; running an AI investigation alone never marks a signal as reviewed.
-
-### 3.4 Exact Relationship Resolution
-Flow Explorer resolves events only from `flow.relatedEvents` and signals only when `signal.relatedFlowIds` contains the exact flow ID. Incident Timeline resolves flows only when a flow's `relatedEvents` contains the event ID and signals only when `signal.relatedEventIds` contains it. Shared IPs, partial five-tuples, prose, protocol names, severity, and temporary IDs never create navigation relationships.
-
----
-
-## 4. Synchronization & Rendering Architecture
-
-### 4.1 Report Builder Sync
-The Report Builder derives its document from parsed events, exact relationships, reviewed deterministic signals, explicitly included investigation records, and an independently included contextual overview. Flow and event inclusion controls are not part of the report model. Its readiness status indicates whether reviewed or explicitly included evidence-grounded content exists; optional overview text cannot make a report evidence-ready.
-
-### 4.2 InfoPopover Engine (Fixed Viewport Clamping)
-To solve clipping issues common to interactive dashboards (caused by tables, scroll containers, or page edges), the `InfoPopover` component uses a robust fixed-coordinate placement algorithm:
-1. **Dynamic Measurement**: Triggers on-open layout calculation via `.getBoundingClientRect()`.
-2. **Horizontal Viewport Clamping**: Clamps the horizontal coordinate between a viewport-safe margin to prevent left-side truncation on mobile, and right-side overflow on desktop.
-3. **Vertical Collision Switching**: Detects if rendering above the trigger cuts off at the top of the browser window. If so, it automatically flips downwards (and vice versa).
-4. **Listeners**: Binds scroll and resize listeners while open to maintain lock-on position. Includes window resize debounces and a clean-up lifecycle.
-
-### 4.3 App Theming & Print Layouts
-* **Theme**: Structured on Tailwind CSS utilizing CSS variables under the `@theme` block in `src/index.css`. The palette matches deep slates, cool navies, and high-contrast primary buttons.
-* **Print Stylesheet**: Implements rigorous `@media print` CSS overrides. When exporting or printing reports:
-  - The sidebar, primary navigation, guided journey, preview overlay, and interactive controls are hidden.
-  - Fixed viewport heights and overflow clipping are reset so the complete bounded report paginates.
-  - Evidence summary, checksum, reviewed findings, contextual overview, included assessments, citations, timeline, recommendations, provenance, and limitations print when available.
-  - `npm run verify:pdf` drives the guided sample, generates a real PDF, checks its signature/text, verifies early and late report markers, confirms multiple timeline rows, and rejects application-shell labels.
-
-### 4.4 Active Routes
-The active workspace routes are Command center, Import evidence, Flow explorer, Protocol intelligence, Signals & observations, Capture overview, Incident timeline, Report builder, Packet Academy, and Architecture spec. Architecture spec is evidence-independent and remains available before a case is loaded. At narrow widths every route is exposed through a labelled keyboard-operable menu that keeps the active route visible.
-
-### 4.5 Architecture Spec
-The in-product Architecture spec is a current-state technical blueprint rather than a promise of unavailable infrastructure. It distinguishes browser responsibilities from serverless/provider boundaries, traces the evidence-to-report pipeline, displays enforced limits from the shared runtime constants where available, documents completed Build Week stages, and labels authentication, persistent case storage, large-capture workers, enterprise policy controls, and external intelligence integrations as not implemented.
-
----
-
-## 5. Deployment & Build System
-
-### 5.1 Local Server Dev
-In development, the app runs using standard Vite middlewares nested inside Express:
-```bash
-npx tsx server.ts
+    A --> S
+    R -->|selected exact evidence only| I
+    S -->|selected capture-summary fields| O
+    I -->|validated assessment and provenance| UI
+    O -->|validated citation-free overview and provenance| UI
 ```
 
-### 5.2 Production Bundling
-Because Node.js requires rigorous ES Module relative path resolutions, PacketSage compiles the backend using `esbuild`:
-```bash
-vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs
+Raw capture bytes remain in browser memory. Supported text exports are sent to `/api/parse`. Model calls use separate server-only routes and derived, bounded data; neither route receives raw capture bytes or packet payloads.
+
+## 2. Normalized evidence model
+
+The canonical interfaces live in `src/types.ts`.
+
+- `UploadedEvidence` records evidence identity, source format, parse mode, status, size, retention wording and checksum state.
+- `PacketEvent` records time, endpoints, explicit port provenance, protocol, observed lengths and a bounded decoded description.
+- `FlowSummary` groups normalized endpoints and protocol state, with counts, timing, direction, risk label and exact `relatedEvents` IDs. Portless flows are valid and are not described as five-tuples.
+- `DnsRecord`, `HttpRecord` and `TlsRecord` may carry stable IDs and explicit `relatedEventIds`.
+- `SuspiciousSignal` separates observed evidence, deterministic interpretation, limitations and a recommended defensive check. Its relationships are exact event and flow IDs.
+- `InvestigationRecord` and `CaptureOverviewRecord` retain schema version, provider, actual model identifier, generation state/time, evidence or capture identity and report-inclusion state.
+
+### 2.1 Deterministic identity and relationships
+
+After parsing, `finalizeEvidenceIds` canonicalizes identity inputs and assigns stable event, flow, protocol-record and signal IDs. Repeated identical records receive occurrence indexes, so duplicates remain distinct while decoding the same ordered evidence produces stable identities. Port provenance participates in identities where a numeric zero would otherwise be ambiguous. This is deterministic application identity, not a claim of cryptographic collision impossibility or chain of custody.
+
+Relationships are parser-established and ID-based:
+
+```mermaid
+flowchart TD
+    E[Normalized event plus port provenance]
+    EI[Deterministic event ID]
+    F[Normalized flow]
+    FI[Deterministic flow ID]
+    P[DNS, HTTP or TLS record]
+    PI[Deterministic protocol-record ID]
+    SG[Deterministic signal]
+    SI[Deterministic signal ID]
+
+    E --> EI
+    EI -->|relatedEvents| F --> FI
+    EI -->|relatedEventIds| P --> PI
+    EI -->|relatedEventIds| SG --> SI
+    FI -->|relatedFlowIds| SG
+    FI --> X[Exact cross-view navigation]
+    EI --> X
+    PI --> X
+    SI --> X
 ```
-This produces a compiled, self-contained CommonJS backend file inside `dist/server.cjs` that safely resolves internal dependencies at build time and can be launched cleanly on standard containers:
-```bash
-node dist/server.cjs
+
+Shared IP addresses, prose, protocol names, severity, display order and temporary identifiers never create navigation relationships. Missing IDs yield unavailable or empty states; PacketSage does not substitute an unrelated flow.
+
+### 2.2 Explicit port provenance
+
+Every event and relevant flow records one of three states for each endpoint port:
+
+| State | Meaning | Example rendering |
+| --- | --- | --- |
+| `observed` | The numeric transport port was supplied or decoded, including literal zero | `10.0.0.15:443` or `10.0.0.15:0` |
+| `unknown` | A transport port could exist but the source did not supply it | `10.0.0.15:unknown` |
+| `not-applicable` | The record has no transport port | `10.0.0.15` |
+
+IPv6 endpoint rendering brackets addresses when a port or `unknown` suffix is present. Canonical IPv6 formatting uses lowercase hexadecimal, removes hextet-leading zeroes, and compresses the leftmost longest run of at least two zero hextets.
+
+```mermaid
+flowchart TD
+    H{Transport header or explicit field?}
+    H -->|Yes| Z[State observed]
+    Z --> Z1[Preserve numeric value including zero]
+    H -->|No| P{Portless protocol or non-initial fragment?}
+    P -->|Yes| N[State not-applicable]
+    P -->|No| K[State unknown with numeric placeholder 0]
+    Z1 --> ID[Display, grouping and identity]
+    N --> ID
+    K --> ID
 ```
 
----
+Numeric zero never universally means unknown.
 
-## 6. Current Implementation vs. Planned Production Target
+## 3. Evidence input paths
 
-| Architectural Component | Current implementation | Possible future extension |
-| :--- | :--- | :--- |
-| **Parsing Location** | Raw captures in the bounded browser decoder; supported text via the serverless endpoint | Isolated workers for larger captures if required |
-| **Parsing Engine** | Native PCAP/PCAPNG metadata decoder plus CSV, Suricata, Zeek, TShark and text adapters | Additional sandboxed decoders without weakening current bounds |
-| **Data Payload Store** | Transient React and Express RAM | Encrypted Cloud Storage (GCS / S3) |
-| **Case Retention** | Volatile (lost on page reload) | Durable database persistence (Firebase/Firestore) |
-| **User Management** | None (Single Session Sandbox) | Multi-tenant Firebase Authentication |
-| **AI Processing** | Separate server-side GPT-5.6 signal-investigation and Gemini capture-overview proxies | Isolated enterprise API gateway with organization policy and auditing |
+### 3.1 Guided sample
+
+**Load guided investigation sample** loads a generated defensive-analysis fixture through the same normalized evidence state used by imported evidence. It contains routine and review-worthy activity but does not assert intrusion or host compromise.
+
+### 3.2 Browser-decoded captures
+
+`.pcap` and `.pcapng` files are decoded in bounded browser memory. The implemented decoder supports Ethernet and raw-IP link types, IPv4 and IPv6, TCP, UDP, ICMP/ICMPv6, non-initial fragment representation, and basic DNS metadata. It handles PCAP/PCAPNG container byte order, interface references and timestamp resolution through the capture parser.
+
+Unsupported link types or network protocols do not create synthetic evidence. Empty, malformed, truncated, unsupported or oversized captures fail with bounded messages. PacketSage does not provide TCP stream reassembly, decryption, payload reconstruction, full protocol dissection or host-compromise confirmation.
+
+### 3.3 Server-parsed text evidence
+
+`POST /api/parse` accepts only validated requests and dispatches to these adapters:
+
+- Wireshark CSV;
+- Suricata EVE JSON lines;
+- Zeek TSV/log exports;
+- TShark JSON from `tshark -T json`;
+- strict structured text.
+
+The strict text grammar accepts one event per line:
+
+```text
+<UTC ISO-8601 timestamp> <source IPv4> -> <destination IPv4> [src_port=<0-65535>] dst_port=<0-65535> protocol=<TCP|UDP> length=<0-65535>
+```
+
+The timestamp, IPv4 endpoints, destination port, protocol and length are required. Source port is optional and becomes `unknown` when omitted. Unknown, duplicate or malformed fields fail the request with line-specific errors; no partial result is returned.
+
+### 3.4 Enforced limits
+
+Values in this table come from the production runtime constants.
+
+| Boundary | Enforced limit |
+| --- | ---: |
+| Browser capture size | 10 MiB |
+| Browser-decoded packets | 20,000 |
+| Text evidence | 2,000,000 characters |
+| Parsed records per collection | 10,000 |
+| File name | 255 characters |
+| Server parse request body | 3 MiB |
+| Investigation packet | 128 KiB |
+| Investigation flows | 25 |
+| Investigation events | 200 |
+| Investigation protocol records, combined | 50 |
+| Investigation text field | 2,000 characters |
+| Investigation ID | 160 characters |
+| Items per assessment section | 20 |
+| GPT investigation timeout | 45 seconds |
+| Capture Overview request | 180,000 characters before reduction |
+| Capture Overview summary | 15 flows, 20 DNS, 10 HTTP, 10 TLS, 20 signals, 12 protocol statistics |
+| Capture Overview timeout across configured/fallback attempts | 45 seconds |
+| Report timeline | 100 events |
+
+The body, schema and collection checks are cumulative controls. Truncation flags in the investigation packet disclose when related flows, events or protocol records were bounded.
+
+## 4. Evidence-grounded Investigation
+
+Evidence-grounded Investigation is a deliberate selected-signal action. The browser constructs one packet from the signal's exact `relatedFlowIds`, the referenced flow events and only protocol records explicitly linked to those included events.
+
+The packet includes one deterministic signal, at most 25 flows, 200 events and 50 combined DNS/HTTP/TLS records. Event `info`, raw summaries, capture bytes and packet payloads are structurally absent. Unrelated capture content is not sampled to fill unused capacity.
+
+`POST /api/investigate` validates the complete request schema and internal relationships, then calls OpenAI model `gpt-5.6-sol` through the Responses API with strict JSON-schema output, `store: false`, low reasoning effort and a 2,500-token output limit. The returned provider and actual model identifier are validated and retained with the result.
+
+```mermaid
+sequenceDiagram
+    actor Analyst
+    participant Browser
+    participant API as /api/investigate
+    participant OpenAI as OpenAI gpt-5.6-sol
+
+    Analyst->>Browser: Investigate with AI
+    Browser->>Browser: Resolve exact IDs and build bounded packet
+    Browser->>API: Validated packet only
+    API->>API: Enforce size, schema and relationships
+    API->>OpenAI: Strict structured request, store false
+    OpenAI-->>API: Assessment plus actual model provenance
+    API->>API: Validate schema and intersect citations
+    API-->>Browser: Safe assessment and provenance
+    Browser->>Browser: Retain only for matching evidence, signal and packet
+```
+
+Validated output is rendered as:
+
+- Assessment summary;
+- Observed evidence;
+- Analyst inference;
+- Uncertainty / missing evidence;
+- Recommended next investigative steps.
+
+An observed-evidence or inference item survives only when it retains at least one citation from the supplied evidence-ID set. Unsupported IDs are removed without substitution. The model cannot modify normalized evidence or deterministic signals, and no fabricated local fallback appears after failure.
+
+### 4.1 Request isolation
+
+Investigation requests use a monotonic request ID, signal ID, deterministic packet identity and `AbortController`. Starting a different request invalidates the prior request; duplicate active requests for the same context are blocked. A completion is accepted only if its request, signal and packet identities still match the active context. Cancelled, stale, duplicate, retried and out-of-order responses are ignored rather than displayed in a different investigation.
+
+The server relays client disconnects to the provider request and enforces its own timeout. Validation, upstream, timeout and malformed-output failures return bounded client-safe errors without raw provider errors, stack traces, environment details, credentials or packet content.
+
+## 5. Capture Overview
+
+Capture Overview is an optional whole-capture orientation capability, separate from Evidence-grounded Investigation. `POST /api/analyze` receives a capture identity and a bounded client summary. The server normalizes and truncates selected fields, applies targeted credential-pattern redaction to bounded text, and sends only that reduced summary to the configured server-side Gemini model.
+
+`GEMINI_MODEL` may provide an ordered configured model list; the server retains the actual successful provider and model with the result. Fallback candidates are implementation choices, not permanent product guarantees. Canonical architecture wording is:
+
+> Capture Overview uses the configured server-side Gemini model, and each retained result records its actual provider and model provenance.
+
+The response schema requires orientation, traffic-pattern explanation, beginner and technical perspectives, triage questions, recommended checks, confidence and limitations. It is citation-free, cannot create or modify deterministic findings, is never merged into GPT assessment state and is never presented as observed evidence or model consensus.
+
+The browser maintains one active overview request, aborts it when capture identity changes or the component unmounts, and accepts a response only when both its request sequence and capture identity remain current. Failure produces an honest retry state with no fabricated fallback.
+
+## 6. Report lifecycle
+
+Report Builder compiles one shared deterministic model consumed by on-screen Preview, Markdown and Print/PDF.
+
+```mermaid
+flowchart LR
+    DS[Deterministic signals]
+    RV[Analyst review]
+    IR[Retained GPT assessment]
+    II[Explicit assessment inclusion]
+    CO[Retained Capture Overview]
+    CI[Explicit contextual-note inclusion]
+    RM[Shared report model]
+    PV[Preview]
+    MD[Markdown]
+    PDF[Print or PDF]
+
+    DS --> RV --> RM
+    IR --> II --> RM
+    CO --> CI --> RM
+    RM --> PV
+    RM --> MD
+    RM --> PDF
+```
+
+- Deterministic findings enter only after **Add finding to report**.
+- Completed GPT assessments default to excluded and require a separate explicit inclusion action.
+- Capture Overview defaults to excluded and requires **Include overview as contextual note**.
+- A contextual overview cannot make a report evidence-ready and is labelled as non-evidence-linked.
+- Report output discloses evidence identity, checksum state, exact finding relationships, assessment citations and model provenance where available.
+
+The report is a draft investigation aid, not a chain-of-custody system or court-certified forensic product.
+
+## 7. Volatile state and routes
+
+Active evidence, signal-review overrides, assessment records, Capture Overview, report details, inclusion state and exact-navigation scope live in the current React session. Replacing evidence or clearing the case resets that state; page reload also clears it. Theme and guided-tour completion preferences may persist in local storage.
+
+The active workspace routes are Command center, Import evidence, Flow explorer, Protocol intelligence, Signals & observations, Capture overview, Incident timeline, Report builder, Packet Academy, and Architecture spec. The Architecture spec is evidence-independent. At narrow widths, a labelled keyboard-operable menu exposes every active route.
+
+## 8. Build and deployment
+
+Local development runs Express with Vite middleware:
+
+```bash
+npm run dev
+```
+
+The development and bundled Express server binds to `0.0.0.0:3000`. The production build creates the browser bundle, bundled Express server and parser module:
+
+```bash
+npm run build
+```
+
+Equivalent build steps are:
+
+```text
+vite build
+esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs
+esbuild src/lib/parser.ts --bundle --platform=node --format=esm --outfile=dist/parser.mjs
+```
+
+`npm run start` launches `dist/server.cjs` for a conventional Node deployment. On Vercel, `api/health.ts`, `api/parse.ts`, `api/investigate.ts` and `api/analyze.ts` run as serverless functions while Vite assets are served from `dist`. The checked-in `vercel.json` uses `npm install`, `npm run build`, the `dist` output directory and a SPA rewrite; `/api/parse` includes the built parser module.
+
+`OPENAI_API_KEY`, `GEMINI_API_KEY` and optional `GEMINI_MODEL` are server-only configuration. Credential names or values must never receive a `VITE_` prefix. Only `VITE_APP_ENV` is intended for browser exposure.
+
+## 9. Verification
+
+The frozen production baseline passed 333/333 tests. A new branch should run its current suite rather than assume the frozen count:
+
+```bash
+npm test
+npm run lint
+npm run build
+npm audit
+npm audit --omit=dev
+```
+
+`npm run verify:pdf` exercises the guided sample and validates a generated PDF for report markers, content and absence of application-shell labels.
+
+## 10. Explicit non-capabilities
+
+The current product does not implement authentication, durable cases, multi-user collaboration, SIEM integration, large-capture workers, progressive parsing, external intelligence enrichment, cross-capture correlation, enterprise chain-of-custody workflows or private/on-premise packaging. These are future possibilities, not hidden or partially shipped architecture.

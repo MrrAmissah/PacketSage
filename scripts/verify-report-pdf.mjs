@@ -12,7 +12,16 @@ const session = `packetsage-print-${process.pid}`;
 mkdirSync(dirname(pdfPath), { recursive: true });
 
 function browser(...args) {
-  return execFileSync('agent-browser', ['--session', session, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    return execFileSync('agent-browser', ['--session', session, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30_000,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message.split('\n')[0] : 'unknown browser failure';
+    throw new Error(`PDF browser step failed (${args.join(' ')}): ${detail}`);
+  }
 }
 
 function assert(condition, message) {
@@ -33,6 +42,8 @@ try {
   browser('wait', '--load', 'networkidle');
   browser('find', 'role', 'button', 'click', '--name', 'Load guided investigation sample');
   browser('wait', '--text', 'Command center');
+  browser('wait', '[data-testid="contextual-spotlight-tour"]');
+  browser('find', 'role', 'button', 'click', '--name', 'Close guided tour', '--exact');
   browser('find', 'role', 'button', 'click', '--name', 'Report builder', '--exact');
   browser('wait', '--text', 'NETWORK EVIDENCE REPORT');
   browser('find', 'role', 'button', 'click', '--name', 'Edit report details');
@@ -71,22 +82,35 @@ try {
   assert(!text.includes('Import evidence'), 'Application navigation leaked into print output.');
   assert(!text.includes('Packet Academy'), 'Application shell leaked into print output.');
   assert(!text.includes('stages complete'), 'Guided journey leaked into print output.');
-  const pages = text.split('\f').map(page => page.trim()).filter(Boolean);
-  const nearEmptyPage = pages.findIndex(page => page.replace(/\s/g, '').length < 40);
+  const pages = text.split('\f').map(page => page.trim());
+  if (!pages.at(-1)) pages.pop();
+  const blankPage = pages.findIndex(page => page.length === 0);
+  assert(blankPage === -1, `Printed page ${blankPage + 1} is blank.`);
+  const nearEmptyPage = pages.findIndex(page => page.replace(/\s/g, '').length < 140);
   assert(nearEmptyPage === -1, `Printed page ${nearEmptyPage + 1} contains only a heading or near-empty content.`);
   const timelinePage = pages.find(page => page.includes('Timeline'));
   assert(timelinePage && /evt-[a-z0-9-]+/.test(timelinePage), 'Timeline heading was orphaned from its first event row.');
+  for (const heading of ['Executive summary', 'Findings', 'Contextual overview', 'AI-assisted investigation assessments', 'Case-specific recommendations', 'Provenance and limitations']) {
+    const page = pages.find(candidate => candidate.includes(heading));
+    const followingContent = page?.slice((page.indexOf(heading) || 0) + heading.length).replace(/\s/g, '').length || 0;
+    assert(followingContent >= 30, `${heading} was orphaned from meaningful following content.`);
+  }
   const eventIds = new Set(text.match(/evt-[a-z0-9-]+/g) || []);
   assert(eventIds.size > 8, `Expected more than 8 printed timeline events, found ${eventIds.size}.`);
   assert(eventIds.size === 40, `Expected all 40 bounded timeline events, found ${eventIds.size}.`);
   const repeatedTimelineHeaders = (text.match(/Recorded time \/ Evidence ID/g) || []).length;
   assert(repeatedTimelineHeaders >= 2, `Expected repeated Timeline headers, found ${repeatedTimelineHeaders}.`);
+  assert(!text.includes('Replay guided tour'), 'Guided-tour content leaked into print output.');
+  assert(!/Step [1-4] of 4/.test(text), 'Contextual-tour content leaked into print output.');
   if (includedAssessment) {
     assert(text.includes('Assessment summary'), 'Included assessment summary is missing.');
     assert(text.includes('Observed evidence'), 'Included assessment observed evidence is missing.');
     assert(text.includes('Analyst inference'), 'Included assessment inference is missing.');
     assert(text.includes('Uncertainty / missing evidence'), 'Included assessment uncertainty is missing.');
     assert(text.includes('Recommended next investigative steps'), 'Included assessment next steps are missing.');
+    assert(text.includes('Provider:'), 'Included assessment provider provenance is missing.');
+    assert(text.includes('Model:'), 'Included assessment model provenance is missing.');
+    assert(/(?:flow|evt|dns|http|tls)-[a-z0-9-]+/.test(text), 'Included assessment evidence citations are missing.');
   }
   process.stdout.write(`Verified report-only PDF: ${pdfPath} (${pages.length} pages, ${eventIds.size} timeline events, ${repeatedTimelineHeaders} repeated Timeline headers, assessment ${includedAssessment ? 'included' : 'excluded'})\n`);
 } finally {

@@ -202,12 +202,43 @@ body {
     max-width: none !important;
     height: auto !important;
     overflow: visible !important;
+    padding: 0 !important;
     border: 0 !important;
     box-shadow: none !important;
     color: #0f172a !important;
     background: #fff !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  .report-document > * + * {
+    margin-top: 1.25rem !important;
+  }
+
+  .report-document [data-testid="included-investigation"] {
+    padding: 0.625rem !important;
+  }
+
+  .report-document [data-testid="included-investigation"] > * + * {
+    margin-top: 0.625rem !important;
+  }
+
+  .report-document [aria-labelledby="report-recommendations"] li {
+    padding: 0.625rem !important;
+  }
+
+  .report-document [data-report-marker="late"] > * + * {
+    margin-top: 0.5rem !important;
+  }
+
+  .report-document [data-report-marker="late"] > p:last-child {
+    padding-top: 0.5rem !important;
+  }
+
+  .report-document [data-report-boundary="relationships"],
+  .report-document [data-report-boundary="timeline"] {
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
   .report-document tr {

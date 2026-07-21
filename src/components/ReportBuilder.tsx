@@ -10,6 +10,7 @@ import {
   type ReportDetails,
   type ReportDetailsRecord,
 } from '../lib/reportDetails';
+import { writeReportMarkdown, type ReportClipboardResult } from '../lib/reportClipboard';
 import { PacketSageIcon } from './Logo';
 
 interface ReportBuilderProps {
@@ -200,7 +201,8 @@ export function ReportDocument({ report }: ReportDocumentProps) {
             <div><h5 className="font-bold text-text-primary">Beginner perspective</h5><p>{report.contextualOverview.result.beginnerExplanation}</p></div>
             <div><h5 className="font-bold text-text-primary">Technical perspective</h5><p>{report.contextualOverview.result.technicalExplanation}</p></div>
             <div><h5 className="font-bold text-text-primary">Analyst triage questions</h5><p>{report.contextualOverview.result.analystQuestions}</p></div>
-            <details className="text-[10px] text-text-muted"><summary className="cursor-pointer font-semibold">AI provenance</summary><p className="mt-1">Provider: {report.contextualOverview.provider} · Model: {report.contextualOverview.model} · Schema: {report.contextualOverview.schemaVersion} · Generated: {report.contextualOverview.createdAt} · Capture: {report.contextualOverview.captureIdentity}</p></details>
+            <details className="text-[10px] text-text-muted print:hidden"><summary className="cursor-pointer font-semibold">AI provenance</summary><p className="mt-1">Provider: {report.contextualOverview.provider} · Model: {report.contextualOverview.model} · Schema: {report.contextualOverview.schemaVersion} · Generated: {report.contextualOverview.createdAt} · Capture: {report.contextualOverview.captureIdentity}</p></details>
+            <p className="hidden text-[9px] text-text-muted print:block">AI provenance — Provider: {report.contextualOverview.provider} · Model: {report.contextualOverview.model} · Schema: {report.contextualOverview.schemaVersion} · Generated: {report.contextualOverview.createdAt} · Capture: {report.contextualOverview.captureIdentity}</p>
           </article>
         )}
       </section>
@@ -219,7 +221,8 @@ export function ReportDocument({ report }: ReportDocumentProps) {
               <div className="mt-1 flex flex-wrap gap-3 font-mono text-[9px] text-text-muted">
                 <span>Signal: {record.signalId}</span><span>Packet: {record.packetIdentity}</span>
               </div>
-              <details className="mt-2 text-[9px] text-text-muted"><summary className="cursor-pointer font-semibold">AI provenance</summary><p>Provider: {record.provider} · Model: {record.model} · Schema: {record.schemaVersion} · Generated: {record.createdAt} · Evidence: {record.selectedEvidenceId}</p></details>
+              <details className="mt-2 text-[9px] text-text-muted print:hidden"><summary className="cursor-pointer font-semibold">AI provenance</summary><p>Provider: {record.provider} · Model: {record.model} · Schema: {record.schemaVersion} · Generated: {record.createdAt} · Evidence: {record.selectedEvidenceId}</p></details>
+              <p className="mt-2 hidden text-[9px] text-text-muted print:block">AI provenance — Provider: {record.provider} · Model: {record.model} · Schema: {record.schemaVersion} · Generated: {record.createdAt} · Evidence: {record.selectedEvidenceId}</p>
               <h5 className="mt-3 font-bold text-text-primary">Assessment summary</h5>
               <p className="mt-1 leading-relaxed">{record.assessment.summary}</p>
             </header>
@@ -252,8 +255,8 @@ export function ReportDocument({ report }: ReportDocumentProps) {
         <dl className="grid gap-2 sm:grid-cols-2">
           <div><dt className="font-semibold text-text-primary">Evidence identity</dt><dd className="font-mono text-[10px]">{report.evidence.checksum}</dd></div>
           <div><dt className="font-semibold text-text-primary">Parser mode</dt><dd>{report.evidence.parseMode}</dd></div>
-          <div className="sm:col-span-2"><dt className="font-semibold text-text-primary">Relationship boundary</dt><dd>Findings, events, flows, and citations are connected only through retained deterministic identifiers. AI inferences remain separately labelled and require independent validation.</dd></div>
-          <div className="sm:col-span-2"><dt className="font-semibold text-text-primary">Timeline boundary</dt><dd>{report.timelineTruncated ? `The bounded report contains ${report.timeline.length} of ${report.counts.events} events.` : `The bounded report contains all ${report.timeline.length} available events.`}</dd></div>
+          <div className="sm:col-span-2" data-report-boundary="relationships"><dt className="font-semibold text-text-primary">Relationship boundary</dt><dd>Findings, events, flows, and citations are connected only through retained deterministic identifiers. AI inferences remain separately labelled and require independent validation.</dd></div>
+          <div className="sm:col-span-2" data-report-boundary="timeline"><dt className="font-semibold text-text-primary">Timeline boundary</dt><dd>{report.timelineTruncated ? `The bounded report contains ${report.timeline.length} of ${report.counts.events} events.` : `The bounded report contains all ${report.timeline.length} available events.`}</dd></div>
         </dl>
         <p className="border-t border-border-subtle pt-3 text-[10px] text-text-muted">End of PacketSage evidence report draft.</p>
       </section>
@@ -274,7 +277,7 @@ export default function ReportBuilder({
   const [detailsDraft, setDetailsDraft] = useState<ReportDetails>({
     investigator: '', roleOrUnit: '', organization: '', caseReferenceId: '', scopeNotes: '',
   });
-  const [copied, setCopied] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<ReportClipboardResult | null>(null);
   const [generatedAt] = useState(() => new Date().toISOString());
   const [timeZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
@@ -305,9 +308,8 @@ export default function ReportBuilder({
   if (!report) return <div className="rounded-xl border border-border-subtle bg-surface p-6 text-sm text-text-muted">Import evidence before building a report.</div>;
 
   const copyMarkdown = async () => {
-    await navigator.clipboard.writeText(reportToMarkdown(report));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    setCopyFeedback(null);
+    setCopyFeedback(await writeReportMarkdown(navigator.clipboard, reportToMarkdown(report)));
   };
   const reportReady = report.counts.reviewedFindings > 0 || report.counts.includedAssessments > 0;
   const identityIncomplete = reportIdentityIncomplete(report.details);
@@ -331,10 +333,21 @@ export default function ReportBuilder({
         <div className="flex flex-wrap gap-2">
           <button ref={detailsTriggerRef} type="button" onClick={openDetails} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary"><Pencil aria-hidden="true" size={13} /> Edit report details</button>
           <button ref={previewTriggerRef} type="button" onClick={() => setPreviewOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-text-primary"><Eye size={13} /> Preview</button>
-          <button type="button" onClick={copyMarkdown} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-text-primary">{copied ? <Check size={13} /> : <Clipboard size={13} />} {copied ? 'Copied' : 'Copy Markdown'}</button>
+          <button type="button" onClick={copyMarkdown} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-text-primary">{copyFeedback?.ok ? <Check size={13} /> : <Clipboard size={13} />} {copyFeedback?.ok ? 'Copied' : 'Copy Markdown'}</button>
           <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-2 text-xs font-bold text-white"><Printer size={13} /> Print / PDF</button>
         </div>
       </div>
+
+      {copyFeedback && (
+        <p
+          data-testid="copy-markdown-status"
+          role={copyFeedback.ok ? 'status' : 'alert'}
+          aria-live="polite"
+          className={`rounded-lg border px-3 py-2 text-xs print:hidden ${copyFeedback.ok ? 'border-status-success/25 bg-status-success-bg text-status-success' : 'border-status-danger/25 bg-status-danger-bg text-status-danger'}`}
+        >
+          {copyFeedback.message}
+        </p>
+      )}
 
       <div className="rounded-lg border border-border-subtle bg-surface p-3 text-xs print:hidden" role="status">
         <span className="font-semibold text-text-primary">Report readiness: </span>

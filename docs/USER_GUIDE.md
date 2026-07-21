@@ -104,7 +104,13 @@ Assemble your investigation findings for stakeholders:
 
 ---
 
-## 6. Ending Your Session
+## 6. Understanding the Architecture
+
+Open **Architecture spec** at any time, including before loading evidence, to inspect PacketSage’s current browser and server boundaries. The view documents the implemented evidence-to-report pipeline, enforced capture, parsing, investigation and reporting limits, completed delivery stages, trust controls, and capabilities that remain explicitly deferred. Provider and model details appear as technical architecture rather than primary workflow labels.
+
+---
+
+## 7. Ending Your Session
 
 PacketSage keeps active evidence in the application session:
 * **Clearing Workspace**: Click **Clear Data** or reload the page to clear active evidence and generated analysis from the workspace.

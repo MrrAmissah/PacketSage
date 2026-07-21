@@ -70,14 +70,17 @@ Invokes GPT-5.6 for one selected signal using only its bounded evidence packet. 
 ### 4.7 Capture Overview
 Optionally invokes Google Gemini with a bounded whole-capture summary for orientation, traffic-pattern explanation, learning perspectives, and triage questions. This capability is separate from Evidence-grounded Investigation: it cannot create findings, is never observed evidence, has no PacketSage evidence citations, and enters the report only through explicit contextual-note inclusion.
 
-### 4.7 Incident Timeline
+### 4.8 Incident Timeline
 A chronological list of normalized events based on recorded timestamps. Event-to-flow and event-to-signal navigation uses only explicit IDs; shared IPs, partial tuples, prose, protocol labels, and temporary records cannot create a relationship.
 
-### 4.8 Report Builder
+### 4.9 Report Builder
 A structured document compiler that exposes report readiness from reviewed deterministic findings and explicitly included investigation assessments. The optional contextual overview never makes a report evidence-ready on its own. Flows and events have no orphan inclusion controls. Preview is an accessible modal, Markdown is copyable, and print/PDF renders the full bounded document without the application shell.
 
-### 4.9 Packet Academy
+### 4.10 Packet Academy
 An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles. It is designed to evaluate and sharpen defensive packet-analysis, reasoning, and evidence verification skills.
+
+### 4.11 Architecture Spec
+A product-facing technical blueprint of the implemented browser, serverless and model-provider boundaries. It documents the active evidence-to-report pipeline, enforced parsing and AI limits, completed delivery stages, trust controls, and explicitly deferred capabilities without presenting future architecture as current functionality.
 
 ---
 

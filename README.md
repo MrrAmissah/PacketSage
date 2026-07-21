@@ -47,6 +47,7 @@ To ensure professional forensic integrity, PacketSage operates on a strict **Evi
 8. **Incident Timeline**: Orders normalized events by recorded timestamp. Flow and signal navigation is enabled only for exact parser-established event relationships.
 9. **Report Builder**: Compiles deterministic findings and explicitly included assessments. Flow/event report controls are intentionally absent. Print/PDF renders the complete bounded report without application chrome; a capture overview appears only through explicit contextual-note inclusion.
 10. **Packet Academy**: An instructional training suite containing guided multiple-choice challenges based on simulated capture profiles to evaluate defensive reasoning skills.
+11. **Architecture Spec**: Shows the implemented browser, serverless and model-provider boundaries, current processing limits, evidence-to-report pipeline, trust controls, completed delivery stages, and clearly labelled deferred architecture.
 
 ---
 

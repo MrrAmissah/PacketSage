@@ -74,7 +74,10 @@ To solve clipping issues common to interactive dashboards (caused by tables, scr
   - `npm run verify:pdf` drives the guided sample, generates a real PDF, checks its signature/text, verifies early and late report markers, confirms multiple timeline rows, and rejects application-shell labels.
 
 ### 4.4 Active Routes
-The active workspace routes are Command center, Import evidence, Flow explorer, Protocol intelligence, Signals & observations, Capture overview, Incident timeline, Report builder, and Packet Academy. At narrow widths they are exposed through a labelled keyboard-operable menu that keeps the active route visible.
+The active workspace routes are Command center, Import evidence, Flow explorer, Protocol intelligence, Signals & observations, Capture overview, Incident timeline, Report builder, Packet Academy, and Architecture spec. Architecture spec is evidence-independent and remains available before a case is loaded. At narrow widths every route is exposed through a labelled keyboard-operable menu that keeps the active route visible.
+
+### 4.5 Architecture Spec
+The in-product Architecture spec is a current-state technical blueprint rather than a promise of unavailable infrastructure. It distinguishes browser responsibilities from serverless/provider boundaries, traces the evidence-to-report pipeline, displays enforced limits from the shared runtime constants where available, documents completed Build Week stages, and labels authentication, persistent case storage, large-capture workers, enterprise policy controls, and external intelligence integrations as not implemented.
 
 ---
 
@@ -107,4 +110,4 @@ node dist/server.cjs
 | **Data Payload Store** | Transient React and Express RAM | Encrypted Cloud Storage (GCS / S3) |
 | **Case Retention** | Volatile (lost on page reload) | Durable database persistence (Firebase/Firestore) |
 | **User Management** | None (Single Session Sandbox) | Multi-tenant Firebase Authentication |
-| **AI Processing** | Server-side evidence-scoped GPT-5.6 proxy | Isolated enterprise API gateway with auditing |
+| **AI Processing** | Separate server-side GPT-5.6 signal-investigation and Gemini capture-overview proxies | Isolated enterprise API gateway with organization policy and auditing |

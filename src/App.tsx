@@ -48,6 +48,7 @@ import SuspiciousSignals from './components/SuspiciousSignals';
 import IncidentTimeline from './components/IncidentTimeline';
 import ReportBuilder from './components/ReportBuilder';
 import LearningMode from './components/LearningMode';
+import ArchitectureRoadmap from './components/ArchitectureRoadmap';
 import CaptureOverview from './components/CaptureOverview';
 import GuidedSampleJourney from './components/GuidedSampleJourney';
 import { setCaptureOverviewInclusion } from './lib/captureOverview';
@@ -64,7 +65,7 @@ import {
 } from './lib/judgePath';
 import { createReportDetailsSession, type ReportDetailsRecord } from './lib/reportDetails';
 
-type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy';
+type TabType = 'overview' | 'import' | 'flows' | 'protocols' | 'signals' | 'capture-overview' | 'timeline' | 'report' | 'academy' | 'architecture';
 type ThemeMode = 'light' | 'dark' | 'system';
 
 export default function App() {
@@ -359,6 +360,8 @@ export default function App() {
         return <ReportBuilder data={parsedData} investigations={investigations} captureOverview={captureOverview} reportDetails={reportDetails} onReportDetailsChange={setReportDetails} signalStatusOverrides={signalStatusOverrides} />;
       case 'academy':
         return <LearningMode hasEvidence={!!parsedData} parsedData={parsedData} />;
+      case 'architecture':
+        return <ArchitectureRoadmap />;
       default:
         return <CommandCenter data={parsedData} investigationStatus={investigationStatus} onPrimaryAction={handleInvestigationStatusAction} onNavigate={(tab) => {
           if (tab === 'flows') setRelatedFlowScopeIds(null);
@@ -376,7 +379,7 @@ export default function App() {
           {/* Logo Heading */}
           <div className="flex items-center justify-between px-3 md:px-5 pb-2 md:pb-4 border-b border-[#1e293b]/40">
             <PacketSageLogo className="[&>span]:hidden md:[&>span]:block" iconClassName="w-7 h-7 md:w-8 md:h-8" forceLight={true} />
-            <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen} aria-controls="primary-navigation" aria-label={mobileNavOpen ? 'Close primary navigation' : 'Open primary navigation'} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-white md:hidden"><Menu aria-hidden="true" size={14} /><span>{activeTab === 'overview' ? 'Command center' : activeTab === 'import' ? 'Import evidence' : activeTab === 'flows' ? 'Flow explorer' : activeTab === 'protocols' ? 'Protocol intelligence' : activeTab === 'signals' ? 'Signals & observations' : activeTab === 'capture-overview' ? 'Capture overview' : activeTab === 'timeline' ? 'Incident timeline' : activeTab === 'report' ? 'Report builder' : 'Packet Academy'}</span></button>
+            <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen} aria-controls="primary-navigation" aria-label={mobileNavOpen ? 'Close primary navigation' : 'Open primary navigation'} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-white md:hidden"><Menu aria-hidden="true" size={14} /><span>{activeTab === 'overview' ? 'Command center' : activeTab === 'import' ? 'Import evidence' : activeTab === 'flows' ? 'Flow explorer' : activeTab === 'protocols' ? 'Protocol intelligence' : activeTab === 'signals' ? 'Signals & observations' : activeTab === 'capture-overview' ? 'Capture overview' : activeTab === 'timeline' ? 'Incident timeline' : activeTab === 'report' ? 'Report builder' : activeTab === 'architecture' ? 'Architecture spec' : 'Packet Academy'}</span></button>
           </div>
 
           {/* Navigation Items */}
@@ -391,6 +394,7 @@ export default function App() {
               { id: 'timeline', label: 'Incident timeline', icon: Activity, enabled: !!parsedData },
               { id: 'report', label: 'Report builder', icon: FileText, enabled: !!parsedData },
               { id: 'academy', label: 'Packet Academy', icon: BookOpen, enabled: true },
+              { id: 'architecture', label: 'Architecture spec', icon: Terminal, enabled: true },
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;

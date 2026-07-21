@@ -12,6 +12,7 @@ import type {
   InvestigationSignalEvidence,
   InvestigationTlsEvidence,
   PacketEvent,
+  PortState,
   SuspiciousSignal,
   TlsRecord,
 } from '../types.js';
@@ -45,6 +46,7 @@ export class InvestigationValidationError extends Error {
 const severities = new Set(['info', 'low', 'medium', 'high']);
 const confidences = new Set(['low', 'medium', 'high']);
 const directions = new Set(['inbound', 'outbound', 'internal']);
+const portStates = new Set<PortState>(['observed', 'unknown', 'not-applicable']);
 
 function boundedText(value: string, max = MAX_INVESTIGATION_TEXT_CHARACTERS): string {
   return value.slice(0, max);
@@ -71,8 +73,10 @@ function normalizeFlow(flow: FlowSummary, includedEventIds: ReadonlySet<string>)
     lastSeen: boundedText(flow.lastSeen, 64),
     sourceIp: boundedText(flow.sourceIp, 128),
     sourcePort: flow.sourcePort,
+    sourcePortState: flow.sourcePortState,
     destinationIp: boundedText(flow.destinationIp, 128),
     destinationPort: flow.destinationPort,
+    destinationPortState: flow.destinationPortState,
     protocol: boundedText(flow.protocol, 32),
     ...(flow.service ? { service: boundedText(flow.service, 64) } : {}),
     packetCount: flow.packetCount,
@@ -90,8 +94,10 @@ function normalizeEvent(event: PacketEvent): InvestigationEventEvidence {
     timestamp: boundedText(event.timestamp, 64),
     sourceIp: boundedText(event.sourceIp, 128),
     sourcePort: event.sourcePort,
+    sourcePortState: event.sourcePortState,
     destinationIp: boundedText(event.destinationIp, 128),
     destinationPort: event.destinationPort,
+    destinationPortState: event.destinationPortState,
     protocol: boundedText(event.protocol, 32),
     ...(event.service ? { service: boundedText(event.service, 64) } : {}),
     length: event.length,
@@ -256,6 +262,22 @@ function recordArray(value: unknown, message: string, maxItems: number): Record<
   return value.map(item => objectValue(item, message));
 }
 
+function portStateValue(value: unknown, message: string): PortState {
+  if (typeof value !== 'string' || !portStates.has(value as PortState)) {
+    throw new InvestigationValidationError(message);
+  }
+  return value as PortState;
+}
+
+function validatedPort(portValue: unknown, stateValue: unknown, label: string): { port: number; state: PortState } {
+  const port = numberValue(portValue, `Invalid ${label} port.`);
+  const state = portStateValue(stateValue, `Invalid ${label} port provenance.`);
+  if (!Number.isInteger(port) || port < 0 || port > 65_535 || (state !== 'observed' && port !== 0)) {
+    throw new InvestigationValidationError(`Invalid ${label} port evidence.`);
+  }
+  return { port, state };
+}
+
 export function validateInvestigationRequest(body: unknown): InvestigationEvidencePacket {
   let bytes: number;
   try {
@@ -273,20 +295,26 @@ export function validateInvestigationRequest(body: unknown): InvestigationEviden
   if (evidence.version !== '1') throw new InvestigationValidationError('Unsupported investigation evidence version.');
   const signalValue = objectValue(evidence.signal, 'A selected signal is required.');
 
-  const events: InvestigationEventEvidence[] = recordArray(evidence.events, 'Invalid investigation events.', MAX_INVESTIGATION_EVENTS).map(event => ({
-    id: stringValue(event.id, 'Invalid event ID.', MAX_INVESTIGATION_ID_CHARACTERS),
-    timestamp: stringValue(event.timestamp, 'Invalid event timestamp.', 64),
-    sourceIp: stringValue(event.sourceIp, 'Invalid event source.', 128),
-    sourcePort: numberValue(event.sourcePort, 'Invalid event source port.'),
-    destinationIp: stringValue(event.destinationIp, 'Invalid event destination.', 128),
-    destinationPort: numberValue(event.destinationPort, 'Invalid event destination port.'),
-    protocol: stringValue(event.protocol, 'Invalid event protocol.', 32),
-    ...(optionalStringValue(event.service, 'Invalid event service.', 64) ? { service: event.service as string } : {}),
-    length: numberValue(event.length, 'Invalid event length.'),
-    ...(event.capturedLength === undefined ? {} : { capturedLength: numberValue(event.capturedLength, 'Invalid captured length.') }),
-    ...(event.originalLength === undefined ? {} : { originalLength: numberValue(event.originalLength, 'Invalid original length.') }),
-    ...(optionalStringValue(event.sourceType, 'Invalid event source type.', 32) ? { sourceType: event.sourceType as string } : {}),
-  }));
+  const events: InvestigationEventEvidence[] = recordArray(evidence.events, 'Invalid investigation events.', MAX_INVESTIGATION_EVENTS).map(event => {
+    const sourcePort = validatedPort(event.sourcePort, event.sourcePortState, 'event source');
+    const destinationPort = validatedPort(event.destinationPort, event.destinationPortState, 'event destination');
+    return {
+      id: stringValue(event.id, 'Invalid event ID.', MAX_INVESTIGATION_ID_CHARACTERS),
+      timestamp: stringValue(event.timestamp, 'Invalid event timestamp.', 64),
+      sourceIp: stringValue(event.sourceIp, 'Invalid event source.', 128),
+      sourcePort: sourcePort.port,
+      sourcePortState: sourcePort.state,
+      destinationIp: stringValue(event.destinationIp, 'Invalid event destination.', 128),
+      destinationPort: destinationPort.port,
+      destinationPortState: destinationPort.state,
+      protocol: stringValue(event.protocol, 'Invalid event protocol.', 32),
+      ...(optionalStringValue(event.service, 'Invalid event service.', 64) ? { service: event.service as string } : {}),
+      length: numberValue(event.length, 'Invalid event length.'),
+      ...(event.capturedLength === undefined ? {} : { capturedLength: numberValue(event.capturedLength, 'Invalid captured length.') }),
+      ...(event.originalLength === undefined ? {} : { originalLength: numberValue(event.originalLength, 'Invalid original length.') }),
+      ...(optionalStringValue(event.sourceType, 'Invalid event source type.', 32) ? { sourceType: event.sourceType as string } : {}),
+    };
+  });
   const eventIds = new Set(events.map(event => event.id));
 
   const flows: InvestigationFlowEvidence[] = recordArray(evidence.flows, 'Invalid investigation flows.', MAX_INVESTIGATION_FLOWS).map(flow => {
@@ -296,14 +324,18 @@ export function validateInvestigationRequest(body: unknown): InvestigationEviden
     const relatedEventIds = stringArray(flow.relatedEventIds, 'Invalid flow event references.', MAX_INVESTIGATION_EVENTS);
     if (relatedEventIds.some(id => !eventIds.has(id))) throw new InvestigationValidationError('Flow references unavailable event evidence.');
     const service = optionalStringValue(flow.service, 'Invalid flow service.', 64);
+    const sourcePort = validatedPort(flow.sourcePort, flow.sourcePortState, 'flow source');
+    const destinationPort = validatedPort(flow.destinationPort, flow.destinationPortState, 'flow destination');
     return {
       id: stringValue(flow.id, 'Invalid flow ID.', MAX_INVESTIGATION_ID_CHARACTERS),
       firstSeen: stringValue(flow.firstSeen, 'Invalid flow start time.', 64),
       lastSeen: stringValue(flow.lastSeen, 'Invalid flow end time.', 64),
       sourceIp: stringValue(flow.sourceIp, 'Invalid flow source.', 128),
-      sourcePort: numberValue(flow.sourcePort, 'Invalid flow source port.'),
+      sourcePort: sourcePort.port,
+      sourcePortState: sourcePort.state,
       destinationIp: stringValue(flow.destinationIp, 'Invalid flow destination.', 128),
-      destinationPort: numberValue(flow.destinationPort, 'Invalid flow destination port.'),
+      destinationPort: destinationPort.port,
+      destinationPortState: destinationPort.state,
       protocol: stringValue(flow.protocol, 'Invalid flow protocol.', 32),
       ...(service ? { service } : {}),
       packetCount: numberValue(flow.packetCount, 'Invalid flow packet count.'),

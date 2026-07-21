@@ -16,6 +16,7 @@ const redact = (value: string) => value
   .replace(/\bbearer\s+[a-z0-9._~+/-]+/gi, 'Bearer [redacted]');
 const text = (value: unknown, limit = MAX_TEXT) => redact(String(value ?? '').replace(/\s+/g, ' ').trim()).slice(0, limit);
 const list = (value: unknown) => Array.isArray(value) ? value : [];
+const portState = (value: unknown) => ['observed', 'unknown', 'not-applicable'].includes(String(value)) ? String(value) : 'unknown';
 
 export function boundedCaptureSummary(body: unknown) {
   if (!body || typeof body !== 'object') throw new CaptureOverviewError(400, 'Capture overview request is malformed.');
@@ -29,7 +30,7 @@ export function boundedCaptureSummary(body: unknown) {
     perspective: ['balanced', 'beginner', 'technical', 'triage'].includes(String(root.perspective)) ? root.perspective : 'balanced',
     flows: list(root.flowSummary).slice(0, 15).map(value => {
       const item = (value || {}) as Record<string, unknown>;
-      return { source: text(item.sourceIp, 48), sourcePort: Number(item.sourcePort) || 0, destination: text(item.destinationIp, 48), destinationPort: Number(item.destinationPort) || 0, protocol: text(item.protocol, 24), packets: Number(item.packetCount) || 0, bytes: Number(item.byteCount) || 0, direction: text(item.direction, 20) };
+      return { source: text(item.sourceIp, 48), sourcePort: Number(item.sourcePort) || 0, sourcePortState: portState(item.sourcePortState), destination: text(item.destinationIp, 48), destinationPort: Number(item.destinationPort) || 0, destinationPortState: portState(item.destinationPortState), protocol: text(item.protocol, 24), packets: Number(item.packetCount) || 0, bytes: Number(item.byteCount) || 0, direction: text(item.direction, 20) };
     }),
     dns: list(root.dnsRecords).slice(0, 20).map(value => { const item = (value || {}) as Record<string, unknown>; return { client: text(item.clientIp, 48), query: text(item.query, 120), type: text(item.queryType, 24), response: text(item.response, 120) }; }),
     http: list(root.httpRecords).slice(0, 10).map(value => { const item = (value || {}) as Record<string, unknown>; return { client: text(item.clientIp, 48), host: text(item.host, 120), method: text(item.method, 16), uri: text(item.uri, 120), status: Number(item.statusCode) || 0 }; }),

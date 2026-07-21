@@ -1,5 +1,6 @@
 import type { ParsedResult } from './parser.js';
 import { MAX_FILE_NAME_CHARACTERS, MAX_PARSED_RECORDS, MAX_TEXT_CHARACTERS } from './limits.js';
+import type { PortState } from '../types.js';
 
 export const TEXT_PARSE_MODES = ['csv', 'suricata', 'zeek', 'tshark', 'txt'] as const;
 export type TextParseMode = typeof TEXT_PARSE_MODES[number];
@@ -51,7 +52,23 @@ export function validateParsedResult(result: ParsedResult): ParsedResult {
   if (collections.some(records => records.length > MAX_PARSED_RECORDS)) {
     throw new ParseRequestError(`Parsed output exceeds the ${MAX_PARSED_RECORDS.toLocaleString()}-record limit.`, 413);
   }
+  for (const record of [...result.events, ...result.flows]) {
+    validatePortProvenance(record.sourcePort, record.sourcePortState);
+    validatePortProvenance(record.destinationPort, record.destinationPortState);
+  }
   return result;
+}
+
+function validatePortProvenance(port: number, state: PortState): void {
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new ParseRequestError('Parsed evidence contains invalid port provenance.', 500);
+  }
+  if (!['observed', 'unknown', 'not-applicable'].includes(state)) {
+    throw new ParseRequestError('Parsed evidence contains invalid port provenance.', 500);
+  }
+  if (state !== 'observed' && port !== 0) {
+    throw new ParseRequestError('Parsed evidence contains invalid port provenance.', 500);
+  }
 }
 
 export function clientSafeParseError(error: unknown): { status: number; message: string } {

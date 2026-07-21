@@ -60,6 +60,57 @@ export function validPcap(): ArrayBuffer {
   return concat(header, record, packet).buffer;
 }
 
+export function rawIpv4Pcap(
+  protocol: number,
+  transport: Uint8Array,
+  fragmentOffset = 0,
+): ArrayBuffer {
+  const packet = new Uint8Array(20 + transport.length);
+  packet[0] = 0x45;
+  packet[2] = (packet.length >> 8) & 0xff;
+  packet[3] = packet.length & 0xff;
+  packet[6] = (fragmentOffset >> 8) & 0x1f;
+  packet[7] = fragmentOffset & 0xff;
+  packet[8] = 64;
+  packet[9] = protocol;
+  packet.set([10, 0, 0, 15], 12);
+  packet.set([203, 0, 113, 80], 16);
+  packet.set(transport, 20);
+
+  const header = new Uint8Array(24);
+  header.set([0xd4, 0xc3, 0xb2, 0xa1]);
+  writeU16LE(header, 4, 2);
+  writeU16LE(header, 6, 4);
+  writeU32LE(header, 16, 65_535);
+  writeU32LE(header, 20, 101);
+  const record = new Uint8Array(16);
+  writeU32LE(record, 0, 1_716_285_600);
+  writeU32LE(record, 8, packet.length);
+  writeU32LE(record, 12, packet.length);
+  return concat(header, record, packet).buffer;
+}
+
+export function nativeTcpPcap(sourcePort: number, destinationPort: number): ArrayBuffer {
+  const tcp = new Uint8Array(20);
+  tcp[0] = (sourcePort >> 8) & 0xff;
+  tcp[1] = sourcePort & 0xff;
+  tcp[2] = (destinationPort >> 8) & 0xff;
+  tcp[3] = destinationPort & 0xff;
+  tcp[12] = 0x50;
+  tcp[13] = 0x02;
+  return rawIpv4Pcap(6, tcp);
+}
+
+export function nativeUdpPcap(sourcePort: number, destinationPort: number): ArrayBuffer {
+  const udp = new Uint8Array(8);
+  udp[0] = (sourcePort >> 8) & 0xff;
+  udp[1] = sourcePort & 0xff;
+  udp[2] = (destinationPort >> 8) & 0xff;
+  udp[3] = destinationPort & 0xff;
+  udp[5] = 8;
+  return rawIpv4Pcap(17, udp);
+}
+
 export function ipv6Pcap(source: readonly number[], destination: readonly number[]): ArrayBuffer {
   if (source.length !== 8 || destination.length !== 8) throw new Error('IPv6 fixtures require eight hextets.');
 

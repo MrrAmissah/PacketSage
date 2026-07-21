@@ -11,10 +11,12 @@ import type {
   DnsRecord,
   HttpRecord,
   TlsRecord,
-  SuspiciousSignal
+  SuspiciousSignal,
+  PortState,
 } from '../types';
 import { deterministicId, finalizeEvidenceIds } from './deterministic';
 import { MAX_PARSED_RECORDS } from './limits';
+import { formatEndpoint, isPortlessProtocol, portFlowKey, portStateFor } from './ports';
 
 const FALLBACK_TIMESTAMP = '1970-01-01T00:00:00.000Z';
 
@@ -23,6 +25,28 @@ export class EvidenceParseError extends Error {
     super(message);
     this.name = 'EvidenceParseError';
   }
+}
+
+interface NormalizedPort {
+  port: number;
+  state: PortState;
+}
+
+function suppliedPort(protocol: string, raw: unknown): NormalizedPort {
+  if (isPortlessProtocol(protocol)) return { port: 0, state: 'not-applicable' };
+  const supplied = raw !== undefined && raw !== null && String(raw).trim() !== '' && String(raw).trim() !== '-';
+  if (!supplied) return { port: 0, state: 'unknown' };
+  const text = String(raw).trim();
+  const port = Number(text);
+  if (!/^\d+$/.test(text) || !Number.isInteger(port) || port < 0 || port > 65_535) {
+    throw new EvidenceParseError('Imported evidence contains an invalid explicit transport port.');
+  }
+  return { port, state: 'observed' };
+}
+
+function firstPresent(record: Record<string, string>, keys: readonly string[]): string | undefined {
+  const key = keys.find(candidate => Object.prototype.hasOwnProperty.call(record, candidate));
+  return key === undefined ? undefined : record[key];
 }
 
 // Helper: Determine Direction
@@ -77,7 +101,7 @@ export interface ParsedResult {
 export function parseDemoData(): ParsedResult {
   const baseTime = new Date('2024-05-21T10:00:00Z');
   
-  const events: PacketEvent[] = [
+  const eventRecords: Array<Omit<PacketEvent, 'sourcePortState' | 'destinationPortState'>> = [
     // DNS Queries
     {
       id: 'evt-1',
@@ -256,6 +280,11 @@ export function parseDemoData(): ParsedResult {
     }
   ];
 
+  const events: PacketEvent[] = eventRecords.map(event => ({
+    ...event,
+    sourcePortState: 'observed',
+    destinationPortState: 'observed',
+  }));
   events.sort((left, right) => left.timestamp.localeCompare(right.timestamp));
 
   const dns: DnsRecord[] = [
@@ -394,6 +423,8 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
     const lenStr = row['length'] || row['len'] || '64';
     const info = row['info'] || row['summary'] || 'CSV Imported Event';
     const timeStr = row['time'] || String(idCounter);
+    const sourcePort = suppliedPort(proto, firstPresent(row, ['source port', 'src_port']));
+    const destinationPort = suppliedPort(proto, firstPresent(row, ['destination port', 'dst_port']));
 
     // Compute synthetic timestamp
     let ts: string;
@@ -408,11 +439,13 @@ export function parseCsv(fileName: string, content: string): ParsedResult {
       id: `evt-csv-${idCounter++}`,
       timestamp: ts,
       sourceIp: src,
-      sourcePort: parseInt(row['source port'] || row['src_port'] || '0') || guessPortFromProtocol(proto, true),
+      sourcePort: sourcePort.port,
+      sourcePortState: sourcePort.state,
       destinationIp: dst,
-      destinationPort: parseInt(row['destination port'] || row['dst_port'] || '0') || guessPortFromProtocol(proto, false),
+      destinationPort: destinationPort.port,
+      destinationPortState: destinationPort.state,
       protocol: proto.toUpperCase(),
-      service: row['service'] || row['app'] || guessService(proto, parseInt(row['destination port'] || row['dst_port'] || '0')),
+      service: row['service'] || row['app'] || guessService(proto, destinationPort.state === 'observed' ? destinationPort.port : 0),
       length: parseInt(lenStr) || 64,
       info: info,
       sourceType: 'csv'
@@ -523,9 +556,9 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
       const ts = data.timestamp || FALLBACK_TIMESTAMP;
       const src = data.src_ip || '0.0.0.0';
       const dst = data.dest_ip || '0.0.0.0';
-      const sport = data.src_port || 0;
-      const dport = data.dest_port || 0;
       const proto = data.proto || 'TCP';
+      const sourcePort = suppliedPort(proto, Object.prototype.hasOwnProperty.call(data, 'src_port') ? data.src_port : undefined);
+      const destinationPort = suppliedPort(proto, Object.prototype.hasOwnProperty.call(data, 'dest_port') ? data.dest_port : undefined);
       const eventType = data.event_type;
       const eventId = `evt-eve-${idCounter++}`;
 
@@ -585,9 +618,11 @@ export function parseSuricataEve(fileName: string, content: string): ParsedResul
         id: eventId,
         timestamp: ts,
         sourceIp: src,
-        sourcePort: sport,
+        sourcePort: sourcePort.port,
+        sourcePortState: sourcePort.state,
         destinationIp: dst,
-        destinationPort: dport,
+        destinationPort: destinationPort.port,
+        destinationPortState: destinationPort.state,
         protocol: proto.toUpperCase(),
         service: eventType?.toUpperCase(),
         length: data.flow?.bytes_toclient || 100,
@@ -689,10 +724,10 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
 
     const ts = row['ts'] ? new Date(parseFloat(row['ts']) * 1000).toISOString() : FALLBACK_TIMESTAMP;
     const src = row['id.orig_h'] || '0.0.0.0';
-    const sport = parseInt(row['id.orig_p'] || '0') || 0;
     const dst = row['id.resp_h'] || '0.0.0.0';
-    const dport = parseInt(row['id.resp_p'] || '0') || 0;
     const proto = row['proto'] || 'TCP';
+    const sourcePort = suppliedPort(proto, firstPresent(row, ['id.orig_p']));
+    const destinationPort = suppliedPort(proto, firstPresent(row, ['id.resp_p']));
     const eventId = `evt-zeek-${idCounter++}`;
 
     let info = `Zeek ${path} Log entry`;
@@ -745,9 +780,11 @@ export function parseZeekLog(fileName: string, content: string): ParsedResult {
       id: eventId,
       timestamp: ts,
       sourceIp: src,
-      sourcePort: sport,
+      sourcePort: sourcePort.port,
+      sourcePortState: sourcePort.state,
       destinationIp: dst,
-      destinationPort: dport,
+      destinationPort: destinationPort.port,
+      destinationPortState: destinationPort.state,
       protocol: proto.toUpperCase(),
       service: path.toUpperCase(),
       length: parseInt(row['orig_bytes'] || '100') || 100,
@@ -821,13 +858,29 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
       const timestamp = frame['frame.time_iso'] || frame['frame.time'] || FALLBACK_TIMESTAMP;
       const sourceIp = ip['ip.src'] || ipv6['ipv6.src'] || '0.0.0.0';
       const destinationIp = ip['ip.dst'] || ipv6['ipv6.dst'] || '0.0.0.0';
-      
-      const sourcePort = parseInt(tcp['tcp.srcport'] || udp['udp.srcport'] || '0');
-      const destinationPort = parseInt(tcp['tcp.dstport'] || udp['udp.dstport'] || '0');
-
-      let protocol = 'TCP';
-      if (udp['udp.srcport'] || udp['udp.dstport']) protocol = 'UDP';
+      const hasTcpLayer = Object.prototype.hasOwnProperty.call(layers, 'tcp');
+      const hasUdpLayer = Object.prototype.hasOwnProperty.call(layers, 'udp');
+      const fragmentOffset = Number(ip['ip.frag_offset'] ?? ipv6['ipv6.frag.offset'] ?? 0);
+      let protocol = hasUdpLayer ? 'UDP' : hasTcpLayer ? 'TCP' : 'IP';
       if (layers.icmp) protocol = 'ICMP';
+      if (layers.icmpv6) protocol = 'ICMPv6';
+      if (fragmentOffset > 0) protocol = ipv6['ipv6.src'] ? 'IPv6 fragment' : 'IPv4 fragment';
+      const sourcePort = suppliedPort(
+        protocol,
+        hasTcpLayer && Object.prototype.hasOwnProperty.call(tcp, 'tcp.srcport')
+          ? tcp['tcp.srcport']
+          : hasUdpLayer && Object.prototype.hasOwnProperty.call(udp, 'udp.srcport')
+            ? udp['udp.srcport']
+            : undefined,
+      );
+      const destinationPort = suppliedPort(
+        protocol,
+        hasTcpLayer && Object.prototype.hasOwnProperty.call(tcp, 'tcp.dstport')
+          ? tcp['tcp.dstport']
+          : hasUdpLayer && Object.prototype.hasOwnProperty.call(udp, 'udp.dstport')
+            ? udp['udp.dstport']
+            : undefined,
+      );
 
       const length = parseInt(frame['frame.len'] || '64');
       let info = `TShark Parsed Packet`;
@@ -876,9 +929,11 @@ export function parseTsharkJson(fileName: string, content: string): ParsedResult
         id: eventId,
         timestamp,
         sourceIp,
-        sourcePort,
+        sourcePort: sourcePort.port,
+        sourcePortState: sourcePort.state,
         destinationIp,
-        destinationPort,
+        destinationPort: destinationPort.port,
+        destinationPortState: destinationPort.state,
         protocol,
         service: dnsLayer ? 'DNS' : (httpLayer ? 'HTTP' : (tlsLayer ? 'TLS' : 'Unknown')),
         length,
@@ -928,12 +983,12 @@ export function parseTextLog(fileName: string, content: string): ParsedResult {
   const parsePort = (value: string | undefined, field: string, lineNumber: number): number | null => {
     if (value === undefined) return field === 'src_port' ? 0 : null;
     if (!/^\d+$/.test(value)) {
-      errors.push(`Line ${lineNumber}: ${field} must be an integer from 1 to 65535.`);
+      errors.push(`Line ${lineNumber}: ${field} must be an integer from 0 to 65535.`);
       return null;
     }
     const parsed = Number(value);
-    if (parsed < 1 || parsed > 65535) {
-      errors.push(`Line ${lineNumber}: ${field} must be an integer from 1 to 65535.`);
+    if (parsed < 0 || parsed > 65535) {
+      errors.push(`Line ${lineNumber}: ${field} must be an integer from 0 to 65535.`);
       return null;
     }
     return parsed;
@@ -998,11 +1053,13 @@ export function parseTextLog(fileName: string, content: string): ParsedResult {
       timestamp: timestamp.toISOString(),
       sourceIp: srcIp,
       sourcePort: srcPort,
+      sourcePortState: portStateFor(protocolValue, fields.has('src_port')),
       destinationIp: dstIp,
       destinationPort: dstPort,
+      destinationPortState: 'observed',
       protocol: protocolValue,
       length: Number(lengthValue),
-      info: `${srcIp}${srcPort ? `:${srcPort}` : ''} -> ${dstIp}:${dstPort} ${protocolValue} ${lengthValue} bytes`,
+      info: `${formatEndpoint(srcIp, srcPort, portStateFor(protocolValue, fields.has('src_port')))} -> ${formatEndpoint(dstIp, dstPort, 'observed')} ${protocolValue} ${lengthValue} bytes`,
       sourceType: 'text'
     });
   });
@@ -1058,6 +1115,7 @@ export function runRuleEngine(
   // 1. Port Scan Detection (Reconnaissance)
   const sourcePortsMap: Record<string, Set<number>> = {};
   events.forEach(evt => {
+    if (evt.destinationPortState !== 'observed') return;
     if (!sourcePortsMap[evt.sourceIp]) {
       sourcePortsMap[evt.sourceIp] = new Set();
     }
@@ -1132,7 +1190,7 @@ export function runRuleEngine(
   // 4. Connection to Unusual Port (Unusual port check)
   flows.forEach(flow => {
     const maliciousPorts = [4444, 6667, 8000, 1337];
-    if (maliciousPorts.includes(flow.destinationPort) && flow.direction === 'outbound') {
+    if (flow.destinationPortState === 'observed' && maliciousPorts.includes(flow.destinationPort) && flow.direction === 'outbound') {
       signals.push({
         id: `sig-unusualport-${flow.id}`,
         title: 'Outbound connection on selected high port observed',
@@ -1152,8 +1210,8 @@ export function runRuleEngine(
   // 5. Repeated outbound connections to the same external service
   const repeatedOutboundGroups: Record<string, FlowSummary[]> = {};
   flows.forEach(flow => {
-    if (flow.direction !== 'outbound') return;
-    const key = `${flow.sourceIp}->${flow.destinationIp}:${flow.destinationPort}:${flow.protocol}`;
+    if (flow.direction !== 'outbound' || flow.destinationPortState === 'not-applicable') return;
+    const key = `${flow.sourceIp}->${flow.destinationIp}:${portFlowKey(flow.destinationPort, flow.destinationPortState)}:${flow.protocol}`;
     repeatedOutboundGroups[key] = repeatedOutboundGroups[key] || [];
     repeatedOutboundGroups[key].push(flow);
   });
@@ -1165,12 +1223,12 @@ export function runRuleEngine(
     const relatedFlowIds = group.map(flow => flow.id);
     const relatedEventIds = group.flatMap(flow => flow.relatedEvents || []);
     signals.push({
-      id: `sig-repeated-connections-${firstFlow.sourceIp}-${firstFlow.destinationIp}-${firstFlow.destinationPort}`.replace(/[^a-zA-Z0-9-_]/g, '_'),
+      id: `sig-repeated-connections-${firstFlow.sourceIp}-${firstFlow.destinationIp}-${portFlowKey(firstFlow.destinationPort, firstFlow.destinationPortState)}`.replace(/[^a-zA-Z0-9-_]/g, '_'),
       title: 'Repeated outbound connections',
       severity: 'medium',
       confidence: group.length >= 8 ? 'high' : 'medium',
       category: 'Repeated outbound activity',
-      observedEvidence: `Internal IP ${firstFlow.sourceIp} made ${group.length} repeated outbound connection attempts to ${firstFlow.destinationIp} on port ${firstFlow.destinationPort}.`,
+      observedEvidence: `Internal IP ${firstFlow.sourceIp} made ${group.length} repeated outbound connection attempts to ${formatEndpoint(firstFlow.destinationIp, firstFlow.destinationPort, firstFlow.destinationPortState)}.`,
       interpretation: 'Multiple outbound sessions to the same external service may indicate application heartbeats, staged communication, polling, or repeated connection retries that require validation alongside endpoint context.',
       whatItDoesNotProve: 'It does not prove command-and-control, tunneling, or data theft. Normal client software, update services, and developer tools can produce repeated outbound connections.',
       recommendedDefensiveCheck: 'Review the destination reputation, destination service owner, process lineage on the source host, and whether these repeated sessions match expected application behavior.',
@@ -1229,8 +1287,8 @@ export function buildFlowsFromEvents(events: PacketEvent[]): FlowSummary[] {
 
   events.forEach(evt => {
     // Unique Flow Key
-    const key = `${evt.sourceIp}:${evt.sourcePort}->${evt.destinationIp}:${evt.destinationPort}:${evt.protocol}`;
-    const reverseKey = `${evt.destinationIp}:${evt.destinationPort}->${evt.sourceIp}:${evt.sourcePort}:${evt.protocol}`;
+    const key = `${evt.sourceIp}:${portFlowKey(evt.sourcePort, evt.sourcePortState)}->${evt.destinationIp}:${portFlowKey(evt.destinationPort, evt.destinationPortState)}:${evt.protocol}`;
+    const reverseKey = `${evt.destinationIp}:${portFlowKey(evt.destinationPort, evt.destinationPortState)}->${evt.sourceIp}:${portFlowKey(evt.sourcePort, evt.sourcePortState)}:${evt.protocol}`;
 
     const dir = getDirection(evt.sourceIp, evt.destinationIp);
 
@@ -1256,9 +1314,9 @@ export function buildFlowsFromEvents(events: PacketEvent[]): FlowSummary[] {
     } else {
       // Identify risk level based on destination ports
       let risk: 'info' | 'low' | 'medium' | 'high' = 'info';
-      if ([4444, 1337].includes(evt.destinationPort)) risk = 'high';
-      else if ([21, 23, 80].includes(evt.destinationPort)) risk = 'medium';
-      else if (dir === 'outbound' && ![80, 443].includes(evt.destinationPort)) risk = 'low';
+      if (evt.destinationPortState === 'observed' && [4444, 1337].includes(evt.destinationPort)) risk = 'high';
+      else if (evt.destinationPortState === 'observed' && [21, 23, 80].includes(evt.destinationPort)) risk = 'medium';
+      else if (evt.destinationPortState === 'observed' && dir === 'outbound' && ![80, 443].includes(evt.destinationPort)) risk = 'low';
 
       flowsMap[key] = {
         id: deterministicId('flow-pending', [key]),
@@ -1266,8 +1324,10 @@ export function buildFlowsFromEvents(events: PacketEvent[]): FlowSummary[] {
         lastSeen: evt.timestamp,
         sourceIp: evt.sourceIp,
         sourcePort: evt.sourcePort,
+        sourcePortState: evt.sourcePortState,
         destinationIp: evt.destinationIp,
         destinationPort: evt.destinationPort,
+        destinationPortState: evt.destinationPortState,
         protocol: evt.protocol,
         service: evt.service,
         packetCount: 1,
@@ -1328,13 +1388,4 @@ function guessService(protocol: string, port: number): string {
   if (port === 23) return 'Telnet';
   if (port === 1337 || port === 4444) return 'Unassigned high port';
   return protocol === 'UDP' ? 'UDP Service' : 'TCP Service';
-}
-
-function guessPortFromProtocol(proto: string, isSource: boolean): number {
-  if (isSource) return 49152;
-  const p = proto.toLowerCase();
-  if (p === 'dns') return 53;
-  if (p === 'http') return 80;
-  if (p === 'https') return 443;
-  return 80;
 }

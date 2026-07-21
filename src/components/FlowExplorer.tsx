@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Clipboard, Check, Layers, Search, X } from 'lucide-react';
 import type { FlowSummary, PacketEvent, SuspiciousSignal } from '../types';
 import { eventsForFlow, signalsForFlow } from '../lib/evidenceRelationships';
+import { formatEndpoint } from '../lib/ports';
 
 interface FlowExplorerProps {
   flows: FlowSummary[];
@@ -11,11 +12,6 @@ interface FlowExplorerProps {
   selectedFlow: FlowSummary | null;
   onCloseDrawer: () => void;
   evidenceName?: string;
-}
-
-function endpoint(ip: string, port: number): string {
-  const address = ip.includes(':') ? `[${ip}]` : ip;
-  return `${address}:${port > 0 ? port : 'unknown'}`;
 }
 
 function formatTime(value: string): string {
@@ -63,7 +59,7 @@ export default function FlowExplorer({
   const filteredFlows = useMemo(() => flows
     .filter(flow => {
       const term = searchTerm.trim().toLowerCase();
-      const searchable = `${flow.sourceIp} ${flow.sourcePort || ''} ${flow.destinationIp} ${flow.destinationPort || ''} ${flow.protocol} ${flow.service || ''}`.toLowerCase();
+      const searchable = `${formatEndpoint(flow.sourceIp, flow.sourcePort, flow.sourcePortState)} ${formatEndpoint(flow.destinationIp, flow.destinationPort, flow.destinationPortState)} ${flow.protocol} ${flow.service || ''}`.toLowerCase();
       return (!term || searchable.includes(term))
         && (protocolFilter === 'ALL' || flow.protocol.toUpperCase() === protocolFilter)
         && (riskFilter === 'ALL' || flow.riskLevel.toUpperCase() === riskFilter)
@@ -82,7 +78,7 @@ export default function FlowExplorer({
 
   const copySummary = async () => {
     if (!selectedFlow) return;
-    await navigator.clipboard.writeText(`Flow ${selectedFlow.id}: ${endpoint(selectedFlow.sourceIp, selectedFlow.sourcePort)} -> ${endpoint(selectedFlow.destinationIp, selectedFlow.destinationPort)} (${selectedFlow.protocol})`);
+    await navigator.clipboard.writeText(`Flow ${selectedFlow.id}: ${formatEndpoint(selectedFlow.sourceIp, selectedFlow.sourcePort, selectedFlow.sourcePortState)} -> ${formatEndpoint(selectedFlow.destinationIp, selectedFlow.destinationPort, selectedFlow.destinationPortState)} (${selectedFlow.protocol})`);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };
@@ -123,7 +119,7 @@ export default function FlowExplorer({
             <tbody className="divide-y divide-border-subtle">
               {filteredFlows.map(flow => (
                 <tr key={flow.id} id={`flow-row-${flow.id}`} role="button" tabIndex={0} aria-label={`Inspect flow ${flow.id}`} aria-pressed={selectedFlow?.id === flow.id} onClick={() => onSelectFlow(flow)} onKeyDown={event => selectFromKeyboard(event, flow)} className={`cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-primary ${selectedFlow?.id === flow.id ? 'bg-accent-soft' : 'hover:bg-surface-muted/50'}`}>
-                  <td className="p-3 font-mono text-[10px] text-text-muted">{formatTime(flow.firstSeen)}</td><td className="p-3 font-mono">{endpoint(flow.sourceIp, flow.sourcePort)}</td><td className="p-3 font-mono">{endpoint(flow.destinationIp, flow.destinationPort)}</td><td className="p-3">{flow.protocol}{flow.service ? ` · ${flow.service}` : ''}</td><td className="p-3 text-right font-mono">{flow.packetCount}</td><td className="p-3 text-right font-mono">{flow.byteCount}</td><td className="p-3 text-right font-mono">{flow.duration.toFixed(3)}s</td><td className="p-3"><RiskPill level={flow.riskLevel} /></td>
+                  <td className="p-3 font-mono text-[10px] text-text-muted">{formatTime(flow.firstSeen)}</td><td className="p-3 font-mono">{formatEndpoint(flow.sourceIp, flow.sourcePort, flow.sourcePortState)}</td><td className="p-3 font-mono">{formatEndpoint(flow.destinationIp, flow.destinationPort, flow.destinationPortState)}</td><td className="p-3">{flow.protocol}{flow.service ? ` · ${flow.service}` : ''}</td><td className="p-3 text-right font-mono">{flow.packetCount}</td><td className="p-3 text-right font-mono">{flow.byteCount}</td><td className="p-3 text-right font-mono">{flow.duration.toFixed(3)}s</td><td className="p-3"><RiskPill level={flow.riskLevel} /></td>
                 </tr>
               ))}
               {!filteredFlows.length && <tr><td colSpan={8} className="p-10 text-center text-text-muted">No observed flows match these filters.</td></tr>}
@@ -135,8 +131,8 @@ export default function FlowExplorer({
           <aside className="h-fit space-y-4 rounded-xl border border-border-subtle bg-surface p-4 shadow-sm" aria-label={`Flow detail ${selectedFlow.id}`}>
             <header className="flex items-start justify-between gap-3 border-b border-border-subtle pb-3"><div><p className="text-[9px] font-bold uppercase tracking-widest text-accent-primary">Observed flow</p><h2 className="font-mono text-xs font-bold text-text-primary">{selectedFlow.id}</h2></div><button type="button" onClick={onCloseDrawer} aria-label="Close flow details" className="rounded border border-border-subtle p-1.5 text-text-muted"><X aria-hidden="true" size={13} /></button></header>
             <dl className="grid gap-2 text-[11px]">
-              <div><dt className="text-text-muted">Source</dt><dd className="font-mono text-text-primary">{endpoint(selectedFlow.sourceIp, selectedFlow.sourcePort)}</dd></div>
-              <div><dt className="text-text-muted">Destination</dt><dd className="font-mono text-text-primary">{endpoint(selectedFlow.destinationIp, selectedFlow.destinationPort)}</dd></div>
+              <div><dt className="text-text-muted">Source</dt><dd className="font-mono text-text-primary">{formatEndpoint(selectedFlow.sourceIp, selectedFlow.sourcePort, selectedFlow.sourcePortState)}</dd></div>
+              <div><dt className="text-text-muted">Destination</dt><dd className="font-mono text-text-primary">{formatEndpoint(selectedFlow.destinationIp, selectedFlow.destinationPort, selectedFlow.destinationPortState)}</dd></div>
               <div className="grid grid-cols-2 gap-2"><div><dt className="text-text-muted">Protocol</dt><dd>{selectedFlow.protocol}</dd></div><div><dt className="text-text-muted">Service</dt><dd>{selectedFlow.service || 'Not recorded'}</dd></div></div>
               <div className="grid grid-cols-2 gap-2"><div><dt className="text-text-muted">Packets</dt><dd>{selectedFlow.packetCount}</dd></div><div><dt className="text-text-muted">Bytes</dt><dd>{selectedFlow.byteCount}</dd></div></div>
               <div className="grid grid-cols-2 gap-2"><div><dt className="text-text-muted">Direction</dt><dd>{selectedFlow.direction}</dd></div><div><dt className="text-text-muted">Risk label</dt><dd className="mt-0.5"><RiskPill level={selectedFlow.riskLevel} /></dd></div></div>

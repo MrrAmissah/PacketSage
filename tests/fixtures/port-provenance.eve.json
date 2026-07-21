@@ -1,0 +1,6 @@
+{"timestamp":"2026-07-21T12:00:00.000Z","event_type":"flow","src_ip":"10.0.0.15","src_port":0,"dest_ip":"203.0.113.80","dest_port":443,"proto":"TCP","flow":{"bytes_toclient":64}}
+{"timestamp":"2026-07-21T12:00:00.250Z","event_type":"flow","src_ip":"10.0.0.15","src_port":1,"dest_ip":"203.0.113.80","dest_port":443,"proto":"TCP","flow":{"bytes_toclient":64}}
+{"timestamp":"2026-07-21T12:00:00.500Z","event_type":"flow","src_ip":"10.0.0.15","src_port":2,"dest_ip":"203.0.113.80","dest_port":443,"proto":"TCP","flow":{"bytes_toclient":64}}
+{"timestamp":"2026-07-21T12:00:00.750Z","event_type":"flow","src_ip":"10.0.0.15","src_port":3,"dest_ip":"203.0.113.80","dest_port":443,"proto":"TCP","flow":{"bytes_toclient":64}}
+{"timestamp":"2026-07-21T12:00:01.000Z","event_type":"flow","src_ip":"10.0.0.16","dest_ip":"203.0.113.81","dest_port":443,"proto":"TCP","flow":{"bytes_toclient":64}}
+{"timestamp":"2026-07-21T12:00:02.000Z","event_type":"flow","src_ip":"10.0.0.17","dest_ip":"203.0.113.82","proto":"ICMP","flow":{"bytes_toclient":64}}

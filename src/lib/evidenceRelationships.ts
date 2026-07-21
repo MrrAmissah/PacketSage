@@ -49,11 +49,15 @@ export function signalsForEvent(
 export function hasSameObservedFlowIdentity(event: PacketEvent, flow: FlowSummary): boolean {
   const forward = event.sourceIp === flow.sourceIp
     && event.sourcePort === flow.sourcePort
+    && event.sourcePortState === flow.sourcePortState
     && event.destinationIp === flow.destinationIp
-    && event.destinationPort === flow.destinationPort;
+    && event.destinationPort === flow.destinationPort
+    && event.destinationPortState === flow.destinationPortState;
   const reverse = event.sourceIp === flow.destinationIp
     && event.sourcePort === flow.destinationPort
+    && event.sourcePortState === flow.destinationPortState
     && event.destinationIp === flow.sourceIp
-    && event.destinationPort === flow.sourcePort;
+    && event.destinationPort === flow.sourcePort
+    && event.destinationPortState === flow.sourcePortState;
   return event.protocol === flow.protocol && (forward || reverse);
 }

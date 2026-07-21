@@ -38,7 +38,7 @@ To analyze your own captures:
 If you have a quick text snippet or log clip:
 1. Confirm authorization and focus the paste field.
 2. Enter one event per line using `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`.
-3. Timestamp, valid IPv4 endpoints, destination port, protocol, and length are required. Source port is optional and displays as `unknown` when omitted.
+3. Timestamp, valid IPv4 endpoints, destination port, protocol, and length are required. Ports accept `0`–`65535`; an explicitly supplied `0` displays as observed port `0`, while an omitted source port displays as `unknown`.
 4. Click **Submit pasted logs**. Incomplete, arbitrary, or malformed lines return a line-specific error and produce no partial evidence.
 
 ---

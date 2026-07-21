@@ -50,7 +50,7 @@ To ensure professional integrity and avoid overclaiming, PacketSage is defined b
 The home operations console lists only loaded evidence totals, present protocol statistics, deterministic signals, observed timeline records, evidence-backed hostnames, and next actions supported by the current dataset. Empty custom evidence does not inherit generated-sample claims.
 
 ### 4.2 Import Evidence
-A versatile ingestion panel allowing analysts to load the generated educational scenario or import authorized evidence. Pasted events use the strict grammar `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`; ambiguous or malformed lines fail without partial evidence.
+A versatile ingestion panel allowing analysts to load the generated educational scenario or import authorized evidence. Pasted events use the strict grammar `YYYY-MM-DDTHH:mm:ssZ SRC_IP -> DST_IP [src_port=N] dst_port=N protocol=TCP|UDP length=N`; ports accept `0`–`65535`, explicit zero remains observed, omitted source ports remain unknown, and ambiguous or malformed lines fail without partial evidence.
 
 ### 4.3 Flow Explorer
 An interactive grid of normalized flow summaries. Analysts can filter observed endpoint, port, protocol, direction, risk, time, packet, and byte fields. Events resolve only through `flow.relatedEvents`; signals resolve only through exact `relatedFlowIds`. No host alias, connection state, or encryption result is inferred.

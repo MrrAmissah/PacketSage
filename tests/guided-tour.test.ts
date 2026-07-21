@@ -75,6 +75,7 @@ test('failed or malformed investigations cannot advance without a retained compl
   const index = deriveGuidedTourWorkflowIndex(workflow({ selectedSignalId: 'signal-a' }));
   assert.equal(index, 1);
   assert.equal(guidedTourProgressControl(1, index!).enabled, false);
+  assert.match(guidedTourProgressControl(1, index!).requirement || '', /valid response/);
 });
 
 test('Step 3 is reachable only for the exact valid retained assessment', () => {
@@ -107,11 +108,13 @@ test('Capture Overview cannot advance the state-driven tour', () => {
   assert.doesNotMatch(source('src/lib/guidedTour.ts'), /captureOverview|Gemini|overviewRecord/);
 });
 
-test('Skip closes the tour and stores only the versioned completion preference', () => {
+test('Skip or finish without AI closes the tour and stores only the versioned completion preference', () => {
   const app = source('src/App.tsx');
   assert.match(app, /localStorage\.setItem\(GUIDED_TOUR_STORAGE_KEY, GUIDED_TOUR_COMPLETION_VALUE\)/);
   assert.match(app, /setGuidedTourSession\(previous => previous \? \{ \.\.\.previous, active: false \}/);
-  assert.match(source('src/components/ContextualSpotlightTour.tsx'), />Skip tour</);
+  const tour = source('src/components/ContextualSpotlightTour.tsx');
+  assert.match(tour, /Finish without AI/);
+  assert.match(tour, /'Skip tour'/);
   assert.equal(createGuidedTourSession('demo', 'evidence-a', GUIDED_TOUR_COMPLETION_VALUE)?.active, false);
 });
 

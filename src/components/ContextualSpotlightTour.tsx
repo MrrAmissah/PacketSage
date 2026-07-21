@@ -186,6 +186,7 @@ export default function ContextualSpotlightTour({
 
   const { rect, callout } = position;
   const canGoBack = displayStepIndex > 0;
+  const canFinishWithoutAi = displayStepIndex === 1 && workflowIndex < 2;
 
   const focusTarget = () => {
     const target = visibleTarget(`[data-tour-target="${step.target}"]`);
@@ -259,7 +260,9 @@ export default function ContextualSpotlightTour({
           {canGoBack
             ? <button type="button" onClick={() => moveToStep(displayStepIndex - 1)} className="inline-flex items-center gap-1 rounded-lg border border-border-subtle px-2 py-2 text-[9px] font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-primary"><ArrowLeft aria-hidden="true" size={10} />Back</button>
             : <span aria-hidden="true" />}
-          <button type="button" onClick={onDismiss} className="justify-self-center rounded-lg px-1.5 py-2 text-[9px] font-semibold text-text-muted hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary">Skip tour</button>
+          <button type="button" data-testid={canFinishWithoutAi ? 'guided-tour-finish-without-ai' : undefined} onClick={onDismiss} className="justify-self-center rounded-lg px-1.5 py-2 text-[9px] font-semibold text-text-muted hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary">
+            {canFinishWithoutAi ? 'Finish without AI' : 'Skip tour'}
+          </button>
           <button
             type="button"
             onClick={handlePrimaryProgression}

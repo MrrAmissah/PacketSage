@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { deriveGuidedTourWorkflowIndex, guidedTourProgressControl, type GuidedTourWorkflowState } from '../src/lib/guidedTour';
+import { deriveGuidedTourWorkflowIndex, GUIDED_TOUR_STEPS, guidedTourProgressControl, type GuidedTourWorkflowState } from '../src/lib/guidedTour';
 
 const root = new URL('../', import.meta.url);
 const source = (path: string) => readFileSync(new URL(path, root), 'utf8');
@@ -59,17 +59,20 @@ test('Step 1 invokes only safe recommended-signal selection and then advances', 
   assert.equal(deriveGuidedTourWorkflowIndex(workflow({ selectedSignalId: 'signal-a' })), 1);
 });
 
-test('Step 2 Next contains no route that can start AI', () => {
+test('Step 2 assessment progression contains no route that can start AI', () => {
   const tour = source('src/components/ContextualSpotlightTour.tsx');
-  assert.equal(guidedTourProgressControl(1, 1).label, 'Next');
+  assert.equal(guidedTourProgressControl(1, 1).label, 'Next after assessment');
   assert.doesNotMatch(tour, /fetch\(|\/api\/investigate|handleInvestigate|\.click\(/);
 });
 
-test('Step 2 Next stays disabled before a valid retained assessment', () => {
+test('Step 2 keeps assessment-only progression truthful while offering a no-cost exit', () => {
   const control = guidedTourProgressControl(1, 1);
   assert.equal(control.enabled, false);
-  assert.match(control.requirement || '', /Complete the highlighted investigation/);
+  assert.match(GUIDED_TOUR_STEPS[1].copy, /optional.*paid API/i);
+  assert.match(control.requirement || '', /finish this tour without AI and return later/i);
   assert.match(source('src/components/ContextualSpotlightTour.tsx'), /disabled=\{!progressControl\.enabled\}/);
+  assert.match(source('src/components/ContextualSpotlightTour.tsx'), /guided-tour-finish-without-ai/);
+  assert.match(source('src/components/ContextualSpotlightTour.tsx'), /canFinishWithoutAi \? 'Finish without AI' : 'Skip tour'/);
 });
 
 test('a valid retained assessment unlocks Next without automatically leaving Step 2', () => {
@@ -89,7 +92,7 @@ test('failed or malformed output cannot enable Step 2 Next', () => {
   const index = deriveGuidedTourWorkflowIndex(state);
   assert.equal(index, 1);
   assert.equal(guidedTourProgressControl(1, index!).enabled, false);
-  assert.match(guidedTourProgressControl(1, index!).requirement || '', /Failed or invalid responses/);
+  assert.match(guidedTourProgressControl(1, index!).requirement || '', /valid response/);
 });
 
 test('Step 3 provides Open assessment and continue', () => {
@@ -123,11 +126,13 @@ test('Finish closes and persists only after explicit inclusion', () => {
   assert.match(source('src/components/ContextualSpotlightTour.tsx'), /displayStepIndex === 2[\s\S]*onOpenAssessment\(\)[\s\S]*onComplete\(\)/);
 });
 
-test('Back and Skip retain independent secondary actions', () => {
+test('Back and no-cost exit retain independent secondary actions', () => {
   const tour = source('src/components/ContextualSpotlightTour.tsx');
   assert.match(tour, /moveToStep\(displayStepIndex - 1\)/);
   assert.match(tour, />Back<\/button>/);
-  assert.match(tour, />Skip tour<\/button>/);
+  assert.match(tour, /Finish without AI/);
+  assert.match(tour, /'Skip tour'/);
+  assert.match(tour, /data-testid=\{canFinishWithoutAi \? 'guided-tour-finish-without-ai' : undefined\} onClick=\{onDismiss\}/);
   assert.doesNotMatch(tour, /onDismiss=\{handlePrimaryProgression\}/);
 });
 

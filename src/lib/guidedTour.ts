@@ -21,7 +21,7 @@ export interface GuidedTourWorkflowState {
 }
 
 export interface GuidedTourProgressControl {
-  label: 'Review signal and continue' | 'Next' | 'Open assessment and continue' | 'Finish tour';
+  label: 'Review signal and continue' | 'Next after assessment' | 'Open assessment and continue' | 'Finish tour';
   enabled: boolean;
   requirement: string | null;
 }
@@ -42,7 +42,7 @@ export const GUIDED_TOUR_STEPS: ReadonlyArray<{
     id: 'investigation',
     target: 'investigation-trigger',
     title: 'Investigate referenced evidence',
-    copy: 'Only this signal and its exact referenced evidence are submitted. No request begins until you choose Investigate with AI.',
+    copy: 'AI investigation is optional and may use your configured paid API. Only this signal and its exact referenced evidence are submitted if you choose Investigate with AI.',
   },
   {
     id: 'assessment',
@@ -108,11 +108,11 @@ export function guidedTourProgressControl(
   }
   if (displayStepIndex === 1) {
     return {
-      label: 'Next',
+      label: 'Next after assessment',
       enabled: workflowIndex >= 2,
       requirement: workflowIndex >= 2
         ? null
-        : 'Complete the highlighted investigation to continue. Failed or invalid responses do not unlock Next.',
+        : 'Run the investigation only when you choose, or finish this tour without AI and return later. Assessment steps unlock only after a valid response.',
     };
   }
   if (displayStepIndex === 2) {

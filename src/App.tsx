@@ -195,11 +195,6 @@ export default function App() {
     setGuidedTourSession(previous => previous ? { ...previous, active: false } : previous);
   }, []);
 
-  React.useEffect(() => {
-    if (guidedTourWorkflowIndex !== 4 || guidedTourSession?.replay) return;
-    finishGuidedTour();
-  }, [guidedTourWorkflowIndex, guidedTourSession?.replay, finishGuidedTour]);
-
   const handleDataParsed = (data: ParsedResult) => {
     let tourCompletionPreference: string | null = null;
     try {
@@ -336,6 +331,26 @@ export default function App() {
       requestId: (previous?.requestId || 0) + 1,
     }));
   };
+
+  const handleTourReviewSignal = React.useCallback(() => {
+    if (!recommendedGuidedSignal) return;
+    setActiveTab('signals');
+    setGuidedSignalAction(previous => ({
+      signalId: recommendedGuidedSignal.id,
+      focusTarget: 'investigation',
+      requestId: (previous?.requestId || 0) + 1,
+    }));
+  }, [recommendedGuidedSignal]);
+
+  const handleTourOpenAssessment = React.useCallback(() => {
+    if (!recommendedGuidedSignal) return;
+    setActiveTab('signals');
+    setGuidedSignalAction(previous => ({
+      signalId: recommendedGuidedSignal.id,
+      focusTarget: 'open-assessment',
+      requestId: (previous?.requestId || 0) + 1,
+    }));
+  }, [recommendedGuidedSignal]);
 
   const renderActiveContent = () => {
     const availableFlows = parsedData?.flows || [];
@@ -745,6 +760,8 @@ export default function App() {
             onDismiss={finishGuidedTour}
             onComplete={finishGuidedTour}
             onDisplayStepChange={handleTourDisplayStepChange}
+            onReviewSignal={handleTourReviewSignal}
+            onOpenAssessment={handleTourOpenAssessment}
           />
         )}
     </div>

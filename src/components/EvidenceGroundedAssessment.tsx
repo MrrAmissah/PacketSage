@@ -93,7 +93,7 @@ export default function EvidenceGroundedAssessment({
           />
         </article>
 
-        <aside className="min-w-0 space-y-5 xl:sticky xl:top-4 xl:h-fit">
+        <aside className="min-w-0 space-y-5 xl:self-start xl:h-fit">
           <section ref={evidenceRef} tabIndex={-1} id="assessment-referenced-evidence" className="scroll-mt-4 space-y-4 rounded-xl border border-border-subtle bg-surface p-5 shadow-sm focus:outline-none focus:ring-2 focus:ring-accent-primary" aria-labelledby="referenced-evidence-title">
             <div>
               <p className="text-[9px] font-bold uppercase tracking-widest text-accent-primary">Validated packet references</p>

@@ -20,6 +20,12 @@ export interface GuidedTourWorkflowState {
   assessmentWorkspaceSignalId: string | null;
 }
 
+export interface GuidedTourProgressControl {
+  label: 'Review signal and continue' | 'Next' | 'Open assessment and continue' | 'Finish tour';
+  enabled: boolean;
+  requirement: string | null;
+}
+
 export const GUIDED_TOUR_STEPS: ReadonlyArray<{
   id: GuidedTourStepId;
   target: string;
@@ -91,4 +97,32 @@ export function deriveGuidedTourWorkflowIndex(state: GuidedTourWorkflowState): n
   if (state.assessmentWorkspaceSignalId !== state.recommendedSignalId) return 2;
   if (!state.includedInvestigationSignalIds.includes(state.recommendedSignalId)) return 3;
   return 4;
+}
+
+export function guidedTourProgressControl(
+  displayStepIndex: number,
+  workflowIndex: number,
+): GuidedTourProgressControl {
+  if (displayStepIndex === 0) {
+    return { label: 'Review signal and continue', enabled: true, requirement: null };
+  }
+  if (displayStepIndex === 1) {
+    return {
+      label: 'Next',
+      enabled: workflowIndex >= 2,
+      requirement: workflowIndex >= 2
+        ? null
+        : 'Complete the highlighted investigation to continue. Failed or invalid responses do not unlock Next.',
+    };
+  }
+  if (displayStepIndex === 2) {
+    return { label: 'Open assessment and continue', enabled: workflowIndex >= 2, requirement: null };
+  }
+  return {
+    label: 'Finish tour',
+    enabled: workflowIndex >= 4,
+    requirement: workflowIndex >= 4
+      ? null
+      : 'Include the assessment with the highlighted control before finishing the tour.',
+  };
 }

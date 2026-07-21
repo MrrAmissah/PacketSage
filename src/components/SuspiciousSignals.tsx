@@ -729,12 +729,16 @@ export default function SuspiciousSignals({
     const guidedSignal = enrichedSignals.find(signal => signal.id === guidedSignalAction.signalId);
     if (!guidedSignal) return;
 
-    setFullAssessmentOpen(false);
-    onAssessmentWorkspaceChange?.(null);
+    const shouldOpenAssessment = guidedSignalAction.focusTarget === 'open-assessment'
+      && completedRecord?.signalId === guidedSignal.id;
+    setFullAssessmentOpen(shouldOpenAssessment);
+    onAssessmentWorkspaceChange?.(shouldOpenAssessment ? guidedSignal.id : null);
     setSelectedSignal(guidedSignal);
     onSignalSelected?.(guidedSignal.id);
     const frame = window.requestAnimationFrame(() => {
-      const targetId = guidedSignalAction.focusTarget === 'investigation'
+      const targetId = shouldOpenAssessment
+        ? 'assessment-report-inclusion'
+        : guidedSignalAction.focusTarget === 'investigation'
         ? 'evidence-grounded-investigation'
         : guidedSignalAction.focusTarget === 'assessment-summary'
           ? 'open-full-assessment'
@@ -749,7 +753,7 @@ export default function SuspiciousSignals({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [guidedSignalAction, enrichedSignals, onAssessmentWorkspaceChange, onGuidedSignalActionHandled, onSignalSelected]);
+  }, [guidedSignalAction, enrichedSignals, completedRecord, onAssessmentWorkspaceChange, onGuidedSignalActionHandled, onSignalSelected]);
 
   // Keep selection synchronized when items change
   const handleSelectSignal = (sig: EnrichedSignal) => {

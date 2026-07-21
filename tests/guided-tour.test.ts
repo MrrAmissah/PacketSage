@@ -6,6 +6,7 @@ import {
   GUIDED_TOUR_STEPS,
   createGuidedTourSession,
   deriveGuidedTourWorkflowIndex,
+  guidedTourProgressControl,
   replayGuidedTourSession,
   shouldShowGuidedTour,
   type GuidedTourWorkflowState,
@@ -67,12 +68,13 @@ test('Step 2 targets the manual investigation trigger only after exact recommend
 test('no tour control starts an AI request', () => {
   const tour = source('src/components/ContextualSpotlightTour.tsx');
   assert.doesNotMatch(tour, /fetch\(|\/api\/investigate|handleInvestigate|\.click\(/);
-  assert.match(tour, /This tour never activates it for you/);
+  assert.match(tour, /The highlighted control remains live and keyboard reachable/);
 });
 
 test('failed or malformed investigations cannot advance without a retained completion', () => {
-  assert.equal(deriveGuidedTourWorkflowIndex(workflow({ selectedSignalId: 'signal-a' })), 1);
-  assert.doesNotMatch(source('src/lib/guidedTour.ts'), /failure|error|response/i);
+  const index = deriveGuidedTourWorkflowIndex(workflow({ selectedSignalId: 'signal-a' }));
+  assert.equal(index, 1);
+  assert.equal(guidedTourProgressControl(1, index!).enabled, false);
 });
 
 test('Step 3 is reachable only for the exact valid retained assessment', () => {
@@ -123,7 +125,7 @@ test('Replay restarts a dismissed tour without mutating retained content', () =>
   assert.deepEqual(replayGuidedTourSession('evidence-a', 7), { evidenceIdentity: 'evidence-a', active: true, replay: true, requestId: 7 });
   const app = source('src/App.tsx');
   assert.match(app, /Replay guided tour/);
-  const preferenceWrite = app.slice(app.indexOf('const finishGuidedTour'), app.indexOf('React.useEffect(() => {', app.indexOf('const finishGuidedTour')));
+  const preferenceWrite = app.slice(app.indexOf('const finishGuidedTour'), app.indexOf('const handleDataParsed'));
   assert.doesNotMatch(preferenceWrite, /assessment|citation|reportContent|signalContent|JSON\.stringify/);
 });
 

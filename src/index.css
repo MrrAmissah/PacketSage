@@ -159,3 +159,66 @@ body {
 .mobile-scroll-snap::-webkit-scrollbar {
   display: none;
 }
+
+@media print {
+  @page {
+    size: auto;
+    margin: 14mm;
+  }
+
+  html,
+  body,
+  #root,
+  #packet-sage-workspace,
+  #packet-sage-workspace main,
+  #packet-sage-workspace main > div,
+  #packet-sage-workspace main > div > div,
+  #report-builder-workspace {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  #packet-sage-workspace > aside,
+  #packet-sage-workspace main > header,
+  [data-testid="guided-sample-journey"],
+  #report-builder-workspace > :not(.report-document),
+  .report-preview-dialog,
+  button,
+  nav {
+    display: none !important;
+  }
+
+  .report-document {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #0f172a !important;
+    background: #fff !important;
+  }
+
+  .report-document section,
+  .report-document article,
+  .report-document table,
+  .report-document tr {
+    break-inside: avoid;
+  }
+
+  .report-document table {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .report-document .overflow-x-auto {
+    overflow: visible !important;
+  }
+}

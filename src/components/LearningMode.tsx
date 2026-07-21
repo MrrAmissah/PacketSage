@@ -403,6 +403,12 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
     }, 1500);
   };
 
+  const activateWithKeyboard = (event: React.KeyboardEvent<HTMLElement>, action: () => void) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    action();
+  };
+
   const quizScore = submitted
     ? quizQuestions.reduce((acc, q) => (userAnswers[q.id] === q.answerIndex ? acc + 1 : acc), 0)
     : 0;
@@ -580,6 +586,10 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                     <div
                       id={`module-card-${m.id}`}
                       onClick={() => setSelectedLessonId(m.id)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open Packet Academy module ${m.title}`}
+                      onKeyDown={(event) => activateWithKeyboard(event, () => setSelectedLessonId(m.id))}
                       className={`p-4 bg-surface rounded-2xl border transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-3 relative group ${
                         isSelected
                           ? 'border-accent-primary bg-accent-primary/5 ring-1 ring-accent-primary/25'
@@ -666,6 +676,10 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                         key={m.id}
                         id={`module-card-${m.id}`}
                         onClick={() => setSelectedLessonId(m.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open Packet Academy module ${m.title}`}
+                        onKeyDown={(event) => activateWithKeyboard(event, () => setSelectedLessonId(m.id))}
                         className={`p-3.5 bg-surface rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-3 relative group ${
                           isSelected
                             ? 'border-accent-primary bg-accent-primary/5 ring-1 ring-accent-primary/20'
@@ -737,6 +751,10 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                         key={m.id}
                         id={`module-card-${m.id}`}
                         onClick={() => setSelectedLessonId(m.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open Packet Academy module ${m.title}`}
+                        onKeyDown={(event) => activateWithKeyboard(event, () => setSelectedLessonId(m.id))}
                         className={`p-3.5 bg-surface rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-3 relative group ${
                           isSelected
                             ? 'border-accent-primary bg-accent-primary/5 ring-1 ring-accent-primary/20'
@@ -808,6 +826,10 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                         key={m.id}
                         id={`module-card-${m.id}`}
                         onClick={() => setSelectedLessonId(m.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open Packet Academy module ${m.title}`}
+                        onKeyDown={(event) => activateWithKeyboard(event, () => setSelectedLessonId(m.id))}
                         className={`p-3.5 bg-surface rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-3 relative group ${
                           isSelected
                             ? 'border-accent-primary bg-accent-primary/5 ring-1 ring-accent-primary/20'
@@ -923,28 +945,28 @@ export default function LearningMode({ hasEvidence = false, parsedData = null }:
                         
                         <div className="space-y-2">
                           {evidenceDnsCount > 0 && (
-                            <div onClick={() => setSelectedLessonId(2)} className="p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center">
+                            <button type="button" onClick={() => setSelectedLessonId(2)} className="w-full p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center text-left">
                               <span className="text-text-primary font-semibold">★ DNS Query Patterns</span>
                               <span className="text-status-info font-mono text-[10px]">{evidenceDnsCount} Queries</span>
-                            </div>
+                            </button>
                           )}
                           {evidenceHttpCount > 0 && (
-                            <div onClick={() => setSelectedLessonId(3)} className="p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center">
+                            <button type="button" onClick={() => setSelectedLessonId(3)} className="w-full p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center text-left">
                               <span className="text-text-primary font-semibold">★ HTTP Cleartext Exposure</span>
                               <span className="text-status-info font-mono text-[10px]">{evidenceHttpCount} Clear</span>
-                            </div>
+                            </button>
                           )}
                           {evidenceTlsCount > 0 && (
-                            <div onClick={() => setSelectedLessonId(4)} className="p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center">
+                            <button type="button" onClick={() => setSelectedLessonId(4)} className="w-full p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center text-left">
                               <span className="text-text-primary font-semibold">★ TLS Handshake Basics</span>
                               <span className="text-status-info font-mono text-[10px]">{evidenceTlsCount} Handshakes</span>
-                            </div>
+                            </button>
                           )}
                           {evidenceSignalsCount > 0 && (
-                            <div onClick={() => setSelectedLessonId(5)} className="p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center">
+                            <button type="button" onClick={() => setSelectedLessonId(5)} className="w-full p-2 bg-surface-muted rounded-lg border border-border-subtle hover:border-accent-primary/50 cursor-pointer text-[11px] flex justify-between items-center text-left">
                               <span className="text-text-primary font-semibold">★ Severity & Confidence</span>
                               <span className="text-status-warning font-mono text-[10px]">{evidenceSignalsCount} Alerts</span>
-                            </div>
+                            </button>
                           )}
                         </div>
                       </div>

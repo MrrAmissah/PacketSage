@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clipboard, Eye, FileText, Printer, X } from 'lucide-react';
 import type { ParsedResult } from '../lib/parser';
 import type { CaptureOverviewRecord, InvestigationRecord, SignalReviewStatus } from '../types';
@@ -26,9 +26,9 @@ function IdList({ values }: { values: readonly string[] }) {
 
 function ReportDocument({ report }: ReportDocumentProps) {
   return (
-    <article data-testid="report-document" className="space-y-7 rounded-xl border border-border-subtle bg-surface p-5 text-xs text-text-secondary shadow-sm print:border-0 print:shadow-none">
+    <article data-testid="report-document" className="report-document space-y-7 rounded-xl border border-border-subtle bg-surface p-5 text-xs text-text-secondary shadow-sm print:border-0 print:shadow-none">
       <header className="space-y-2 border-b border-border-subtle pb-5">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-accent-primary">PacketSage evidence report draft</p>
+        <p data-report-marker="early" className="text-[10px] font-bold uppercase tracking-widest text-accent-primary">PacketSage evidence report draft</p>
         <h2 className="text-xl font-bold text-text-primary">{report.evidence.name}</h2>
         <dl className="grid gap-2 sm:grid-cols-3">
           <div><dt className="text-text-muted">Evidence type</dt><dd className="font-semibold text-text-primary">{report.evidence.type}</dd></div>
@@ -144,6 +144,17 @@ function ReportDocument({ report }: ReportDocumentProps) {
           </ul>
         )}
       </section>
+
+      <section aria-labelledby="report-provenance-limitations" className="space-y-3" data-report-marker="late">
+        <h3 id="report-provenance-limitations" className="text-sm font-bold text-text-primary">Provenance and limitations</h3>
+        <dl className="grid gap-2 sm:grid-cols-2">
+          <div><dt className="font-semibold text-text-primary">Evidence identity</dt><dd className="font-mono text-[10px]">{report.evidence.checksum}</dd></div>
+          <div><dt className="font-semibold text-text-primary">Parser mode</dt><dd>{report.evidence.parseMode}</dd></div>
+          <div className="sm:col-span-2"><dt className="font-semibold text-text-primary">Relationship boundary</dt><dd>Findings, events, flows, and citations are connected only through retained deterministic identifiers. AI inferences remain separately labelled and require independent validation.</dd></div>
+          <div className="sm:col-span-2"><dt className="font-semibold text-text-primary">Timeline boundary</dt><dd>{report.timelineTruncated ? `The bounded report contains ${report.timeline.length} of ${report.counts.events} events.` : `The bounded report contains all ${report.timeline.length} available events.`}</dd></div>
+        </dl>
+        <p className="border-t border-border-subtle pt-3 text-[10px] text-text-muted">End of PacketSage evidence report draft.</p>
+      </section>
     </article>
   );
 }
@@ -151,10 +162,48 @@ function ReportDocument({ report }: ReportDocumentProps) {
 export default function ReportBuilder({ data, investigations, captureOverview, signalStatusOverrides = {} }: ReportBuilderProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const previewTriggerRef = useRef<HTMLButtonElement>(null);
+  const previewDialogRef = useRef<HTMLDivElement>(null);
   const report = useMemo(
     () => data ? buildReportModel(data, investigations, signalStatusOverrides, captureOverview) : null,
     [data, investigations, signalStatusOverrides, captureOverview],
   );
+
+  const closePreview = () => setPreviewOpen(false);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    const dialog = previewDialogRef.current;
+    const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusable = (): HTMLElement[] => dialog
+      ? Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      : [];
+    focusable()[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closePreview();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const elements = focusable();
+      if (!elements.length) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previewTriggerRef.current?.focus();
+    };
+  }, [previewOpen]);
 
   if (!report) return <div className="rounded-xl border border-border-subtle bg-surface p-6 text-sm text-text-muted">Import evidence before building a report.</div>;
 
@@ -170,7 +219,7 @@ export default function ReportBuilder({ data, investigations, captureOverview, s
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end print:hidden">
         <div><p className="text-[10px] font-bold uppercase tracking-widest text-accent-primary">Evidence-grounded export</p><h1 className="text-xl font-bold text-text-primary">Report builder</h1><p className="mt-1 text-xs text-text-muted">Preview and export only reviewed findings and explicitly included assessments.</p></div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setPreviewOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-text-primary"><Eye size={13} /> Preview</button>
+          <button ref={previewTriggerRef} type="button" onClick={() => setPreviewOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-text-primary"><Eye size={13} /> Preview</button>
           <button type="button" onClick={copyMarkdown} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-text-primary">{copied ? <Check size={13} /> : <Clipboard size={13} />} {copied ? 'Copied' : 'Copy Markdown'}</button>
           <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-2 text-xs font-bold text-white"><Printer size={13} /> Print / PDF</button>
         </div>
@@ -195,9 +244,9 @@ export default function ReportBuilder({ data, investigations, captureOverview, s
       <ReportDocument report={report} />
 
       {previewOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 p-4 print:hidden" role="dialog" aria-modal="true" aria-label="Report preview">
+        <div ref={previewDialogRef} className="report-preview-dialog fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="report-preview-title">
           <div className="mx-auto max-w-5xl space-y-3">
-            <div className="flex justify-end"><button type="button" onClick={() => setPreviewOpen(false)} className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-900"><X size={13} /> Close preview</button></div>
+            <div className="flex items-center justify-between"><h2 id="report-preview-title" className="text-sm font-bold text-white">Report preview</h2><button type="button" onClick={closePreview} className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-900"><X size={13} /> Close preview</button></div>
             <ReportDocument report={report} />
           </div>
         </div>

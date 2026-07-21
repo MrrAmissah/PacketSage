@@ -25,7 +25,8 @@ import {
   Moon,
   Monitor,
   Sparkles,
-  Compass
+  Compass,
+  Menu,
 } from 'lucide-react';
 
 import { CaptureOverviewRecord, FlowSummary, InvestigationRecord, SignalReviewStatus } from './types';
@@ -75,10 +76,15 @@ export default function App() {
   const [signalStatusOverrides, setSignalStatusOverrides] = useState<Record<string, SignalReviewStatus>>({});
   const [guideSession, setGuideSession] = useState<JudgePathSession | null>(null);
   const [guidedSignalAction, setGuidedSignalAction] = useState<GuidedSignalAction | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const workspaceScrollRef = React.useRef<HTMLDivElement>(null);
   const recommendedGuidedSignal = React.useMemo(() => parsedData
     ? findGuidedInvestigationSignal(parsedData.evidence.parseMode, parsedData.signals, parsedData.flows, parsedData.events)
     : null, [parsedData]);
+  const includedGuidedSignalIds = React.useMemo(() => investigations
+    .filter(record => record.selectedEvidenceId === parsedData?.evidence.id && record.includedInReport)
+    .map(record => record.signalId), [investigations, parsedData?.evidence.id]);
+  const guidedInvestigationIncluded = Boolean(recommendedGuidedSignal && includedGuidedSignalIds.includes(recommendedGuidedSignal.id));
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('packet-sage-theme');
@@ -122,8 +128,10 @@ export default function App() {
 
   React.useEffect(() => {
     workspaceScrollRef.current?.scrollTo({ top: 0, left: 0 });
-    if (activeTab === 'report') setGuideSession(previous => previous ? { ...previous, reportVisited: true } : previous);
-  }, [activeTab, parsedData?.evidence.id]);
+    if (activeTab === 'report' && guidedInvestigationIncluded) {
+      setGuideSession(previous => previous ? { ...previous, reportVisitedAfterInclusion: true } : previous);
+    }
+  }, [activeTab, parsedData?.evidence.id, guidedInvestigationIncluded]);
 
   const handleDataParsed = (data: ParsedResult) => {
     setParsedData(data);
@@ -188,10 +196,13 @@ export default function App() {
     includedInReport: boolean,
   ) => {
     setInvestigations(previous => setInvestigationReportInclusion(previous, context, includedInReport));
+    if (context.signalId === recommendedGuidedSignal?.id) {
+      setGuideSession(previous => previous ? { ...previous, reportVisitedAfterInclusion: false } : previous);
+    }
   };
 
-  const handleSignalSelected = React.useCallback(() => {
-    setGuideSession(previous => previous && !previous.signalSelected ? { ...previous, signalSelected: true } : previous);
+  const handleSignalSelected = React.useCallback((signalId: string) => {
+    setGuideSession(previous => previous ? { ...previous, selectedSignalId: signalId } : previous);
   }, []);
 
   const handleGuidedSignalActionHandled = React.useCallback((requestId: number) => {
@@ -232,6 +243,7 @@ export default function App() {
           <FlowExplorer
             flows={visibleFlows}
             events={parsedData?.events || []}
+            signals={parsedData?.signals || []}
             onSelectFlow={setSelectedFlow}
             selectedFlow={selectedFlow}
             onCloseDrawer={() => setSelectedFlow(null)}
@@ -292,9 +304,9 @@ export default function App() {
             events={parsedData?.events || []}
             flows={parsedData?.flows || []}
             signals={parsedData?.signals || []}
-            onNavigateToFlows={(flow) => {
-              setRelatedFlowScopeIds(null);
-              setSelectedFlow(flow);
+            onNavigateToFlows={(relatedFlows) => {
+              setRelatedFlowScopeIds(relatedFlows.map(flow => flow.id));
+              setSelectedFlow(relatedFlows[0] || null);
               setActiveTab('flows');
             }}
           />
@@ -318,12 +330,13 @@ export default function App() {
       <aside className="w-full md:w-60 bg-[#08162e] border-b md:border-b-0 md:border-r border-slate-900 flex flex-col md:justify-between shrink-0 select-none text-slate-100">
         <div className="space-y-2 md:space-y-6 pt-2 md:pt-6 min-w-0">
           {/* Logo Heading */}
-          <div className="px-3 md:px-5 pb-2 md:pb-4 border-b border-[#1e293b]/40">
+          <div className="flex items-center justify-between px-3 md:px-5 pb-2 md:pb-4 border-b border-[#1e293b]/40">
             <PacketSageLogo className="[&>span]:hidden md:[&>span]:block" iconClassName="w-7 h-7 md:w-8 md:h-8" forceLight={true} />
+            <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen} aria-controls="primary-navigation" aria-label={mobileNavOpen ? 'Close primary navigation' : 'Open primary navigation'} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-white md:hidden"><Menu aria-hidden="true" size={14} /><span>{activeTab === 'overview' ? 'Command center' : activeTab === 'import' ? 'Import evidence' : activeTab === 'flows' ? 'Flow explorer' : activeTab === 'protocols' ? 'Protocol intelligence' : activeTab === 'signals' ? 'Signals & observations' : activeTab === 'capture-overview' ? 'Capture overview' : activeTab === 'timeline' ? 'Incident timeline' : activeTab === 'report' ? 'Report builder' : 'Packet Academy'}</span></button>
           </div>
 
           {/* Navigation Items */}
-          <nav className="flex md:block gap-2 md:space-y-1 px-2 md:px-3 pb-2 md:pb-0 overflow-x-auto mobile-scroll-snap">
+          <nav id="primary-navigation" aria-label="Primary navigation" className={`${mobileNavOpen ? 'grid' : 'hidden'} grid-cols-1 gap-1 px-2 pb-2 md:block md:space-y-1 md:px-3 md:pb-0`}>
             {[
               { id: 'overview', label: 'Command center', icon: Server, enabled: !!parsedData },
               { id: 'import', label: 'Import evidence', icon: Database, enabled: true },
@@ -344,8 +357,10 @@ export default function App() {
                   onClick={() => {
                     if (item.id === 'flows') setRelatedFlowScopeIds(null);
                     setActiveTab(item.id as TabType);
+                    setMobileNavOpen(false);
                   }}
-                  className={`relative flex-none md:flex-auto min-w-[124px] md:min-w-0 md:w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-3.5 py-2 md:py-2.5 text-xs font-medium rounded-lg transition-all text-left cursor-pointer group ${
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`relative min-w-0 w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-3.5 py-2 md:py-2.5 text-xs font-medium rounded-lg transition-all text-left cursor-pointer group ${
                     !item.enabled
                       ? 'text-slate-500 hover:bg-transparent cursor-not-allowed border border-transparent'
                       : isActive
@@ -529,6 +544,8 @@ export default function App() {
                   <button
                     key={t.id}
                     onClick={() => setTheme(t.id as ThemeMode)}
+                    aria-label={`Use ${t.label.toLowerCase()} theme`}
+                    aria-pressed={isSelected}
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-all text-[11px] font-medium cursor-pointer h-7 ${
                       isSelected
                         ? 'bg-surface text-accent-primary shadow-sm font-semibold'
@@ -575,9 +592,10 @@ export default function App() {
               <GuidedSampleJourney
                 progress={deriveJudgePathProgress({
                   evidenceLoaded: true,
-                  signalSelected: guideSession?.signalSelected || false,
-                  investigationIncluded: investigations.some(record => record.selectedEvidenceId === parsedData.evidence.id && record.includedInReport),
-                  reportVisited: guideSession?.reportVisited || false,
+                  recommendedSignalId: recommendedGuidedSignal?.id || null,
+                  selectedSignalId: guideSession?.selectedSignalId || null,
+                  includedInvestigationSignalIds: includedGuidedSignalIds,
+                  reportVisitedAfterInclusion: guideSession?.reportVisitedAfterInclusion || false,
                 })}
                 onDismiss={() => setGuideSession(previous => previous ? { ...previous, dismissed: true } : previous)}
                 onNavigate={(destination: JudgePathDestination) => setActiveTab(destination)}

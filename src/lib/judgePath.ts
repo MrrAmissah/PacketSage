@@ -12,9 +12,10 @@ export interface GuidedSignalAction {
 
 export interface JudgePathState {
   evidenceLoaded: boolean;
-  signalSelected: boolean;
-  investigationIncluded: boolean;
-  reportVisited: boolean;
+  recommendedSignalId: string | null;
+  selectedSignalId: string | null;
+  includedInvestigationSignalIds: readonly string[];
+  reportVisitedAfterInclusion: boolean;
 }
 
 export interface JudgePathStage {
@@ -32,12 +33,12 @@ export interface JudgePathProgress {
 export interface JudgePathSession {
   evidenceIdentity: string;
   dismissed: boolean;
-  signalSelected: boolean;
-  reportVisited: boolean;
+  selectedSignalId: string | null;
+  reportVisitedAfterInclusion: boolean;
 }
 
 export function createJudgePathSession(evidenceIdentity: string): JudgePathSession {
-  return { evidenceIdentity, dismissed: false, signalSelected: false, reportVisited: false };
+  return { evidenceIdentity, dismissed: false, selectedSignalId: null, reportVisitedAfterInclusion: false };
 }
 
 export function shouldShowGuidedJourney(parseMode: string, session: JudgePathSession | null): boolean {
@@ -71,17 +72,22 @@ export function findGuidedInvestigationSignal(
 }
 
 export function deriveJudgePathProgress(state: JudgePathState): JudgePathProgress {
+  const recommendedSignalSelected = Boolean(state.recommendedSignalId && state.selectedSignalId === state.recommendedSignalId);
+  const recommendedInvestigationIncluded = Boolean(
+    state.recommendedSignalId && state.includedInvestigationSignalIds.includes(state.recommendedSignalId),
+  );
+  const reportComplete = recommendedInvestigationIncluded && state.reportVisitedAfterInclusion;
   const stages: JudgePathStage[] = [
     { id: 'evidence', label: 'Evidence loaded', complete: state.evidenceLoaded },
-    { id: 'signal', label: 'Review recommended signal', complete: state.signalSelected },
-    { id: 'investigation', label: 'Run and include investigation', complete: state.investigationIncluded },
-    { id: 'report', label: 'Build report', complete: state.reportVisited },
+    { id: 'signal', label: 'Review recommended signal', complete: recommendedSignalSelected },
+    { id: 'investigation', label: 'Run and include investigation', complete: recommendedInvestigationIncluded },
+    { id: 'report', label: 'Build report', complete: reportComplete },
   ];
 
   let nextAction: JudgePathProgress['nextAction'];
-  if (!state.signalSelected) nextAction = { id: 'review-recommended-signal', label: 'Review recommended signal', destination: 'signals' };
-  else if (!state.investigationIncluded) nextAction = { id: 'focus-investigation', label: 'Run evidence-grounded investigation', destination: 'signals' };
-  else nextAction = { id: 'open-report', label: state.reportVisited ? 'Review report' : 'Build report', destination: 'report' };
+  if (!recommendedSignalSelected) nextAction = { id: 'review-recommended-signal', label: 'Review recommended signal', destination: 'signals' };
+  else if (!recommendedInvestigationIncluded) nextAction = { id: 'focus-investigation', label: 'Run and include investigation', destination: 'signals' };
+  else nextAction = { id: 'open-report', label: reportComplete ? 'Review report' : 'Build report', destination: 'report' };
 
   return {
     stages,

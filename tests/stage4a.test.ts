@@ -40,15 +40,15 @@ test('bundled guided sample satisfies the stable evidence contract', () => {
 });
 
 test('guided progress derives only from real workflow state and uses correct destinations', () => {
-  const loaded = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: false, investigationIncluded: false, reportVisited: false });
+  const loaded = deriveJudgePathProgress({ evidenceLoaded: true, recommendedSignalId: 'sig-a', selectedSignalId: null, includedInvestigationSignalIds: [], reportVisitedAfterInclusion: false });
   assert.equal(loaded.completedCount, 1);
   assert.deepEqual(loaded.nextAction, { id: 'review-recommended-signal', label: 'Review recommended signal', destination: 'signals' });
 
-  const selected = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: true, investigationIncluded: false, reportVisited: false });
+  const selected = deriveJudgePathProgress({ evidenceLoaded: true, recommendedSignalId: 'sig-a', selectedSignalId: 'sig-a', includedInvestigationSignalIds: [], reportVisitedAfterInclusion: false });
   assert.equal(selected.completedCount, 2);
-  assert.deepEqual(selected.nextAction, { id: 'focus-investigation', label: 'Run evidence-grounded investigation', destination: 'signals' });
+  assert.deepEqual(selected.nextAction, { id: 'focus-investigation', label: 'Run and include investigation', destination: 'signals' });
 
-  const included = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: true, investigationIncluded: true, reportVisited: false });
+  const included = deriveJudgePathProgress({ evidenceLoaded: true, recommendedSignalId: 'sig-a', selectedSignalId: 'sig-a', includedInvestigationSignalIds: ['sig-a'], reportVisitedAfterInclusion: false });
   assert.equal(included.completedCount, 3);
   assert.deepEqual(included.nextAction, { id: 'open-report', label: 'Build report', destination: 'report' });
 });
@@ -96,16 +96,16 @@ test('only the validated recommendation displays the provider-neutral investigat
 });
 
 test('guide dismissal is session-scoped and replacement evidence resets it', () => {
-  const first = { ...createJudgePathSession('evidence-a'), dismissed: true, signalSelected: true, reportVisited: true };
+  const first = { ...createJudgePathSession('evidence-a'), dismissed: true, selectedSignalId: 'sig-a', reportVisitedAfterInclusion: true };
   assert.equal(shouldShowGuidedJourney('demo', first), false);
   const replacement = createJudgePathSession('evidence-b');
-  assert.deepEqual(replacement, { evidenceIdentity: 'evidence-b', dismissed: false, signalSelected: false, reportVisited: false });
+  assert.deepEqual(replacement, { evidenceIdentity: 'evidence-b', dismissed: false, selectedSignalId: null, reportVisitedAfterInclusion: false });
   assert.equal(shouldShowGuidedJourney('demo', replacement), true);
   assert.equal(shouldShowGuidedJourney('pcap', replacement), false);
 });
 
 test('Capture Overview remains optional and never advances the primary stages', () => {
-  const before = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: true, investigationIncluded: false, reportVisited: false });
+  const before = deriveJudgePathProgress({ evidenceLoaded: true, recommendedSignalId: 'sig-a', selectedSignalId: 'sig-a', includedInvestigationSignalIds: [], reportVisitedAfterInclusion: false });
   assert.deepEqual(before.stages.map(stage => stage.id), ['evidence', 'signal', 'investigation', 'report']);
   assert.equal(before.completedCount, 2);
   assert.equal(before.stages.find(stage => stage.id === 'investigation')?.complete, false);
@@ -147,7 +147,7 @@ test('Capture Overview blocks duplicate clicks while active and keeps Retry avai
 
 test('malformed model output cannot create retained output or advance guided progress', () => {
   assert.throws(() => validateCaptureOverviewResponse({ provider: 'Google', model: '', result: {} }), /provenance/i);
-  const progress = deriveJudgePathProgress({ evidenceLoaded: true, signalSelected: true, investigationIncluded: false, reportVisited: false });
+  const progress = deriveJudgePathProgress({ evidenceLoaded: true, recommendedSignalId: 'sig-a', selectedSignalId: 'sig-a', includedInvestigationSignalIds: [], reportVisitedAfterInclusion: false });
   assert.equal(progress.stages.find(stage => stage.id === 'investigation')?.complete, false);
 });
 

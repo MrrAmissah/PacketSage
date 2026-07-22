@@ -4,7 +4,9 @@
 
 PacketSage is an evidence-grounded network investigation workspace that helps analysts use AI without allowing inference to masquerade as observed fact. It is a **Developer Tools** project for defensive network forensics, packet analysis, incident response, and technical learning.
 
-[**Open the live workspace**](https://packetsage.vercel.app) · **333/333 production tests** · **`build-week-stage-4a.2-production`** · **Proprietary/source-available**
+[**Live workspace**](https://packetsage.vercel.app) · [**Demo video**](https://youtu.be/at5JAtGvIEo) · [**Devpost submission**](https://devpost.com/software/packet-sage)
+
+**333/333 production tests** · **`build-week-stage-4a.2-production`** · **Proprietary/source-available**
 
 Created and developed by **Prince Kofi Frimpong Amissah**.
 
